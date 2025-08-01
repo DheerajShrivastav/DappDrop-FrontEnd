@@ -1,3 +1,4 @@
+
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
@@ -274,7 +275,15 @@ export const createCampaign = async (campaignData: any) => {
         return campaignId;
     } catch(error: any) {
         console.error("Error creating campaign:", error);
-        toast({ variant: 'destructive', title: 'Transaction Failed', description: error.reason || error.message });
+        const reason = error.reason || error.message;
+        let description = reason;
+        if (reason && reason.includes('caller is not the host')) {
+            description = 'Your wallet does not have the HOST_ROLE. Please ask the contract owner to grant you this role.';
+        } else if (error.code === 'CALL_EXCEPTION') {
+            description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE to create campaigns. Please contact the contract administrator.';
+        }
+        
+        toast({ variant: 'destructive', title: 'Transaction Failed', description });
         throw error;
     }
 };
