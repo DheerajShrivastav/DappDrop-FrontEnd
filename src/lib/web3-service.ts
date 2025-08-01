@@ -18,12 +18,15 @@ declare global {
 let provider: BrowserProvider | null = null;
 let contract: Contract | null = null;
 
+const SEPOLIA_CHAIN_ID = '0xaa36a7';
+const SEPOLIA_RPC_URL = `https://sepolia.infura.io/v3/${process.env.NEXT_PUBLIC_INFURA_ID || 'YOUR_INFURA_ID'}`;
+
 if (typeof window !== 'undefined' && window.ethereum) {
   provider = new ethers.BrowserProvider(window.ethereum);
 } else {
   console.warn('MetaMask not found. Please install MetaMask to use this dApp.');
   // Use a read-only provider for Sepolia if no wallet is present
-  provider = new ethers.JsonRpcProvider(`https://sepolia.infura.io/v3/${process.env.NEXT_PUBLIC_INFURA_ID || 'YOUR_INFURA_ID'}`);
+  provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
 }
 
 if (config.campaignFactoryAddress && provider) {
@@ -71,16 +74,61 @@ const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
     };
 };
 
+
+const switchOrAddSepoliaNetwork = async (ethereum: Eip1193Provider) => {
+    try {
+        await ethereum.request({
+            method: 'wallet_switchEthereumChain',
+            params: [{ chainId: SEPOLIA_CHAIN_ID }],
+        });
+    } catch (switchError: any) {
+        // This error code indicates that the chain has not been added to MetaMask.
+        if (switchError.code === 4902) {
+            try {
+                await ethereum.request({
+                    method: 'wallet_addEthereumChain',
+                    params: [
+                        {
+                            chainId: SEPOLIA_CHAIN_ID,
+                            chainName: 'Sepolia Testnet',
+                            nativeCurrency: {
+                                name: 'Sepolia Ether',
+                                symbol: 'ETH',
+                                decimals: 18,
+                            },
+                            rpcUrls: [SEPOLIA_RPC_URL],
+                            blockExplorerUrls: ['https://sepolia.etherscan.io'],
+                        },
+                    ],
+                });
+            } catch (addError) {
+                console.error('Failed to add Sepolia network:', addError);
+                toast({ variant: 'destructive', title: 'Network Error', description: 'Failed to add Sepolia network to your wallet.' });
+                throw addError;
+            }
+        } else {
+             console.error('Failed to switch to Sepolia network:', switchError);
+             toast({ variant: 'destructive', title: 'Network Error', description: 'Please switch to the Sepolia test network in your wallet.' });
+             throw switchError;
+        }
+    }
+}
+
+
 // --- Service Functions ---
 
 export const connectWallet = async (): Promise<string | null> => {
   if (window.ethereum) {
     try {
+      await switchOrAddSepoliaNetwork(window.ethereum);
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       return accounts[0] || null;
     } catch (error) {
       console.error("Error connecting to MetaMask:", error);
-      toast({ variant: 'destructive', title: 'Connection Failed', description: 'Could not connect to wallet.' });
+      // Don't show a toast if the user rejects the connection
+      if ((error as any).code !== 4001) {
+          toast({ variant: 'destructive', title: 'Connection Failed', description: 'Could not connect to wallet.' });
+      }
       return null;
     }
   }
@@ -92,7 +140,8 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
     if (!contract) return [];
     try {
         const campaignCount = await contract.getCampaignCount();
-        if (typeof campaignCount === 'undefined') {
+        if (typeof campaignCount === 'undefined' || campaignCount === null) {
+            console.error("getCampaignCount returned undefined or null");
             return [];
         }
         const campaigns = [];
@@ -147,7 +196,7 @@ export const createCampaign = async (campaignData: any) => {
         
         const rewardAmount = campaignData.reward.type === 'ERC20' 
             ? ethers.parseUnits(campaignData.reward.amount, 18) 
-            : '1';
+            : '0'; // For ERC721, amount can be 0, as it's about the token ID which isn't specified here
         
         const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, campaignData.reward.tokenAddress, rewardAmount);
         await rewardTx.wait();
