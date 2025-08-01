@@ -10,6 +10,7 @@ declare global {
     ethereum?: Eip1193Provider & {
         isMetaMask?: boolean;
         request: (...args: any[]) => Promise<any>;
+        providers?: (Eip1193Provider & {isMetaMask?: boolean})[];
     };
   }
 }
@@ -18,20 +19,23 @@ declare global {
 let provider: BrowserProvider | null = null;
 let contract: Contract | null = null;
 
-const SEPOLIA_CHAIN_ID = '11155111';
-const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL;
+const SEPOLIA_CHAIN_ID = '0xaa36a7'; // Sepolia chain id in hex
+const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID';
 
-if (typeof window !== 'undefined' && window.ethereum) {
-  provider = new ethers.BrowserProvider(window.ethereum);
-} else {
-  console.warn('MetaMask not found. Please install MetaMask to use this dApp.');
-  // Use a read-only provider for Sepolia if no wallet is present
-  provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
-}
+const initializeProvider = () => {
+    if (typeof window !== 'undefined' && window.ethereum) {
+        provider = new ethers.BrowserProvider(window.ethereum);
+    } else {
+        console.warn('MetaMask not found. Please install MetaMask to use this dApp.');
+        provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
+    }
 
-if (config.campaignFactoryAddress && provider) {
-  contract = new ethers.Contract(config.campaignFactoryAddress, Web3Campaigns.abi, provider);
+    if (config.campaignFactoryAddress && provider) {
+        contract = new ethers.Contract(config.campaignFactoryAddress, Web3Campaigns.abi, provider);
+    }
 }
+initializeProvider();
+
 
 // --- Helper Functions ---
 
@@ -46,7 +50,16 @@ const getSigner = async () => {
 
 const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
     const statusMap = ['Draft', 'Active', 'Ended', 'Closed'];
-    const rewardTypeMap = ['ERC20', 'ERC721'];
+    const rewardTypeMap = ['ERC20', 'ERC721', 'None'];
+
+    let rewardName = `Reward for ${contractData.name}`;
+    if (Number(contractData.reward.rewardType) === 2) { // "None" type
+        // For "None", the reward details are stored off-chain.
+        // We'll need a way to get this. For now, using a placeholder.
+        // In a real app, you might fetch this from a DB using the campaignId.
+        rewardName = "A special off-chain reward";
+    }
+
 
     return {
         id: id.toString(),
@@ -64,10 +77,10 @@ const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
             description: task.description,
         })),
         reward: {
-            type: rewardTypeMap[Number(contractData.reward.rewardType)] as 'ERC20' | 'ERC721',
+            type: rewardTypeMap[Number(contractData.reward.rewardType)] as 'ERC20' | 'ERC721' | 'None',
             tokenAddress: contractData.reward.tokenAddress,
             amount: contractData.reward.amountOrTokenId.toString(),
-            name: `Reward for ${contractData.name}`, // Placeholder
+            name: rewardName,
         },
         imageUrl: `https://placehold.co/600x400`,
         'data-ai-hint': 'blockchain technology',
@@ -118,28 +131,52 @@ const switchOrAddSepoliaNetwork = async (ethereum: Eip1193Provider) => {
 // --- Service Functions ---
 
 export const connectWallet = async (): Promise<string | null> => {
-  if (window.ethereum) {
-    try {
-      await switchOrAddSepoliaNetwork(window.ethereum);
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      return accounts[0] || null;
-    } catch (error) {
-      console.error("Error connecting to MetaMask:", error);
-      // Don't show a toast if the user rejects the connection
-      if ((error as any).code !== 4001) {
-          toast({ variant: 'destructive', title: 'Connection Failed', description: 'Could not connect to wallet.' });
-      }
-      return null;
+    if (typeof window.ethereum === 'undefined') {
+        toast({ variant: 'destructive', title: 'MetaMask Not Found', description: 'Please install a wallet extension like MetaMask to use this dApp.' });
+        return null;
     }
-  }
-  toast({ variant: 'destructive', title: 'MetaMask Not Found', description: 'Please install MetaMask to use this dApp.' });
-  return null;
+    
+    let selectedProvider: (Eip1193Provider & { isMetaMask?: boolean; }) | null = null;
+
+    // Handle multiple wallet extensions
+    if (window.ethereum.providers) {
+        selectedProvider = window.ethereum.providers.find(p => p.isMetaMask) ?? window.ethereum.providers[0];
+    } else if (window.ethereum.isMetaMask) {
+        selectedProvider = window.ethereum;
+    } else {
+        selectedProvider = window.ethereum;
+    }
+
+    if (!selectedProvider) {
+         toast({ variant: 'destructive', title: 'No Wallet Found', description: 'Could not detect a wallet provider.' });
+         return null;
+    }
+
+    try {
+        // Re-initialize ethers provider with the selected wallet provider
+        provider = new ethers.BrowserProvider(selectedProvider);
+        if (config.campaignFactoryAddress && provider) {
+            contract = new ethers.Contract(config.campaignFactoryAddress, Web3Campaigns.abi, provider);
+        }
+
+        await switchOrAddSepoliaNetwork(selectedProvider);
+        const accounts = await selectedProvider.request({ method: 'eth_requestAccounts' });
+        return accounts[0] || null;
+    } catch (error) {
+        console.error("Error connecting to wallet:", error);
+        if ((error as any).code !== 4001) {
+            toast({ variant: 'destructive', title: 'Connection Failed', description: 'Could not connect to wallet.' });
+        }
+        return null;
+    }
 };
 
 export const getAllCampaigns = async (): Promise<Campaign[]> => {
     if (!contract) return [];
     try {
-        const campaignCount = await contract.getCampaignCount();
+        const campaignCountBigInt = await contract.getCampaignCount();
+        const campaignCount = Number(campaignCountBigInt);
+
         if (typeof campaignCount === 'undefined' || campaignCount === null) {
             console.error("getCampaignCount returned undefined or null");
             return [];
@@ -154,9 +191,14 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
             }
         }
         return campaigns.filter(c => c.status !== 'Draft'); // Only show non-draft campaigns
-    } catch (error) {
-        console.error("Error fetching campaigns:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch campaign data.' });
+    } catch (error: any) {
+        if (error.code !== 'CALL_EXCEPTION') {
+            console.error("Error fetching campaigns:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch campaign data.' });
+        } else {
+             console.error("Contract call failed. Check contract address and network.", error)
+             toast({ variant: 'destructive', title: 'Contract Error', description: 'Could not connect to the campaign contract. Please check your configuration.' });
+        }
         return [];
     }
 };
@@ -185,25 +227,47 @@ export const createCampaign = async (campaignData: any) => {
         const tx = await contractWithSigner.createCampaign(campaignData.title, startTime, endTime);
         const receipt = await tx.wait();
         
-        // Find CampaignCreated event to get the new campaignId
-        const event = receipt.logs.map((log: any) => contract.interface.parseLog(log)).find((e: any) => e.name === 'CampaignCreated');
+        const event = receipt.logs.map((log: any) => {
+            try {
+                return contract.interface.parseLog(log);
+            } catch (e) {
+                return null;
+            }
+        }).find((e: any) => e && e.name === 'CampaignCreated');
         
         if (!event) throw new Error("CampaignCreated event not found");
         const campaignId = event.args.campaignId.toString();
+        
+        let rewardType;
+        let tokenAddress = ethers.ZeroAddress;
+        let rewardAmount = '0';
 
-        // Set reward
-        const rewardType = campaignData.reward.type === 'ERC20' ? 0 : 1;
-        
-        const rewardAmount = campaignData.reward.type === 'ERC20' 
-            ? ethers.parseUnits(campaignData.reward.amount, 18) 
-            : '0'; // For ERC721, amount can be 0, as it's about the token ID which isn't specified here
-        
-        const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, campaignData.reward.tokenAddress, rewardAmount);
+        switch(campaignData.reward.type) {
+            case 'ERC20':
+                rewardType = 0;
+                tokenAddress = campaignData.reward.tokenAddress;
+                rewardAmount = ethers.parseUnits(campaignData.reward.amount, 18);
+                break;
+            case 'ERC721':
+                rewardType = 1;
+                tokenAddress = campaignData.reward.tokenAddress;
+                break;
+            case 'None':
+                rewardType = 2;
+                // For "None" type, we can store the description off-chain.
+                // The on-chain function does not need a name for it.
+                break;
+            default:
+                throw new Error("Invalid reward type");
+        }
+
+        const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, tokenAddress, rewardAmount);
         await rewardTx.wait();
+
 
         // Add tasks
         for (const task of campaignData.tasks) {
-            const taskType = 0; // Placeholder for SOCIAL_FOLLOW
+            const taskType = 0; // Placeholder for ONCHAIN_TX - assuming all tasks are generic for now
             const taskTx = await contractWithSigner.addTaskToCampaign(campaignId, taskType, task.description, "0x", false);
             await taskTx.wait();
         }
@@ -212,7 +276,7 @@ export const createCampaign = async (campaignData: any) => {
         return campaignId;
     } catch(error: any) {
         console.error("Error creating campaign:", error);
-        toast({ variant: 'destructive', title: 'Transaction Failed', description: error.message });
+        toast({ variant: 'destructive', title: 'Transaction Failed', description: error.reason || error.message });
         throw error;
     }
 };
