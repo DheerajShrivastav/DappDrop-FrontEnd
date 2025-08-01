@@ -37,7 +37,7 @@ const campaignSchema = z.object({
   dates: z.object({
     from: z.date({ required_error: 'Start date is required.' }),
     to: z.date({ required_error: 'End date is required.' }),
-  }).refine(data => data.from < data.to, {
+  }).refine((data) => data.to > data.from, {
     message: "End date must be after the start date.",
     path: ["to"],
   }),
@@ -48,10 +48,12 @@ const campaignSchema = z.object({
       type: z.literal('ERC20'),
       tokenAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Please enter a valid Ethereum address.'),
       amount: z.string().min(1, "Amount is required for ERC20 tokens."),
+      name: z.string().optional(),
     }),
     z.object({
       type: z.literal('ERC721'),
       tokenAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Please enter a valid Ethereum address.'),
+      name: z.string().optional(),
     }),
     z.object({
         type: z.literal('None'),
