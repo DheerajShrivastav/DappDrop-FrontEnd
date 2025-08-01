@@ -1,3 +1,4 @@
+
 export type TaskType = 'SOCIAL_FOLLOW' | 'JOIN_DISCORD' | 'RETWEET' | 'ONCHAIN_TX';
 
 export type Task = {
@@ -13,7 +14,7 @@ export type UserTask = {
 };
 
 export type Reward = {
-    type: 'ERC20' | 'ERC721';
+    type: 'ERC20' | 'ERC721' | 'None';
     tokenAddress: string;
     amount?: string;
     name: string;
@@ -34,3 +35,4 @@ export type Campaign = {
   imageUrl: string;
   'data-ai-hint'?: string;
 };
+

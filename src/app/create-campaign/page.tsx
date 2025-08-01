@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState } from 'react';
@@ -52,6 +53,10 @@ const campaignSchema = z.object({
       type: z.literal('ERC721'),
       tokenAddress: z.string().regex(/^0x[a-fA-F0-9]{40}$/, 'Please enter a valid Ethereum address.'),
     }),
+    z.object({
+        type: z.literal('None'),
+        name: z.string().min(1, "A description of the reward is required.")
+    })
   ]),
 });
 
@@ -120,7 +125,7 @@ export default function CreateCampaignPage() {
   };
   
   const nextStep = async () => {
-    let fieldsToValidate: (keyof CampaignFormValues)[] | `tasks.${number}.${"description"|"type"}`[] | `reward.${"type"|"tokenAddress"|"amount"}`[] = [];
+    let fieldsToValidate: (keyof CampaignFormValues)[] | `tasks.${number}.${"description"|"type"}`[] | `reward.${"type"|"tokenAddress"|"amount"|"name"}`[] = [];
     if(step === 1) fieldsToValidate = ['title', 'shortDescription', 'description', 'dates', 'imageUrl'];
     if(step === 2) fieldsToValidate = ['tasks'];
     if(step === 3) fieldsToValidate = ['reward'];
@@ -231,16 +236,22 @@ export default function CreateCampaignPage() {
                                 <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex flex-col space-y-1">
                                     <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="ERC20" /></FormControl><FormLabel className="font-normal">ERC20 Token (Fungible)</FormLabel></FormItem>
                                     <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="ERC721" /></FormControl><FormLabel className="font-normal">ERC721 Token (NFT)</FormLabel></FormItem>
+                                    <FormItem className="flex items-center space-x-3 space-y-0"><FormControl><RadioGroupItem value="None" /></FormControl><FormLabel className="font-normal">None (Text description)</FormLabel></FormItem>
                                 </RadioGroup>
                             </FormControl><FormMessage />
                         </FormItem>
                      )}/>
-                     <FormField control={form.control} name="reward.tokenAddress" render={({ field }) => (
+                     {rewardType !== 'None' && <FormField control={form.control} name="reward.tokenAddress" render={({ field }) => (
                         <FormItem><FormLabel>Token Contract Address</FormLabel><FormControl><Input placeholder="0x..." {...field} /></FormControl><FormMessage /></FormItem>
-                    )} />
+                    )} />}
                     {rewardType === 'ERC20' && (
                         <FormField control={form.control} name="reward.amount" render={({ field }) => (
                             <FormItem><FormLabel>Amount per Participant</FormLabel><FormControl><Input type="number" placeholder="1000" {...field} /></FormControl><FormMessage /></FormItem>
+                        )}/>
+                    )}
+                    {rewardType === 'None' && (
+                        <FormField control={form.control} name="reward.name" render={({ field }) => (
+                            <FormItem><FormLabel>Reward Description</FormLabel><FormControl><Input placeholder="e.g., A special role in our Discord" {...field} /></FormControl><FormMessage /></FormItem>
                         )}/>
                     )}
                 </section>
@@ -252,7 +263,13 @@ export default function CreateCampaignPage() {
                   <div className="space-y-4 rounded-lg border p-6 bg-secondary/50">
                     <h3 className="font-semibold text-lg">{form.getValues('title')}</h3>
                     <p className="text-sm text-muted-foreground">{form.getValues('shortDescription')}</p>
-                    <div className="text-sm"><strong>Reward:</strong> {form.getValues('reward.type') === 'ERC20' ? `${form.getValues('reward.amount')} tokens` : '1 NFT'} from contract <code className="text-xs bg-muted p-1 rounded">{form.getValues('reward.tokenAddress')}</code></div>
+                    <div className="text-sm"><strong>Reward:</strong> {
+                      form.getValues('reward.type') === 'ERC20' ? `${form.getValues('reward.amount')} tokens from contract ` :
+                      form.getValues('reward.type') === 'ERC721' ? `1 NFT from contract ` :
+                      `${(form.getValues('reward') as any).name}`
+                    }
+                    {form.getValues('reward.type') !== 'None' && <code className="text-xs bg-muted p-1 rounded">{(form.getValues('reward') as any).tokenAddress}</code>}
+                    </div>
                     <div className="text-sm"><strong>Tasks:</strong>
                       <ul className="list-disc pl-5 mt-1 space-y-1">
                         {form.getValues('tasks').map((task, i) => <li key={i}>[{TASK_TYPE_OPTIONS.find(t=>t.value === task.type)?.label}] {task.description}</li>)}
@@ -282,3 +299,4 @@ export default function CreateCampaignPage() {
     </div>
   );
 }
+

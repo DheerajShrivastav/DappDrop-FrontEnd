@@ -18,8 +18,8 @@ declare global {
 let provider: BrowserProvider | null = null;
 let contract: Contract | null = null;
 
-const SEPOLIA_CHAIN_ID = '0xaa36a7';
-const SEPOLIA_RPC_URL = `https://sepolia.infura.io/v3/${process.env.NEXT_PUBLIC_INFURA_ID || 'YOUR_INFURA_ID'}`;
+const SEPOLIA_CHAIN_ID = '11155111';
+const SEPOLIA_RPC_URL = process.env.SEPOLIA_RPC_URL;
 
 if (typeof window !== 'undefined' && window.ethereum) {
   provider = new ethers.BrowserProvider(window.ethereum);
