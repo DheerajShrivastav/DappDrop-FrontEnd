@@ -92,6 +92,9 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
     if (!contract) return [];
     try {
         const campaignCount = await contract.getCampaignCount();
+        if (typeof campaignCount === 'undefined') {
+            return [];
+        }
         const campaigns = [];
         for (let i = 0; i < campaignCount; i++) {
             try {
@@ -141,8 +144,12 @@ export const createCampaign = async (campaignData: any) => {
 
         // Set reward
         const rewardType = campaignData.reward.type === 'ERC20' ? 0 : 1;
-        const rewardAmount = campaignData.reward.amount || '1'; // Default to 1 for NFT
-        const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, campaignData.reward.tokenAddress, ethers.parseUnits(rewardAmount, 18));
+        
+        const rewardAmount = campaignData.reward.type === 'ERC20' 
+            ? ethers.parseUnits(campaignData.reward.amount, 18) 
+            : '1';
+        
+        const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, campaignData.reward.tokenAddress, rewardAmount);
         await rewardTx.wait();
 
         // Add tasks
