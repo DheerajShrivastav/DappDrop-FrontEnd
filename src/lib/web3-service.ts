@@ -141,8 +141,6 @@ export const connectWallet = async (): Promise<string | null> => {
     // Handle multiple wallet extensions
     if (window.ethereum.providers) {
         selectedProvider = window.ethereum.providers.find(p => p.isMetaMask) ?? window.ethereum.providers[0];
-    } else if (window.ethereum.isMetaMask) {
-        selectedProvider = window.ethereum;
     } else {
         selectedProvider = window.ethereum;
     }
@@ -192,12 +190,12 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
         }
         return campaigns.filter(c => c.status !== 'Draft'); // Only show non-draft campaigns
     } catch (error: any) {
-        if (error.code !== 'CALL_EXCEPTION') {
+        if (error.code === 'CALL_EXCEPTION') {
+            console.error("Contract call failed. Check contract address and network.", error)
+            toast({ variant: 'destructive', title: 'Contract Error', description: 'Could not connect to the campaign contract. Please check your configuration and network.' });
+        } else {
             console.error("Error fetching campaigns:", error);
             toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch campaign data.' });
-        } else {
-             console.error("Contract call failed. Check contract address and network.", error)
-             toast({ variant: 'destructive', title: 'Contract Error', description: 'Could not connect to the campaign contract. Please check your configuration.' });
         }
         return [];
     }
