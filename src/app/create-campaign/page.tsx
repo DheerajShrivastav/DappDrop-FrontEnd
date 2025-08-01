@@ -88,7 +88,7 @@ export default function CreateCampaignPage() {
       },
       imageUrl: `https://placehold.co/600x400`,
       tasks: [{ type: 'SOCIAL_FOLLOW', description: '' }],
-      reward: { type: 'ERC20', tokenAddress: '', amount: '' },
+      reward: { type: 'ERC20', tokenAddress: '', amount: '', name: '' },
     },
     mode: 'onChange',
   });
@@ -299,4 +299,3 @@ export default function CreateCampaignPage() {
     </div>
   );
 }
-
