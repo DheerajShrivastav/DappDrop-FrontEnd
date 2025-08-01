@@ -22,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useWallet } from '@/context/wallet-provider';
 import React from 'react';
 import type { TaskType } from '@/lib/types';
+import { createCampaign } from '@/lib/web3-service';
 
 const taskSchema = z.object({
   type: z.enum(['SOCIAL_FOLLOW', 'JOIN_DISCORD', 'RETWEET', 'ONCHAIN_TX']),
@@ -101,19 +102,21 @@ export default function CreateCampaignPage() {
     }
   }, [role, router, toast]);
 
-  const onSubmit = (data: CampaignFormValues) => {
+  const onSubmit = async (data: CampaignFormValues) => {
     if (!isConnected || !address) {
       toast({ variant: 'destructive', title: 'Error', description: 'Please connect your wallet to create a campaign.' });
       return;
     }
     setIsLoading(true);
-    console.log('Campaign Data:', data);
-    // Simulate smart contract interaction (createCampaign, addTaskToCampaign, etc.)
-    setTimeout(() => {
+    try {
+      const campaignId = await createCampaign(data);
+      toast({ title: 'Success!', description: `Your campaign (ID: ${campaignId}) has been created and is in Draft status.` });
+      router.push(`/campaign/${campaignId}`);
+    } catch(e) {
+      // Error toast is handled in the service
+    } finally {
       setIsLoading(false);
-      toast({ title: 'Success!', description: 'Your campaign has been created and is in Draft status.' });
-      router.push('/');
-    }, 2000);
+    }
   };
   
   const nextStep = async () => {

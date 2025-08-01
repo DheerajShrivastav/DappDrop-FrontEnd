@@ -1,16 +1,30 @@
 'use client';
 
 import Link from 'next/link';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Loader2 } from 'lucide-react';
 import { CampaignCard } from '@/components/campaign-card';
-import { campaigns } from '@/lib/mock-data';
 import { useWallet } from '@/context/wallet-provider';
 import { Button } from '@/components/ui/button';
+import { useEffect, useState } from 'react';
+import { getAllCampaigns } from '@/lib/web3-service';
+import type { Campaign } from '@/lib/types';
 
 export default function Home() {
   const { role } = useWallet();
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const visibleCampaigns = campaigns.filter(c => c.status !== 'Draft');
+  useEffect(() => {
+    const fetchCampaigns = async () => {
+      setIsLoading(true);
+      const fetchedCampaigns = await getAllCampaigns();
+      setCampaigns(fetchedCampaigns);
+      setIsLoading(false);
+    };
+
+    fetchCampaigns();
+  }, []);
+
 
   return (
     <>
@@ -42,11 +56,17 @@ export default function Home() {
         <div className="flex justify-between items-center mb-8">
           <h2 className="text-3xl font-bold tracking-tight">Active Campaigns</h2>
         </div>
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-          {visibleCampaigns.map((campaign) => (
-            <CampaignCard key={campaign.id} campaign={campaign} />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-64">
+            <Loader2 className="h-16 w-16 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {campaigns.map((campaign) => (
+              <CampaignCard key={campaign.id} campaign={campaign} />
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

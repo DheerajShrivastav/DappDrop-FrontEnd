@@ -5,11 +5,11 @@ import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import { format } from 'date-fns';
 
-import { campaigns } from '@/lib/mock-data';
 import type { Campaign, UserTask, Task as TaskType } from '@/lib/types';
 import { useWallet } from '@/context/wallet-provider';
 import { useToast } from '@/hooks/use-toast';
 import { truncateAddress } from '@/lib/utils';
+import { getCampaignById } from '@/lib/web3-service';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,10 +41,15 @@ export default function CampaignDetailsPage() {
   const [isJoined, setIsJoined] = useState(false);
 
   useEffect(() => {
-    const foundCampaign = campaigns.find((c) => c.id === id);
-    if (foundCampaign) {
-      setCampaign(foundCampaign);
-      setUserTasks(foundCampaign.tasks.map(task => ({ taskId: task.id, completed: false })));
+    if (id) {
+        const fetchCampaign = async () => {
+            const fetchedCampaign = await getCampaignById(id as string);
+            if (fetchedCampaign) {
+                setCampaign(fetchedCampaign);
+                setUserTasks(fetchedCampaign.tasks.map(task => ({ taskId: task.id, completed: false })));
+            }
+        }
+        fetchCampaign();
     }
   }, [id]);
 
