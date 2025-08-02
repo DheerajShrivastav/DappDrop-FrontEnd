@@ -36,19 +36,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     setIsSuperAdmin(false);
     // You might want to clear other states or local storage here if needed
   }, []);
-
-  const handleAccountsChanged = useCallback(async (accounts: string[]) => {
-    if (accounts.length === 0) {
-      // MetaMask is locked or the user has disconnected all accounts.
-      disconnectWallet();
-    } else if (accounts[0] !== address) {
-      const newAddress = accounts[0];
-      setAddress(newAddress);
-      setIsConnected(true);
-      await checkAdminRole(newAddress);
-    }
-  }, [address, checkAdminRole, disconnectWallet]);
-
+  
   const connectWallet = useCallback(async () => {
     const account = await web3Connect();
     if(account) {
@@ -59,6 +47,16 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
         disconnectWallet();
     }
   }, [checkAdminRole, disconnectWallet]);
+  
+  const handleAccountsChanged = useCallback(async (accounts: string[]) => {
+    if (accounts.length === 0) {
+      // MetaMask is locked or the user has disconnected all accounts.
+      disconnectWallet();
+    } else if (accounts[0] !== address) {
+      // Reconnect with the new account
+      await connectWallet();
+    }
+  }, [address, connectWallet, disconnectWallet]);
 
   const toggleRole = useCallback(() => {
     setRole((prevRole) => (prevRole === 'host' ? 'participant' : 'host'));
@@ -68,31 +66,17 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     if (typeof window.ethereum === 'undefined') {
       return;
     }
-
-    const checkInitialConnection = async () => {
-        try {
-            const accounts = await window.ethereum!.request({ method: 'eth_accounts' });
-            if (accounts.length > 0) {
-                const newAddress = accounts[0];
-                setAddress(newAddress);
-                setIsConnected(true);
-                await checkAdminRole(newAddress);
-            }
-        } catch (error) {
-            console.error("Error checking for initial wallet connection:", error);
-        }
-    };
     
-    checkInitialConnection();
-
+    // Listen for account changes
     window.ethereum.on('accountsChanged', handleAccountsChanged);
 
+    // Cleanup listener on unmount
     return () => {
-      if (window.ethereum) {
+      if (window.ethereum?.removeListener) {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
       }
     };
-  }, [handleAccountsChanged, checkAdminRole]);
+  }, [handleAccountsChanged]);
 
 
   const value = { isConnected, address, role, isSuperAdmin, connectWallet, disconnectWallet, toggleRole, setRole };
