@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState } from 'react';
@@ -86,7 +87,7 @@ export default function CreateCampaignPage() {
       description: '',
       dates: {
         from: new Date(),
-        to: addDays(new Date(), 7),
+        to: addDays(new Date(), 1),
       },
       imageUrl: `https://placehold.co/600x400`,
       tasks: [{ type: 'SOCIAL_FOLLOW', description: '' }],
