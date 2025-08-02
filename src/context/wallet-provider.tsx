@@ -2,9 +2,9 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import { connectWallet as web3Connect, isSuperAdmin as web3IsSuperAdmin } from '@/lib/web3-service';
+import { connectWallet as web3Connect, isSuperAdmin as web3IsSuperAdmin, isHost as web3IsHost } from '@/lib/web3-service';
 
-type Role = 'host' | 'participant';
+type Role = 'host' | 'participant' | null;
 
 interface WalletContextType {
   isConnected: boolean;
@@ -13,8 +13,6 @@ interface WalletContextType {
   isSuperAdmin: boolean;
   connectWallet: () => void;
   disconnectWallet: () => void;
-  toggleRole: () => void;
-  setRole: (role: Role) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -22,19 +20,28 @@ const WalletContext = createContext<WalletContextType | undefined>(undefined);
 export const WalletProvider = ({ children }: { children: ReactNode }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
-  const [role, setRole] = useState<Role>('participant');
+  const [role, setRole] = useState<Role>(null);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
-  const checkAdminRole = useCallback(async (currentAddress: string) => {
+  const checkRoles = useCallback(async (currentAddress: string) => {
       const isAdmin = await web3IsSuperAdmin(currentAddress);
       setIsSuperAdmin(isAdmin);
+
+      // Super Admins are also hosts by default
+      if (isAdmin) {
+          setRole('host');
+          return;
+      }
+
+      const isHost = await web3IsHost(currentAddress);
+      setRole(isHost ? 'host' : 'participant');
   }, []);
 
   const disconnectWallet = useCallback(() => {
     setAddress(null);
     setIsConnected(false);
     setIsSuperAdmin(false);
-    // You might want to clear other states or local storage here if needed
+    setRole(null);
   }, []);
   
   const connectWallet = useCallback(async () => {
@@ -42,35 +49,27 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     if(account) {
         setAddress(account);
         setIsConnected(true);
-        await checkAdminRole(account);
+        await checkRoles(account);
     } else {
         disconnectWallet();
     }
-  }, [checkAdminRole, disconnectWallet]);
+  }, [checkRoles, disconnectWallet]);
   
   const handleAccountsChanged = useCallback(async (accounts: string[]) => {
     if (accounts.length === 0) {
-      // MetaMask is locked or the user has disconnected all accounts.
       disconnectWallet();
     } else if (accounts[0] !== address) {
-      // Reconnect with the new account
       await connectWallet();
     }
   }, [address, connectWallet, disconnectWallet]);
-
-  const toggleRole = useCallback(() => {
-    setRole((prevRole) => (prevRole === 'host' ? 'participant' : 'host'));
-  }, []);
 
   useEffect(() => {
     if (typeof window.ethereum === 'undefined') {
       return;
     }
     
-    // Listen for account changes
     window.ethereum.on('accountsChanged', handleAccountsChanged);
 
-    // Cleanup listener on unmount
     return () => {
       if (window.ethereum?.removeListener) {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
@@ -79,7 +78,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
   }, [handleAccountsChanged]);
 
 
-  const value = { isConnected, address, role, isSuperAdmin, connectWallet, disconnectWallet, toggleRole, setRole };
+  const value = { isConnected, address, role, isSuperAdmin, connectWallet, disconnectWallet };
 
   return (
     <WalletContext.Provider value={value}>

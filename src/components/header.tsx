@@ -13,12 +13,10 @@ import {
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 import { Gem, LogOut, PlusCircle, User, Wallet, Shield } from 'lucide-react';
-import { Switch } from './ui/switch';
-import { Label } from './ui/label';
 import { truncateAddress } from '@/lib/utils';
 
 export default function Header() {
-  const { isConnected, address, connectWallet, disconnectWallet, role, toggleRole, isSuperAdmin } = useWallet();
+  const { isConnected, address, connectWallet, disconnectWallet, role, isSuperAdmin } = useWallet();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -46,20 +44,6 @@ export default function Header() {
           )}
         </nav>
         <div className="flex items-center gap-4">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="role-switch" className="text-sm font-medium">
-              Participant
-            </Label>
-            <Switch
-              id="role-switch"
-              checked={role === 'host'}
-              onCheckedChange={toggleRole}
-              aria-label="Toggle between participant and host roles"
-            />
-            <Label htmlFor="role-switch" className="text-sm font-medium">
-              Host
-            </Label>
-          </div>
           {isConnected && address ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -71,7 +55,7 @@ export default function Header() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel className="flex items-center gap-2">
                   <User className="h-4 w-4" />
-                  <span>My Wallet</span>
+                  <span>My Wallet ({role})</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={disconnectWallet} className="cursor-pointer text-red-500 focus:text-red-500">

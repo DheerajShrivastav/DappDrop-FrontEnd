@@ -304,6 +304,41 @@ export const isSuperAdmin = async (address: string): Promise<boolean> => {
     }
 };
 
+export const isHost = async (address: string): Promise<boolean> => {
+    if (!contract || !address) return false;
+    try {
+        const hostRole = await contract.HOST_ROLE();
+        return await contract.hasRole(hostRole, address);
+    } catch (error) {
+        console.error("Error checking for host role:", error);
+        return false;
+    }
+}
+
+export const getAllHosts = async (): Promise<string[]> => {
+    if (!contract) return [];
+    try {
+        const hostRole = await contract.HOST_ROLE();
+        const filter = contract.filters.RoleGranted(hostRole);
+        const events = await contract.queryFilter(filter, 0, 'latest');
+        const hosts = events.map(event => event.args.account);
+        // We need to also check who has been revoked
+        const revokedFilter = contract.filters.RoleRevoked(hostRole);
+        const revokedEvents = await contract.queryFilter(revokedFilter, 0, 'latest');
+        const revokedHosts = new Set(revokedEvents.map(event => event.args.account));
+
+        // Return a unique list of addresses that have the role and haven't been revoked
+        const uniqueHosts = [...new Set(hosts)].filter(host => !revokedHosts.has(host));
+        return uniqueHosts;
+
+    } catch (error) {
+        console.error("Error fetching hosts:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch host list.' });
+        return [];
+    }
+}
+
+
 export const grantHostRole = async (address: string) => {
     if (!contract) throw new Error("Contract not initialized");
     const signer = await getSigner();
@@ -319,3 +354,19 @@ export const grantHostRole = async (address: string) => {
         throw error;
     }
 };
+
+export const revokeHostRole = async (address: string) => {
+    if (!contract) throw new Error("Contract not initialized");
+    const signer = await getSigner();
+    const contractWithSigner = contract.connect(signer) as Contract;
+    try {
+        const tx = await contractWithSigner.revokeHostRole(address);
+        await tx.wait();
+        toast({ title: 'Success!', description: `HOST_ROLE revoked from ${address}` });
+    } catch (error: any) {
+        console.error("Error revoking host role:", error);
+        const reason = error.reason || "An unknown error occurred.";
+        toast({ variant: 'destructive', title: 'Transaction Failed', description: `Failed to revoke host role. Reason: ${reason}` });
+        throw error;
+    }
+}
