@@ -30,7 +30,6 @@ export default function AdminPage() {
   const router = useRouter();
   
   useEffect(() => {
-    // Redirect if wallet is not connected or user is not the super admin
     if (!isConnected) {
         toast({
             variant: 'destructive',
@@ -38,7 +37,9 @@ export default function AdminPage() {
             description: 'Please connect your wallet to view this page.'
         });
       router.push('/');
-    } else if (!isSuperAdmin) {
+      return;
+    }
+    if (!isSuperAdmin) {
          toast({
             variant: 'destructive',
             title: 'Unauthorized',

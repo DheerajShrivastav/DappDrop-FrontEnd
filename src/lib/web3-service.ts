@@ -203,7 +203,7 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
 };
 
 export const getCampaignById = async (id: string): Promise<Campaign | null> => {
-    if (!contract) return null;
+    if (!contract || !id || isNaN(parseInt(id, 10))) return null;
     try {
         const campaignData = await contract.getCampaign(id);
         return mapContractDataToCampaign(campaignData, parseInt(id));
@@ -262,8 +262,10 @@ export const createCampaign = async (campaignData: any) => {
                 throw new Error("Invalid reward type");
         }
 
-        const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, tokenAddress, rewardAmount);
-        await rewardTx.wait();
+        if (rewardType !== 2) {
+             const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, tokenAddress, rewardAmount);
+             await rewardTx.wait();
+        }
 
 
         // Add tasks
