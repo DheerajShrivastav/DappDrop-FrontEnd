@@ -1,5 +1,4 @@
 
-
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
@@ -20,28 +19,38 @@ declare global {
 // --- Ethers Setup ---
 let provider: BrowserProvider | null = null;
 let contract: Contract | null = null;
+let readOnlyContract: Contract | null = null;
+
 
 const SEPOLIA_CHAIN_ID = '0xaa36a7'; // Sepolia chain id in hex
-const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID';
+const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://rpc.sepolia.org';
+
+const initializeReadOnlyProvider = () => {
+    if (readOnlyContract) return;
+    try {
+        const rpcProvider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
+        if(config.campaignFactoryAddress) {
+            readOnlyContract = new ethers.Contract(config.campaignFactoryAddress, Web3Campaigns.abi, rpcProvider);
+        }
+    } catch (e) {
+        console.error("Failed to initialize read-only provider", e);
+    }
+}
 
 const initializeProviderAndContract = (walletProvider?: Eip1193Provider) => {
     if (walletProvider) {
         provider = new ethers.BrowserProvider(walletProvider);
-    } else if (typeof window === 'undefined') {
-        provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
+        if (config.campaignFactoryAddress) {
+            contract = new ethers.Contract(config.campaignFactoryAddress, Web3Campaigns.abi, provider);
+        } else {
+            contract = null;
+        }
     } else {
-         console.warn('MetaMask not found. Using read-only RPC provider.');
-         provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
-    }
-
-    if (config.campaignFactoryAddress && provider) {
-        contract = new ethers.Contract(config.campaignFactoryAddress, Web3Campaigns.abi, provider);
-    } else {
-        contract = null;
+        initializeReadOnlyProvider();
     }
 }
 // Initial call for read-only access
-initializeProviderAndContract();
+initializeReadOnlyProvider();
 
 
 // --- Helper Functions ---
@@ -51,7 +60,6 @@ const getSigner = async () => {
     toast({ variant: 'destructive', title: 'Wallet not connected', description: 'Please connect your wallet.' });
     throw new Error('Wallet not connected');
   }
-  await connectWallet(); // Ensure provider is using the correct, active wallet
   const signer = await provider.getSigner();
   return signer;
 };
@@ -63,9 +71,6 @@ const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
 
     let rewardName = `Reward for ${contractData.name}`;
     if (Number(contractData.reward.rewardType) === 2) { // "None" type
-        // For "None", the reward details are stored off-chain.
-        // We'll need a way to get this. For now, using a placeholder.
-        // In a real app, you might fetch this from a DB using the campaignId.
         rewardName = "A special off-chain reward";
     }
 
@@ -104,7 +109,6 @@ const switchOrAddSepoliaNetwork = async (ethereum: Eip1193Provider) => {
             params: [{ chainId: SEPOLIA_CHAIN_ID }],
         });
     } catch (switchError: any) {
-        // This error code indicates that the chain has not been added to MetaMask.
         if (switchError.code === 4902) {
             try {
                 await ethereum.request({
@@ -159,11 +163,11 @@ export const connectWallet = async (): Promise<string | null> => {
     }
 
     try {
-        // Re-initialize ethers provider with the selected wallet provider
-        initializeProviderAndContract(selectedProvider);
-
         await switchOrAddSepoliaNetwork(selectedProvider);
         const accounts = await selectedProvider.request({ method: 'eth_requestAccounts' });
+        
+        initializeProviderAndContract(selectedProvider);
+
         return accounts[0] || null;
     } catch (error) {
         console.error("Error connecting to wallet:", error);
@@ -175,27 +179,28 @@ export const connectWallet = async (): Promise<string | null> => {
 };
 
 export const getAllCampaigns = async (): Promise<Campaign[]> => {
-    if (!contract) {
-        console.warn("Contract not initialized, re-initializing...");
-        initializeProviderAndContract(); // Attempt to re-initialize for read-only
-        if (!contract) {
-             toast({ variant: 'destructive', title: 'Contract Error', description: 'Could not connect to the campaign contract. Please check your configuration and network.' });
-             return [];
+    const contractToUse = readOnlyContract;
+    if (!contractToUse) {
+        console.warn("Contract not initialized, trying to initialize read-only...");
+        initializeReadOnlyProvider();
+        if (!readOnlyContract) {
+            toast({ variant: 'destructive', title: 'Contract Error', description: 'Could not connect to the campaign contract. Please check your configuration and network.' });
+            return [];
         }
+        // If it was just initialized, use it
+        return getAllCampaigns();
     }
 
     try {
-        const campaignCountBigInt = await contract.getCampaignCount();
+        const campaignCountBigInt = await contractToUse.getCampaignCount();
         const campaignCount = Number(campaignCountBigInt);
 
-        if (typeof campaignCount === 'undefined' || campaignCount === null) {
-            console.error("getCampaignCount returned undefined or null");
-            return [];
-        }
+        if (campaignCount === 0) return [];
+        
         const campaigns = [];
         for (let i = 0; i < campaignCount; i++) {
             try {
-                const campaignData = await contract.getCampaign(i);
+                const campaignData = await contractToUse.getCampaign(i);
                 campaigns.push(mapContractDataToCampaign(campaignData, i));
             } catch (error) {
                  console.error(`Failed to fetch campaign ${i}:`, error);
@@ -215,9 +220,10 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
 };
 
 export const getCampaignById = async (id: string): Promise<Campaign | null> => {
-    if (!contract || !id || isNaN(parseInt(id, 10))) return null;
+    const contractToUse = readOnlyContract ?? contract;
+    if (!contractToUse || !id || isNaN(parseInt(id, 10))) return null;
     try {
-        const campaignData = await contract.getCampaign(id);
+        const campaignData = await contractToUse.getCampaign(id);
         return mapContractDataToCampaign(campaignData, parseInt(id));
     } catch (error) {
         console.error(`Error fetching campaign ${id}:`, error);
@@ -262,13 +268,10 @@ export const createCampaign = async (campaignData: any) => {
             case 'ERC721':
                 rewardType = 1;
                 tokenAddress = campaignData.reward.tokenAddress;
-                // For ERC721, amount is not used in setCampaignReward, so we pass 0
                 rewardAmount = '0'; 
                 break;
             case 'None':
                 rewardType = 2;
-                // For "None" type, we can store the description off-chain.
-                // The on-chain function does not need a name for it.
                 break;
             default:
                 throw new Error("Invalid reward type");
@@ -293,8 +296,12 @@ export const createCampaign = async (campaignData: any) => {
         console.error("Error creating campaign:", error);
         const reason = error.reason || error.message;
         let description = `Transaction failed: ${reason}`;
-        if (reason && reason.includes('caller is not the host') || error.data?.includes('0x6352211e')) {
+        
+        // This is a generic way to check for custom errors.
+        if (error.data?.includes('0x6352211e')) { // Web3Campaigns__CallerIsNotHost
             description = 'Your wallet does not have the HOST_ROLE. Please ask the contract owner to grant you this role.';
+        } else if (error.data?.includes('0xa1c02e1f')) { // Web3Campaigns__InvalidCampaignDuration
+            description = 'Invalid campaign duration. The end date must be after the start date.';
         } else if (error.code === 'CALL_EXCEPTION' && !reason) {
             description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE, an invalid campaign duration, or another contract requirement was not met. Please contact the contract administrator.';
         }
@@ -305,10 +312,11 @@ export const createCampaign = async (campaignData: any) => {
 };
 
 export const isSuperAdmin = async (address: string): Promise<boolean> => {
-    if (!contract || !address) return false;
+    const contractToUse = contract ?? readOnlyContract;
+    if (!contractToUse || !address) return false;
     try {
-        const adminRole = await contract.DEFAULT_ADMIN_ROLE();
-        const hasAdminRole = await contract.hasRole(adminRole, address);
+        const adminRole = await contractToUse.DEFAULT_ADMIN_ROLE();
+        const hasAdminRole = await contractToUse.hasRole(adminRole, address);
         return hasAdminRole;
     } catch (error) {
         console.error("Error checking for admin role:", error);
@@ -317,10 +325,11 @@ export const isSuperAdmin = async (address: string): Promise<boolean> => {
 };
 
 export const isHost = async (address: string): Promise<boolean> => {
-    if (!contract || !address) return false;
+    const contractToUse = contract ?? readOnlyContract;
+    if (!contractToUse || !address) return false;
     try {
-        const hostRole = await contract.HOST_ROLE();
-        return await contract.hasRole(hostRole, address);
+        const hostRole = await contractToUse.HOST_ROLE();
+        return await contractToUse.hasRole(hostRole, address);
     } catch (error) {
         console.error("Error checking for host role:", error);
         return false;
@@ -328,15 +337,16 @@ export const isHost = async (address: string): Promise<boolean> => {
 }
 
 export const getAllHosts = async (): Promise<string[]> => {
-    if (!contract) return [];
+    const contractToUse = readOnlyContract;
+    if (!contractToUse) return [];
     try {
-        const hostRole = await contract.HOST_ROLE();
-        const filter = contract.filters.RoleGranted(hostRole);
-        const events = await contract.queryFilter(filter, 0, 'latest');
+        const hostRole = await contractToUse.HOST_ROLE();
+        const filter = contractToUse.filters.RoleGranted(hostRole);
+        const events = await contractToUse.queryFilter(filter, 0, 'latest');
         const hosts = events.map(event => (event.args as any).account);
         // We need to also check who has been revoked
-        const revokedFilter = contract.filters.RoleRevoked(hostRole);
-        const revokedEvents = await contract.queryFilter(revokedFilter, 0, 'latest');
+        const revokedFilter = contractToUse.filters.RoleRevoked(hostRole);
+        const revokedEvents = await contractToUse.queryFilter(revokedFilter, 0, 'latest');
         const revokedHosts = new Set(revokedEvents.map(event => (event.args as any).account));
 
         // Return a unique list of addresses that have the role and haven't been revoked
@@ -383,3 +393,4 @@ export const revokeHostRole = async (address: string) => {
     }
 }
 
+    
