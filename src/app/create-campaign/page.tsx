@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useState } from 'react';
@@ -8,7 +7,8 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addDays, format } from 'date-fns';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Loader2, Plus, ShieldCheck, Trash2 } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Loader2, Plus, ShieldCheck, Trash2, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -143,11 +143,21 @@ export default function CreateCampaignPage() {
   if (role && role !== 'host') {
     return (
         <div className="container mx-auto px-4 py-12 max-w-4xl">
-            <Alert variant="destructive">
+            <Alert variant="default">
                 <ShieldCheck className="h-4 w-4" />
-                <AlertTitle>Host Role Required</AlertTitle>
+                <AlertTitle>Host Role Required to Create Campaigns</AlertTitle>
                 <AlertDescription>
-                    You must have the 'Host' role to create a new campaign. Please contact the platform administrator to request access.
+                    <p className="mb-4">
+                        To ensure the quality and safety of our platform, creating new airdrop campaigns is restricted to users with the 'Host' role.
+                    </p>
+                    <p className="mb-4">
+                        If you represent a project and would like to launch a campaign, please apply for the host role. The administrator will review your application and grant access if it's approved.
+                    </p>
+                     <Button asChild>
+                        <Link href="https://docs.google.com/forms/d/e/1FAIpQLScoKWvHpz_9KkRxH9Euf9AcjZDJIhdfIVT3n5G8__ZTSN8Bwg/viewform?usp=dialog" target="_blank">
+                           Apply for Host Role <ExternalLink className="ml-2 h-4 w-4" />
+                        </Link>
+                    </Button>
                 </AlertDescription>
             </Alert>
         </div>
@@ -310,3 +320,5 @@ export default function CreateCampaignPage() {
     </div>
   );
 }
+
+    
