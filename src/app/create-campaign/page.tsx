@@ -8,7 +8,7 @@ import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addDays, format } from 'date-fns';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Loader2, Plus, ShieldCheck, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -25,6 +25,7 @@ import { useWallet } from '@/context/wallet-provider';
 import React from 'react';
 import type { TaskType } from '@/lib/types';
 import { createCampaign } from '@/lib/web3-service';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const taskSchema = z.object({
   type: z.enum(['SOCIAL_FOLLOW', 'JOIN_DISCORD', 'RETWEET', 'ONCHAIN_TX']),
@@ -103,13 +104,6 @@ export default function CreateCampaignPage() {
 
   const rewardType = form.watch('reward.type');
 
-  React.useEffect(() => {
-    if (role !== 'host') {
-        toast({ variant: 'destructive', title: 'Unauthorized', description: 'You must be a host to create a campaign.' });
-        router.push('/');
-    }
-  }, [role, router, toast]);
-
   const onSubmit = async (data: CampaignFormValues) => {
     if (!isConnected || !address) {
       toast({ variant: 'destructive', title: 'Error', description: 'Please connect your wallet to create a campaign.' });
@@ -145,6 +139,20 @@ export default function CreateCampaignPage() {
     { id: 3, name: 'Rewards' },
     { id: 4, name: 'Review' }
   ];
+
+  if (role && role !== 'host') {
+    return (
+        <div className="container mx-auto px-4 py-12 max-w-4xl">
+            <Alert variant="destructive">
+                <ShieldCheck className="h-4 w-4" />
+                <AlertTitle>Host Role Required</AlertTitle>
+                <AlertDescription>
+                    You must have the 'Host' role to create a new campaign. Please contact the platform administrator to request access.
+                </AlertDescription>
+            </Alert>
+        </div>
+    )
+  }
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
