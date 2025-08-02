@@ -1,4 +1,5 @@
 
+
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
@@ -23,19 +24,24 @@ let contract: Contract | null = null;
 const SEPOLIA_CHAIN_ID = '0xaa36a7'; // Sepolia chain id in hex
 const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://sepolia.infura.io/v3/YOUR_INFURA_PROJECT_ID';
 
-const initializeProvider = () => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-        provider = new ethers.BrowserProvider(window.ethereum);
-    } else {
-        console.warn('MetaMask not found. Please install MetaMask to use this dApp.');
+const initializeProviderAndContract = (walletProvider?: Eip1193Provider) => {
+    if (walletProvider) {
+        provider = new ethers.BrowserProvider(walletProvider);
+    } else if (typeof window === 'undefined') {
         provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
+    } else {
+         console.warn('MetaMask not found. Using read-only RPC provider.');
+         provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL);
     }
 
     if (config.campaignFactoryAddress && provider) {
         contract = new ethers.Contract(config.campaignFactoryAddress, Web3Campaigns.abi, provider);
+    } else {
+        contract = null;
     }
 }
-initializeProvider();
+// Initial call for read-only access
+initializeProviderAndContract();
 
 
 // --- Helper Functions ---
@@ -45,7 +51,9 @@ const getSigner = async () => {
     toast({ variant: 'destructive', title: 'Wallet not connected', description: 'Please connect your wallet.' });
     throw new Error('Wallet not connected');
   }
-  return provider.getSigner();
+  await connectWallet(); // Ensure provider is using the correct, active wallet
+  const signer = await provider.getSigner();
+  return signer;
 };
 
 
@@ -139,7 +147,6 @@ export const connectWallet = async (): Promise<string | null> => {
     
     let selectedProvider: (Eip1193Provider & { isMetaMask?: boolean; }) | null = null;
 
-    // Handle multiple wallet extensions
     if (window.ethereum.providers) {
         selectedProvider = window.ethereum.providers.find(p => p.isMetaMask) ?? window.ethereum.providers[0];
     } else {
@@ -153,10 +160,7 @@ export const connectWallet = async (): Promise<string | null> => {
 
     try {
         // Re-initialize ethers provider with the selected wallet provider
-        provider = new ethers.BrowserProvider(selectedProvider);
-        if (config.campaignFactoryAddress && provider) {
-            contract = new ethers.Contract(config.campaignFactoryAddress, Web3Campaigns.abi, provider);
-        }
+        initializeProviderAndContract(selectedProvider);
 
         await switchOrAddSepoliaNetwork(selectedProvider);
         const accounts = await selectedProvider.request({ method: 'eth_requestAccounts' });
@@ -171,7 +175,15 @@ export const connectWallet = async (): Promise<string | null> => {
 };
 
 export const getAllCampaigns = async (): Promise<Campaign[]> => {
-    if (!contract) return [];
+    if (!contract) {
+        console.warn("Contract not initialized, re-initializing...");
+        initializeProviderAndContract(); // Attempt to re-initialize for read-only
+        if (!contract) {
+             toast({ variant: 'destructive', title: 'Contract Error', description: 'Could not connect to the campaign contract. Please check your configuration and network.' });
+             return [];
+        }
+    }
+
     try {
         const campaignCountBigInt = await contract.getCampaignCount();
         const campaignCount = Number(campaignCountBigInt);
@@ -281,10 +293,10 @@ export const createCampaign = async (campaignData: any) => {
         console.error("Error creating campaign:", error);
         const reason = error.reason || error.message;
         let description = `Transaction failed: ${reason}`;
-        if (reason && reason.includes('caller is not the host')) {
+        if (reason && reason.includes('caller is not the host') || error.data?.includes('0x6352211e')) {
             description = 'Your wallet does not have the HOST_ROLE. Please ask the contract owner to grant you this role.';
-        } else if (error.code === 'CALL_EXCEPTION') {
-            description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE to create campaigns, or another contract requirement was not met. Please contact the contract administrator.';
+        } else if (error.code === 'CALL_EXCEPTION' && !reason) {
+            description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE, an invalid campaign duration, or another contract requirement was not met. Please contact the contract administrator.';
         }
         
         toast({ variant: 'destructive', title: 'Transaction Failed', description });
@@ -321,11 +333,11 @@ export const getAllHosts = async (): Promise<string[]> => {
         const hostRole = await contract.HOST_ROLE();
         const filter = contract.filters.RoleGranted(hostRole);
         const events = await contract.queryFilter(filter, 0, 'latest');
-        const hosts = events.map(event => event.args.account);
+        const hosts = events.map(event => (event.args as any).account);
         // We need to also check who has been revoked
         const revokedFilter = contract.filters.RoleRevoked(hostRole);
         const revokedEvents = await contract.queryFilter(revokedFilter, 0, 'latest');
-        const revokedHosts = new Set(revokedEvents.map(event => event.args.account));
+        const revokedHosts = new Set(revokedEvents.map(event => (event.args as any).account));
 
         // Return a unique list of addresses that have the role and haven't been revoked
         const uniqueHosts = [...new Set(hosts)].filter(host => !revokedHosts.has(host));
@@ -370,3 +382,4 @@ export const revokeHostRole = async (address: string) => {
         throw error;
     }
 }
+
