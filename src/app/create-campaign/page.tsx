@@ -140,18 +140,18 @@ export default function CreateCampaignPage() {
     { id: 4, name: 'Review' }
   ];
 
-  if (role && role !== 'host') {
+  if (!isConnected || role !== 'host') {
     return (
         <div className="container mx-auto px-4 py-12 max-w-4xl">
             <Alert variant="default">
                 <ShieldCheck className="h-4 w-4" />
                 <AlertTitle>Host Role Required to Create Campaigns</AlertTitle>
                 <AlertDescription>
-                    <p className="mb-4">
+                    <p className="mb-2">
                         To ensure the quality and safety of our platform, creating new airdrop campaigns is restricted to users with the 'Host' role.
                     </p>
                     <p className="mb-4">
-                        If you represent a project and would like to launch a campaign, please apply for the host role. The administrator will review your application and grant access if it's approved.
+                        If you represent a project and would like to launch a campaign, please connect your wallet and apply for the host role. The administrator will review your application and grant access if it's approved.
                     </p>
                      <Button asChild>
                         <Link href="https://docs.google.com/forms/d/e/1FAIpQLScoKWvHpz_9KkRxH9Euf9AcjZDJIhdfIVT3n5G8__ZTSN8Bwg/viewform?usp=dialog" target="_blank">
@@ -320,5 +320,3 @@ export default function CreateCampaignPage() {
     </div>
   );
 }
-
-    
