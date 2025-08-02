@@ -30,31 +30,31 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
       setIsSuperAdmin(isAdmin);
   }, []);
 
-  const handleAccountsChanged = useCallback((accounts: string[]) => {
+  const disconnectWallet = useCallback(() => {
+    setAddress(null);
+    setIsConnected(false);
+    setIsSuperAdmin(false);
+  }, []);
+
+  const handleAccountsChanged = useCallback(async (accounts: string[]) => {
     if (accounts.length === 0) {
       console.log('Please connect to MetaMask.');
       disconnectWallet();
     } else if (accounts[0] !== address) {
       setAddress(accounts[0]);
       setIsConnected(true);
-      checkAdminRole(accounts[0]);
+      await checkAdminRole(accounts[0]);
     }
-  }, [address, checkAdminRole]);
+  }, [address, checkAdminRole, disconnectWallet]);
 
   const connectWallet = useCallback(async () => {
     const account = await web3Connect();
     if(account) {
         setAddress(account);
         setIsConnected(true);
-        checkAdminRole(account);
+        await checkAdminRole(account);
     }
   }, [checkAdminRole]);
-
-  const disconnectWallet = useCallback(() => {
-    setAddress(null);
-    setIsConnected(false);
-    setIsSuperAdmin(false);
-  }, []);
 
   const toggleRole = useCallback(() => {
     setRole((prevRole) => (prevRole === 'host' ? 'participant' : 'host'));
@@ -65,7 +65,6 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
       window.ethereum.on('accountsChanged', handleAccountsChanged);
     }
     
-    // Initial check for connected accounts
     const checkConnection = async () => {
         if(window.ethereum) {
             try {
@@ -87,8 +86,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
         window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checkAdminRole]);
+  }, [checkAdminRole, handleAccountsChanged]);
 
 
   const value = { isConnected, address, role, isSuperAdmin, connectWallet, disconnectWallet, toggleRole, setRole };
