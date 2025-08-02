@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -11,13 +12,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { Gem, LogOut, PlusCircle, User, Wallet } from 'lucide-react';
+import { Gem, LogOut, PlusCircle, User, Wallet, Shield } from 'lucide-react';
 import { Switch } from './ui/switch';
 import { Label } from './ui/label';
 import { truncateAddress } from '@/lib/utils';
 
 export default function Header() {
-  const { isConnected, address, connectWallet, disconnectWallet, role, toggleRole } = useWallet();
+  const { isConnected, address, connectWallet, disconnectWallet, role, toggleRole, isSuperAdmin } = useWallet();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -33,6 +34,14 @@ export default function Header() {
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Create Campaign
               </Link>
+            </Button>
+          )}
+          {isSuperAdmin && (
+            <Button variant="ghost" asChild>
+                <Link href="/admin">
+                    <Shield className="mr-2 h-4 w-4" />
+                    Admin
+                </Link>
             </Button>
           )}
         </nav>

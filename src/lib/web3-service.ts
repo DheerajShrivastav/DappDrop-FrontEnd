@@ -250,6 +250,8 @@ export const createCampaign = async (campaignData: any) => {
             case 'ERC721':
                 rewardType = 1;
                 tokenAddress = campaignData.reward.tokenAddress;
+                // For ERC721, amount is not used in setCampaignReward, so we pass 0
+                rewardAmount = '0'; 
                 break;
             case 'None':
                 rewardType = 2;
@@ -276,14 +278,42 @@ export const createCampaign = async (campaignData: any) => {
     } catch(error: any) {
         console.error("Error creating campaign:", error);
         const reason = error.reason || error.message;
-        let description = reason;
+        let description = `Transaction failed: ${reason}`;
         if (reason && reason.includes('caller is not the host')) {
             description = 'Your wallet does not have the HOST_ROLE. Please ask the contract owner to grant you this role.';
         } else if (error.code === 'CALL_EXCEPTION') {
-            description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE to create campaigns. Please contact the contract administrator.';
+            description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE to create campaigns, or another contract requirement was not met. Please contact the contract administrator.';
         }
         
         toast({ variant: 'destructive', title: 'Transaction Failed', description });
+        throw error;
+    }
+};
+
+export const isSuperAdmin = async (address: string): Promise<boolean> => {
+    if (!contract || !address) return false;
+    try {
+        const adminRole = await contract.DEFAULT_ADMIN_ROLE();
+        const hasAdminRole = await contract.hasRole(adminRole, address);
+        return hasAdminRole;
+    } catch (error) {
+        console.error("Error checking for admin role:", error);
+        return false;
+    }
+};
+
+export const grantHostRole = async (address: string) => {
+    if (!contract) throw new Error("Contract not initialized");
+    const signer = await getSigner();
+    const contractWithSigner = contract.connect(signer) as Contract;
+    try {
+        const tx = await contractWithSigner.grantHostRole(address);
+        await tx.wait();
+        toast({ title: 'Success!', description: `HOST_ROLE granted to ${address}` });
+    } catch (error: any) {
+        console.error("Error granting host role:", error);
+        const reason = error.reason || "An unknown error occurred.";
+        toast({ variant: 'destructive', title: 'Transaction Failed', description: `Failed to grant host role. Reason: ${reason}` });
         throw error;
     }
 };
