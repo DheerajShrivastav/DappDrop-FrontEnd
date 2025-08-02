@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -15,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Calendar, CheckCircle, Clock, Gift, Loader2, Users, Info, ShieldCheck, Twitter, MessageSquare, Bot } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, Gift, Loader2, Users, Info, ShieldCheck, Twitter, MessageSquare, Bot, Share2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
 const TaskIcon = ({ type }: { type: TaskType['type'] }) => {
@@ -52,6 +53,16 @@ export default function CampaignDetailsPage() {
         fetchCampaign();
     }
   }, [id]);
+
+  const handleShare = () => {
+    const url = window.location.href;
+    navigator.clipboard.writeText(url).then(() => {
+        toast({ title: 'Link Copied!', description: 'Campaign link copied to your clipboard.' });
+    }).catch(err => {
+        console.error('Failed to copy text: ', err);
+        toast({ variant: 'destructive', title: 'Error', description: 'Failed to copy link.' });
+    });
+  };
 
   if (!campaign) {
     return (
@@ -129,7 +140,13 @@ export default function CampaignDetailsPage() {
                 </div>
             </CardHeader>
             <CardContent className="p-6">
-                <CardTitle className="text-3xl font-bold mb-2">{campaign.title}</CardTitle>
+                <div className="flex justify-between items-start mb-2">
+                    <CardTitle className="text-3xl font-bold">{campaign.title}</CardTitle>
+                    <Button variant="outline" size="icon" onClick={handleShare}>
+                        <Share2 className="h-5 w-5" />
+                        <span className="sr-only">Share</span>
+                    </Button>
+                </div>
                 <CardDescription className="text-lg text-foreground">{campaign.longDescription}</CardDescription>
             </CardContent>
           </Card>
