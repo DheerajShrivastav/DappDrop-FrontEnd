@@ -349,7 +349,6 @@ export const getAllHosts = async (): Promise<string[]> => {
         const revokedEvents = await contractToUse.queryFilter(revokedFilter, 0, 'latest');
         const revokedHosts = new Set(revokedEvents.map(event => (event.args as any).account));
 
-        // Return a unique list of addresses that have the role and haven't been revoked
         const uniqueHosts = [...new Set(hosts)].filter(host => !revokedHosts.has(host));
         return uniqueHosts;
 
