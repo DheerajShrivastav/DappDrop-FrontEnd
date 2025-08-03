@@ -2,13 +2,14 @@
 'use client';
 
 import Link from 'next/link';
-import { PlusCircle, Loader2, Rocket, Zap, Award } from 'lucide-react';
+import { PlusCircle, Loader2, Rocket, Zap, Award, Twitter, Github, Bot, ShieldCheck, DollarSign, Image as ImageIcon } from 'lucide-react';
 import { CampaignCard } from '@/components/campaign-card';
 import { useWallet } from '@/context/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
 import { getAllCampaigns } from '@/lib/web3-service';
 import type { Campaign } from '@/lib/types';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function Home() {
   const { role } = useWallet();
@@ -31,11 +32,8 @@ export default function Home() {
     <>
       <section className="bg-background border-b border-primary/20">
         <div className="container mx-auto px-4 py-20 text-center">
-          <div className="bg-primary/10 rounded-full px-4 py-1.5 text-sm text-primary-foreground inline-block mb-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            Find The Next Billion Real Users For Your Project
-          </div>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tighter text-foreground animate-in fade-in slide-in-from-bottom-10 duration-700">
-            Project Onboard
+            Find The Next Billion Real Users For Your Project
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200">
             The ultimate platform to launch your project, engage real users, and build a thriving community on-chain. Ditch the bots, find your tribe.
@@ -81,6 +79,87 @@ export default function Home() {
                     <h3 className="text-xl font-semibold mb-2">Grow Your Community</h3>
                     <p className="text-muted-foreground">Reward genuine participation and turn new users into a valuable, long-term community.</p>
                 </div>
+            </div>
+        </div>
+      </section>
+
+      <section className="py-20 bg-background">
+        <div className="container mx-auto px-4">
+            <h2 className="text-3xl font-bold tracking-tight text-center mb-4">Engage Your Way</h2>
+            <p className="text-muted-foreground text-center max-w-2xl mx-auto mb-12">
+              From simple social tasks to complex on-chain actions, design campaigns that create genuine engagement and reward users with valuable digital assets.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+                <Card className="bg-card border-primary/20">
+                    <CardHeader>
+                        <CardTitle className="text-2xl">Tasks for Real Engagement</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                       <div className="flex items-start gap-4">
+                            <div className="bg-primary/10 p-2 rounded-lg mt-1"><Twitter className="h-5 w-5 text-primary" /></div>
+                            <div>
+                                <h4 className="font-semibold">Social Follows</h4>
+                                <p className="text-sm text-muted-foreground">Grow your community on platforms like X (formerly Twitter).</p>
+                            </div>
+                       </div>
+                       <div className="flex items-start gap-4">
+                            <div className="bg-primary/10 p-2 rounded-lg mt-1"><Github className="h-5 w-5 text-primary" /></div>
+                            <div>
+                                <h4 className="font-semibold">GitHub Repo Stars</h4>
+                                <p className="text-sm text-muted-foreground">Encourage developers to engage with your open-source code.</p>
+                            </div>
+                       </div>
+                       <div className="flex items-start gap-4">
+                            <div className="bg-primary/10 p-2 rounded-lg mt-1"><Bot className="h-5 w-5 text-primary" /></div>
+                            <div>
+                                <h4 className="font-semibold">Join Discord / Telegram</h4>
+                                <p className="text-sm text-muted-foreground">Funnel engaged users directly into your community channels.</p>
+                            </div>
+                       </div>
+                       <div className="flex items-start gap-4">
+                            <div className="bg-primary/10 p-2 rounded-lg mt-1"><ShieldCheck className="h-5 w-5 text-primary" /></div>
+                            <div>
+                                <h4 className="font-semibold">On-Chain Actions</h4>
+                                <p className="text-sm text-muted-foreground">Verify wallet balances, token holds, or specific contract interactions.</p>
+                            </div>
+                       </div>
+                    </CardContent>
+                </Card>
+                 <Card className="bg-card border-primary/20">
+                    <CardHeader>
+                        <CardTitle className="text-2xl">Rewards That Matter</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                       <div className="flex items-start gap-4">
+                            <div className="bg-primary/10 p-2 rounded-lg mt-1"><ImageIcon className="h-5 w-5 text-primary" /></div>
+                            <div>
+                                <h4 className="font-semibold">On-Chain NFTs</h4>
+                                <p className="text-sm text-muted-foreground">Reward loyal users with unique, verifiable digital collectibles (ERC721).</p>
+                            </div>
+                       </div>
+                       <div className="flex items-start gap-4">
+                            <div className="bg-primary/10 p-2 rounded-lg mt-1"><DollarSign className="h-5 w-5 text-primary" /></div>
+                            <div>
+                                <h4 className="font-semibold">Cryptocurrency</h4>
+                                <p className="text-sm text-muted-foreground">Distribute your project's native token or other popular tokens (ERC20).</p>
+                            </div>
+                       </div>
+                       <div className="flex items-start gap-4">
+                            <div className="bg-primary/10 p-2 rounded-lg mt-1"><Award className="h-5 w-5 text-primary" /></div>
+                            <div>
+                                <h4 className="font-semibold">Exclusive Roles & Access</h4>
+                                <p className="text-sm text-muted-foreground">Grant special Discord roles or access to token-gated content.</p>
+                            </div>
+                       </div>
+                       <div className="flex items-start gap-4">
+                            <div className="bg-primary/10 p-2 rounded-lg mt-1"><Zap className="h-5 w-5 text-primary" /></div>
+                            <div>
+                                <h4 className="font-semibold">And More...</h4>
+                                <p className="text-sm text-muted-foreground">Our flexible system allows for a wide range of creative reward structures.</p>
+                            </div>
+                       </div>
+                    </CardContent>
+                </Card>
             </div>
         </div>
       </section>
