@@ -32,8 +32,11 @@ export default function Home() {
     <>
       <section className="bg-background border-b border-primary/20">
         <div className="container mx-auto px-4 py-20 text-center">
+            <div className="bg-primary/10 rounded-full px-4 py-1.5 text-sm text-primary inline-block mb-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                Find The Next Billion Real Users For Your Project
+            </div>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tighter text-foreground animate-in fade-in slide-in-from-bottom-10 duration-700">
-            Find The Next Billion Real Users For Your Project
+            A New Era of Community Building
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200">
             The ultimate platform to launch your project, engage real users, and build a thriving community on-chain. Ditch the bots, find your tribe.
