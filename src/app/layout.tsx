@@ -3,6 +3,13 @@ import './globals.css';
 import { WalletProvider } from '@/context/wallet-provider';
 import Header from '@/components/header';
 import { Toaster } from '@/components/ui/toaster';
+import { Inter } from 'next/font/google'
+
+const inter = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-inter',
+})
 
 export const metadata: Metadata = {
   title: 'DApp Drop Zone',
@@ -15,13 +22,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" style={{ scrollBehavior: 'smooth' }} suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-      </head>
-      <body className="font-body antialiased min-h-screen flex flex-col" suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} dark`} style={{ scrollBehavior: 'smooth' }} suppressHydrationWarning>
+      <body className="font-body antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
         <WalletProvider>
           <Header />
           <main className="flex-grow">{children}</main>

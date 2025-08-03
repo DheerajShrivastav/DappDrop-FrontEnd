@@ -127,7 +127,7 @@ export default function CampaignDetailsPage() {
     <div className="container mx-auto px-4 py-12">
       <div className="grid lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 space-y-8">
-          <Card className="bg-card">
+          <Card className="bg-card border">
              <CardHeader className="p-0">
                 <div className="relative h-80 w-full">
                     <Image
@@ -147,11 +147,11 @@ export default function CampaignDetailsPage() {
                         <span className="sr-only">Share</span>
                     </Button>
                 </div>
-                <CardDescription className="text-lg text-foreground">{campaign.longDescription}</CardDescription>
+                <CardDescription className="text-lg text-muted-foreground">{campaign.longDescription}</CardDescription>
             </CardContent>
           </Card>
           
-          <Card className="bg-card">
+          <Card className="bg-card border">
             <CardHeader><CardTitle>Tasks to Complete</CardTitle></CardHeader>
             <CardContent className="space-y-4">
                {role === 'participant' && (
@@ -166,9 +166,11 @@ export default function CampaignDetailsPage() {
               {campaign.tasks.map((task) => {
                 const userTask = userTasks.find(ut => ut.taskId === task.id);
                 return (
-                  <div key={task.id} className="flex items-center justify-between p-3 rounded-md bg-secondary/50">
+                  <div key={task.id} className="flex items-center justify-between p-4 rounded-md bg-secondary/50">
                     <div className="flex items-center space-x-4">
-                      <TaskIcon type={task.type} />
+                      <div className="p-2 bg-background rounded-full">
+                        <TaskIcon type={task.type} />
+                      </div>
                       <label htmlFor={task.id} className="text-sm font-medium leading-none">
                         {task.description}
                       </label>
@@ -196,7 +198,7 @@ export default function CampaignDetailsPage() {
         </div>
 
         <div className="lg:col-span-1 space-y-6">
-          <Card className="bg-card">
+          <Card className="bg-card border">
             <CardHeader><CardTitle>Campaign Info</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div className="flex items-center"><Users className="h-4 w-4 mr-3 text-muted-foreground" /> <span>{campaign.participants.toLocaleString()} participants</span></div>
@@ -216,7 +218,7 @@ export default function CampaignDetailsPage() {
           </Card>
 
           {role === 'participant' && (
-            <Card className="bg-card">
+            <Card className="bg-card border sticky top-24">
                 <CardHeader><CardTitle>Your Actions</CardTitle></CardHeader>
                 <CardContent className='space-y-4'>
                     {!isJoined ? (

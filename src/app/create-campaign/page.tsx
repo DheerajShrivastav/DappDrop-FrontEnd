@@ -3,11 +3,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addDays, format } from 'date-fns';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Loader2, Plus, ShieldCheck, Trash2, ExternalLink } from 'lucide-react';
+import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -143,15 +143,15 @@ export default function CreateCampaignPage() {
   if (!isConnected || role !== 'host') {
     return (
         <div className="container mx-auto px-4 py-12 max-w-4xl">
-            <Alert variant="default">
-                <ShieldCheck className="h-4 w-4" />
+            <Alert variant="default" className="border-primary/20 bg-card">
+                <ShieldCheck className="h-4 w-4 text-primary" />
                 <AlertTitle>Host Role Required to Create Campaigns</AlertTitle>
                 <AlertDescription>
                     <p className="mb-2">
                         To ensure the quality and safety of our platform, creating new airdrop campaigns is restricted to users with the 'Host' role.
                     </p>
                     <p className="mb-4">
-                        If you represent a project and would like to launch a campaign, please connect your wallet and apply for the host role. The administrator will review your application and grant access if it's approved.
+                        If you represent a project and would like to launch a campaign, please complete our application form. The administrator will review your application and grant access if it's approved.
                     </p>
                      <Button asChild>
                         <Link href="https://docs.google.com/forms/d/e/1FAIpQLScoKWvHpz_9KkRxH9Euf9AcjZDJIhdfIVT3n5G8__ZTSN8Bwg/viewform?usp=dialog" target="_blank">
@@ -166,7 +166,7 @@ export default function CreateCampaignPage() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
-      <Card className="bg-card">
+      <Card className="bg-card border shadow-lg">
         <CardHeader>
           <CardTitle className="text-3xl font-bold text-center">Create New Airdrop Campaign</CardTitle>
           <CardDescription className="text-center">Follow the steps to launch your next successful campaign.</CardDescription>
@@ -176,8 +176,8 @@ export default function CreateCampaignPage() {
                 <ol className="flex items-center w-full max-w-2xl">
                     {steps.map((s, index) => (
                         <li key={s.id} className={cn("flex w-full items-center", { "after:content-[''] after:w-full after:h-1 after:border-b after:border-border after:border-4 after:inline-block": index !== steps.length - 1 })}>
-                            <span className={cn("flex items-center justify-center w-10 h-10 rounded-full lg:h-12 lg:w-12 shrink-0", step > s.id ? 'bg-primary text-primary-foreground' : step === s.id ? 'bg-accent text-accent-foreground' : 'bg-secondary')}>
-                                {step > s.id ? <ChevronRight className="w-6 h-6" /> : s.id}
+                            <span className={cn("flex items-center justify-center w-10 h-10 rounded-full lg:h-12 lg:w-12 shrink-0 font-bold", step > s.id ? 'bg-primary text-primary-foreground' : step === s.id ? 'bg-primary/20 border-2 border-primary text-primary' : 'bg-secondary')}>
+                                {step > s.id ? <Check className="w-6 h-6" /> : s.id}
                             </span>
                         </li>
                     ))}
@@ -237,7 +237,7 @@ export default function CreateCampaignPage() {
                             <FormField control={form.control} name={`tasks.${index}.description`} render={({ field }) => (
                                 <FormItem className="flex-1"><FormLabel>Description</FormLabel><FormControl><Input placeholder={`E.g., Follow @project on X`} {...field} /></FormControl><FormMessage /></FormItem>
                             )}/>
-                            <Button type="button" variant="ghost" size="icon" className="mt-8 text-muted-foreground" onClick={() => remove(index)} disabled={fields.length <= 1}>
+                            <Button type="button" variant="ghost" size="icon" className="mt-8 text-muted-foreground hover:text-destructive" onClick={() => remove(index)} disabled={fields.length <= 1}>
                                 <Trash2 className="h-4 w-4" /><span className="sr-only">Remove Task</span>
                             </Button>
                         </div>
@@ -281,7 +281,7 @@ export default function CreateCampaignPage() {
               {step === 4 && (
                 <section className="space-y-6 animate-in fade-in-50">
                   <h2 className="text-xl font-semibold border-b pb-2">{steps[3].name} &amp; Create</h2>
-                  <div className="space-y-4 rounded-lg border p-6 bg-secondary/50">
+                  <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-6">
                     <h3 className="font-semibold text-lg">{form.getValues('title')}</h3>
                     <p className="text-sm text-muted-foreground">{form.getValues('shortDescription')}</p>
                     <div className="text-sm"><strong>Reward:</strong> {
@@ -301,11 +301,17 @@ export default function CreateCampaignPage() {
                 </section>
               )}
 
-              <div className="flex justify-between pt-4">
-                <Button type="button" variant="outline" onClick={prevStep} disabled={step === 1}>Previous</Button>
+              <div className="flex justify-between pt-4 mt-8 border-t">
+                <Button type="button" variant="outline" onClick={prevStep} disabled={step === 1}>
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Previous
+                </Button>
                 
                 {step < 4 ? (
-                    <Button type="button" onClick={nextStep}>Next</Button>
+                    <Button type="button" onClick={nextStep}>
+                        Next
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
                 ) : (
                   <Button type="submit" disabled={isLoading}>
                     {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

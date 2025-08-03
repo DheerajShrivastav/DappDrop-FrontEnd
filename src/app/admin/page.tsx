@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { ShieldCheck, Loader2, UserX } from 'lucide-react';
+import { ShieldCheck, Loader2, UserX, UserPlus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useWallet } from '@/context/wallet-provider';
 import { grantHostRole, getAllHosts, revokeHostRole } from '@/lib/web3-service';
-import { truncateAddress } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 
 const hostRoleSchema = z.object({
@@ -119,15 +118,15 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-12 max-w-2xl">
-        <Card className="bg-card mb-8">
+    <div className="container mx-auto px-4 py-12 max-w-4xl">
+        <Card className="bg-card border mb-8 shadow-lg">
             <CardHeader>
-            <CardTitle className="text-3xl font-bold text-center">Admin Panel</CardTitle>
+            <CardTitle className="text-3xl font-bold text-center flex items-center justify-center gap-2"><UserPlus /> Admin Panel</CardTitle>
             <CardDescription className="text-center">Grant Host Role to a New Address</CardDescription>
             </CardHeader>
             <CardContent>
             <Form {...form}>
-                <form onSubmit={form.handleSubmit(onGrantSubmit)} className="space-y-8">
+                <form onSubmit={form.handleSubmit(onGrantSubmit)} className="space-y-6">
                 <FormField
                     control={form.control}
                     name="address"
@@ -153,7 +152,7 @@ export default function AdminPage() {
             </CardContent>
         </Card>
 
-        <Card className="bg-card">
+        <Card className="bg-card border shadow-lg">
             <CardHeader>
                 <CardTitle>Manage Existing Hosts</CardTitle>
                 <CardDescription>Revoke HOST_ROLE from an address.</CardDescription>
@@ -173,7 +172,7 @@ export default function AdminPage() {
                                 Revoke
                             </Button>
                         </div>
-                    )) : <p className="text-muted-foreground text-center">No hosts found.</p>}
+                    )) : <p className="text-muted-foreground text-center py-4">No hosts found.</p>}
                 </div>
             </CardContent>
         </Card>

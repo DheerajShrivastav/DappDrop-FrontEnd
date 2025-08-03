@@ -14,6 +14,7 @@ import {
 } from './ui/dropdown-menu';
 import { Gem, LogOut, PlusCircle, User, Wallet, Shield } from 'lucide-react';
 import { truncateAddress } from '@/lib/utils';
+import { Badge } from './ui/badge';
 
 export default function Header() {
   const { isConnected, address, connectWallet, disconnectWallet, role, isSuperAdmin } = useWallet();
@@ -27,20 +28,14 @@ export default function Header() {
         </Link>
         <nav className="flex items-center gap-6 text-sm flex-1">
           {role === 'host' && (
-            <Button variant="ghost" asChild>
-              <Link href="/create-campaign">
-                <PlusCircle className="mr-2 h-4 w-4" />
+            <Link href="/create-campaign" className='text-muted-foreground hover:text-foreground transition-colors'>
                 Create Campaign
-              </Link>
-            </Button>
+            </Link>
           )}
           {isSuperAdmin && (
-            <Button variant="ghost" asChild>
-                <Link href="/admin">
-                    <Shield className="mr-2 h-4 w-4" />
-                    Admin
-                </Link>
-            </Button>
+             <Link href="/admin" className='text-muted-foreground hover:text-foreground transition-colors'>
+                Admin Panel
+            </Link>
           )}
         </nav>
         <div className="flex items-center gap-4">
@@ -53,10 +48,21 @@ export default function Header() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  <span>My Wallet ({role})</span>
+                <DropdownMenuLabel className="flex items-center justify-between">
+                  My Wallet
+                  <Badge variant="secondary">{role}</Badge>
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                 {role === 'host' && (
+                  <DropdownMenuItem asChild className='cursor-pointer'>
+                    <Link href="/create-campaign"><PlusCircle className="mr-2 h-4 w-4"/>Create Campaign</Link>
+                  </DropdownMenuItem>
+                 )}
+                 {isSuperAdmin && (
+                  <DropdownMenuItem asChild className='cursor-pointer'>
+                     <Link href="/admin"><Shield className="mr-2 h-4 w-4" />Admin Panel</Link>
+                  </DropdownMenuItem>
+                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={disconnectWallet} className="cursor-pointer text-red-500 focus:text-red-500">
                   <LogOut className="mr-2 h-4 w-4" />
@@ -65,7 +71,7 @@ export default function Header() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <Button onClick={connectWallet}>
+            <Button onClick={connectWallet} className='bg-primary text-primary-foreground hover:bg-primary/90'>
               <Wallet className="mr-2 h-4 w-4" />
               Connect Wallet
             </Button>
