@@ -7,7 +7,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addDays, format } from 'date-fns';
-import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ExternalLink, ArrowRight, ArrowLeft, Check } from 'lucide-react';
+import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ExternalLink, ArrowRight, ArrowLeft, Check, Info } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -140,26 +140,34 @@ export default function CreateCampaignPage() {
     { id: 4, name: 'Review' }
   ];
 
-  if (!isConnected || role !== 'host') {
+  if (role !== 'host') {
     return (
         <div className="container mx-auto px-4 py-12 max-w-4xl">
-            <Alert variant="default" className="border-primary/20 bg-card">
-                <ShieldCheck className="h-4 w-4 text-primary" />
-                <AlertTitle>Host Role Required to Create Campaigns</AlertTitle>
-                <AlertDescription>
-                    <p className="mb-2">
-                        To ensure the quality and safety of our platform, creating new campaigns is restricted to users with the 'Host' role.
-                    </p>
-                    <p className="mb-4">
-                        If you represent a project and would like to launch a campaign, please complete our application form. The administrator will review your application and grant access if it's approved.
-                    </p>
-                     <Button asChild>
-                        <Link href="https://docs.google.com/forms/d/e/1FAIpQLScoKWvHpz_9KkRxH9Euf9AcjZDJIhdfIVT3n5G8__ZTSN8Bwg/viewform?usp=dialog" target="_blank">
-                           Apply for Host Role <ExternalLink className="ml-2 h-4 w-4" />
-                        </Link>
-                    </Button>
-                </AlertDescription>
-            </Alert>
+            <Card className="bg-card border shadow-lg">
+              <CardHeader>
+                <CardTitle className="text-3xl font-bold text-center">Become a Host</CardTitle>
+                <CardDescription className="text-center">Apply to get the HOST_ROLE and start creating campaigns.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Alert variant="default" className="border-primary/20 bg-card mb-6">
+                    <Info className="h-4 w-4 text-primary" />
+                    <AlertTitle>Why an Application?</AlertTitle>
+                    <AlertDescription>
+                        To maintain a high-quality and secure platform for all users, we require project owners to complete a short application. This helps us prevent spam and ensures that only legitimate projects can create campaigns.
+                    </AlertDescription>
+                </Alert>
+                <div className="text-center">
+                  <p className="mb-4 text-muted-foreground">
+                    Please fill out our Google Form to apply for the HOST_ROLE. Our team will review your application and grant access if it's approved.
+                  </p>
+                  <Button asChild size="lg">
+                      <Link href="https://docs.google.com/forms/d/e/1FAIpQLScoKWvHpz_9KkRxH9Euf9AcjZDJIhdfIVT3n5G8__ZTSN8Bwg/viewform?usp=dialog" target="_blank">
+                        Apply for Host Role <ExternalLink className="ml-2 h-4 w-4" />
+                      </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
         </div>
     )
   }

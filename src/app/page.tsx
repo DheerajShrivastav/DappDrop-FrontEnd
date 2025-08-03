@@ -45,14 +45,12 @@ export default function Home() {
             <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20">
               <Link href="#campaigns">Explore Campaigns</Link>
             </Button>
-            {role === 'host' && (
-              <Button size="lg" variant="outline" asChild>
-                <Link href="/create-campaign">
-                  <PlusCircle className="mr-2 h-5 w-5" />
-                  Create Your Campaign
-                </Link>
-              </Button>
-            )}
+            <Button size="lg" variant="outline" asChild>
+              <Link href="/create-campaign">
+                <PlusCircle className="mr-2 h-5 w-5" />
+                Create Your Campaign
+              </Link>
+            </Button>
           </div>
         </div>
       </section>

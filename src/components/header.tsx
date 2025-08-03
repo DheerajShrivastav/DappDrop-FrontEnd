@@ -24,7 +24,7 @@ export default function Header() {
       <div className="container flex h-16 items-center">
         <Link href="/" className="flex items-center gap-2 mr-8">
           <Rocket className="h-6 w-6 text-primary" />
-          <span className="font-bold text-lg">Project Onboard</span>
+          <span className="font-bold text-lg">DApp Drop Zone</span>
         </Link>
         <nav className="flex items-center gap-6 text-sm flex-1">
           {role === 'host' && (

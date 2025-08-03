@@ -12,7 +12,7 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Project Onboard',
+  title: 'DApp Drop Zone',
   description: 'Launch your project, engage real users, and build a thriving community on-chain.',
 };
 
