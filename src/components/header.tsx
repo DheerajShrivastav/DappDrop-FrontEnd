@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { Gem, LogOut, PlusCircle, User, Wallet, Shield } from 'lucide-react';
+import { Rocket, LogOut, PlusCircle, User, Wallet, Shield } from 'lucide-react';
 import { truncateAddress } from '@/lib/utils';
 import { Badge } from './ui/badge';
 
@@ -23,8 +23,8 @@ export default function Header() {
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 items-center">
         <Link href="/" className="flex items-center gap-2 mr-8">
-          <Gem className="h-6 w-6 text-primary" />
-          <span className="font-bold text-lg">DApp Drop Zone</span>
+          <Rocket className="h-6 w-6 text-primary" />
+          <span className="font-bold text-lg">Project Onboard</span>
         </Link>
         <nav className="flex items-center gap-6 text-sm flex-1">
           {role === 'host' && (

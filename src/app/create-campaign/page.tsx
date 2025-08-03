@@ -7,7 +7,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addDays, format } from 'date-fns';
-import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ExternalLink, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ExternalLink, ArrowRight, ArrowLeft, Check } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -148,7 +148,7 @@ export default function CreateCampaignPage() {
                 <AlertTitle>Host Role Required to Create Campaigns</AlertTitle>
                 <AlertDescription>
                     <p className="mb-2">
-                        To ensure the quality and safety of our platform, creating new airdrop campaigns is restricted to users with the 'Host' role.
+                        To ensure the quality and safety of our platform, creating new campaigns is restricted to users with the 'Host' role.
                     </p>
                     <p className="mb-4">
                         If you represent a project and would like to launch a campaign, please complete our application form. The administrator will review your application and grant access if it's approved.
@@ -168,7 +168,7 @@ export default function CreateCampaignPage() {
     <div className="container mx-auto px-4 py-12 max-w-4xl">
       <Card className="bg-card border shadow-lg">
         <CardHeader>
-          <CardTitle className="text-3xl font-bold text-center">Create New Airdrop Campaign</CardTitle>
+          <CardTitle className="text-3xl font-bold text-center">Create New Campaign</CardTitle>
           <CardDescription className="text-center">Follow the steps to launch your next successful campaign.</CardDescription>
         </CardHeader>
         <CardContent>

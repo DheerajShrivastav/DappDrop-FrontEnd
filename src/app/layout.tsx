@@ -12,8 +12,8 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'DApp Drop Zone',
-  description: 'Create and participate in airdrop campaigns',
+  title: 'Project Onboard',
+  description: 'Launch your project, engage real users, and build a thriving community on-chain.',
 };
 
 export default function RootLayout({

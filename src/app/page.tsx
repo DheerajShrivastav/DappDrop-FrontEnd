@@ -32,13 +32,13 @@ export default function Home() {
       <section className="bg-background border-b border-primary/20">
         <div className="container mx-auto px-4 py-20 text-center">
           <div className="bg-primary/10 rounded-full px-4 py-1.5 text-sm text-primary-foreground inline-block mb-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
-            The Future of Community Engagement is Here
+            Find The Next Billion Real Users For Your Project
           </div>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tighter text-foreground animate-in fade-in slide-in-from-bottom-10 duration-700">
-            DApp Drop Zone
+            Project Onboard
           </h1>
           <p className="mt-6 text-lg text-muted-foreground max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-12 duration-700 delay-200">
-            The ultimate platform to create, manage, and participate in exciting airdrop campaigns on the blockchain. Discover new projects and get rewarded.
+            The ultimate platform to launch your project, engage real users, and build a thriving community on-chain. Ditch the bots, find your tribe.
           </p>
           <div className="mt-8 flex justify-center gap-4 animate-in fade-in slide-in-from-bottom-14 duration-700 delay-400">
             <Button size="lg" asChild className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20">
@@ -64,22 +64,22 @@ export default function Home() {
                     <div className="bg-primary/10 p-4 rounded-full mb-4">
                         <Rocket className="h-8 w-8 text-primary"/>
                     </div>
-                    <h3 className="text-xl font-semibold mb-2">Launch Campaigns</h3>
-                    <p className="text-muted-foreground">Hosts can easily create and customize airdrop campaigns to engage their community and distribute tokens.</p>
+                    <h3 className="text-xl font-semibold mb-2">Launch Your Campaign</h3>
+                    <p className="text-muted-foreground">Easily create and customize campaigns to attract and onboard your ideal users.</p>
                 </div>
                 <div className="flex flex-col items-center">
                     <div className="bg-primary/10 p-4 rounded-full mb-4">
                         <Zap className="h-8 w-8 text-primary"/>
                     </div>
-                    <h3 className="text-xl font-semibold mb-2">Complete Tasks</h3>
-                    <p className="text-muted-foreground">Participants discover new projects, complete on-chain and off-chain tasks, and prove their engagement.</p>
+                    <h3 className="text-xl font-semibold mb-2">Engage Real Users</h3>
+                    <p className="text-muted-foreground">Participants discover new projects, complete meaningful tasks, and prove their engagement.</p>
                 </div>
                  <div className="flex flex-col items-center">
                     <div className="bg-primary/10 p-4 rounded-full mb-4">
                         <Award className="h-8 w-8 text-primary"/>
                     </div>
-                    <h3 className="text-xl font-semibold mb-2">Earn Rewards</h3>
-                    <p className="text-muted-foreground">Successfully completed tasks make participants eligible to claim valuable token rewards directly to their wallet.</p>
+                    <h3 className="text-xl font-semibold mb-2">Grow Your Community</h3>
+                    <p className="text-muted-foreground">Reward genuine participation and turn new users into a valuable, long-term community.</p>
                 </div>
             </div>
         </div>
@@ -102,7 +102,7 @@ export default function Home() {
         ) : (
           <div className="text-center py-16 bg-card rounded-lg border-2 border-dashed">
             <h3 className="text-xl font-semibold">No Active Campaigns</h3>
-            <p className="text-muted-foreground mt-2">Check back later for new airdrop opportunities!</p>
+            <p className="text-muted-foreground mt-2">Check back later for new opportunities to engage!</p>
           </div>
         )}
       </div>
