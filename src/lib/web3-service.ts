@@ -351,6 +351,18 @@ export const createCampaign = async (campaignData: any) => {
     }
 };
 
+export const hasParticipated = async (campaignId: string, participantAddress: string): Promise<boolean> => {
+    const contractToUse = contract ?? readOnlyContract;
+    if (!contractToUse || !participantAddress) return false;
+    try {
+        return await contractToUse.hasParticipated(campaignId, participantAddress);
+    } catch (error) {
+        console.error(`Error checking participation for ${participantAddress} in campaign ${campaignId}:`, error);
+        // Don't show a toast for this, as it might be called frequently
+        return false;
+    }
+}
+
 export const isSuperAdmin = async (address: string): Promise<boolean> => {
     const contractToUse = contract ?? readOnlyContract;
     if (!contractToUse || !address) return false;
@@ -435,3 +447,4 @@ export const revokeHostRole = async (address: string) => {
     
 
     
+

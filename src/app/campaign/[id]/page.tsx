@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import { format } from 'date-fns';
@@ -10,7 +10,7 @@ import type { Campaign, UserTask, Task as TaskType } from '@/lib/types';
 import { useWallet } from '@/context/wallet-provider';
 import { useToast } from '@/hooks/use-toast';
 import { truncateAddress } from '@/lib/utils';
-import { getCampaignById } from '@/lib/web3-service';
+import { getCampaignById, hasParticipated } from '@/lib/web3-service';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,18 +41,33 @@ export default function CampaignDetailsPage() {
   const [isJoining, setIsJoining] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
 
-  useEffect(() => {
-    if (id) {
-        const fetchCampaign = async () => {
-            const fetchedCampaign = await getCampaignById(id as string);
-            if (fetchedCampaign) {
-                setCampaign(fetchedCampaign);
-                setUserTasks(fetchedCampaign.tasks.map(task => ({ taskId: task.id, completed: false })));
-            }
+  const campaignId = id as string;
+
+  const fetchCampaignData = useCallback(async () => {
+    if (campaignId) {
+        const fetchedCampaign = await getCampaignById(campaignId);
+        if (fetchedCampaign) {
+            setCampaign(fetchedCampaign);
+            setUserTasks(fetchedCampaign.tasks.map(task => ({ taskId: task.id, completed: false })));
         }
-        fetchCampaign();
     }
-  }, [id]);
+  }, [campaignId]);
+
+  const checkParticipation = useCallback(async () => {
+    if (campaignId && address && isConnected) {
+        const hasJoined = await hasParticipated(campaignId, address);
+        setIsJoined(hasJoined);
+    }
+  }, [campaignId, address, isConnected]);
+
+
+  useEffect(() => {
+    fetchCampaignData();
+  }, [fetchCampaignData]);
+
+  useEffect(() => {
+    checkParticipation();
+  }, [checkParticipation]);
 
   const handleShare = () => {
     const url = window.location.href;
