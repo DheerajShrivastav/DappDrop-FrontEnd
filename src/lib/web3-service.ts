@@ -198,7 +198,7 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
         if (campaignCount === 0) return [];
         
         const campaigns = [];
-        for (let i = 0; i < campaignCount; i++) {
+        for (let i = 1; i < campaignCount; i++) {
             try {
                 const campaignData = await contractToUse.getCampaign(i);
                 campaigns.push(mapContractDataToCampaign(campaignData, i));
