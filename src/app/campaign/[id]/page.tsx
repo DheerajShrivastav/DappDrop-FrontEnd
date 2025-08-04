@@ -10,7 +10,7 @@ import type { Campaign, UserTask, Task as TaskType } from '@/lib/types';
 import { useWallet } from '@/context/wallet-provider';
 import { useToast } from '@/hooks/use-toast';
 import { truncateAddress } from '@/lib/utils';
-import { getCampaignById, hasParticipated } from '@/lib/web3-service';
+import { getCampaignById, hasParticipated, completeTask } from '@/lib/web3-service';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,7 +38,6 @@ export default function CampaignDetailsPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [userTasks, setUserTasks] = useState<UserTask[]>([]);
   const [isClaiming, setIsClaiming] = useState(false);
-  const [isJoining, setIsJoining] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
 
   const campaignId = id as string;
@@ -89,45 +88,49 @@ export default function CampaignDetailsPage() {
     );
   }
 
-  const isCampaignEnded = campaign.status === 'Ended' || campaign.status === 'Closed';
   const allTasksCompleted = userTasks.every(task => task.completed);
-  const canClaim = isConnected && isJoined && isCampaignEnded && allTasksCompleted;
+  const canClaim = isConnected && isJoined && campaign.status === 'Ended' && allTasksCompleted;
 
-  const handleCompleteTask = (taskId: string) => {
-    if (!isJoined) {
-        toast({ variant: 'destructive', title: 'Not Joined', description: 'You must join the campaign before completing tasks.' });
-        return;
+  const handleCompleteTask = async (taskId: string) => {
+    if (!isConnected || !address) {
+      toast({ variant: 'destructive', title: 'Wallet Not Connected', description: 'Please connect your wallet.' });
+      return;
     }
+
+    const taskIndex = parseInt(taskId, 10);
+
     setUserTasks(prevTasks =>
       prevTasks.map(task =>
         task.taskId === taskId ? { ...task, isCompleting: true } : task
       )
     );
-    // Simulate API call to mark task as complete
-    setTimeout(() => {
+
+    try {
+      await completeTask(campaignId, taskIndex);
+      toast({ title: 'Task Completed!', description: 'Great job, one step closer to your reward.' });
+      
+      // Update local state on success
       setUserTasks(prevTasks =>
         prevTasks.map(task =>
           task.taskId === taskId ? { ...task, completed: true, isCompleting: false } : task
         )
       );
-      toast({ title: 'Task Completed!', description: 'Great job, one step closer to your reward.' });
-    }, 1500);
+
+      // If they weren't marked as joined before, they are now
+      if (!isJoined) {
+          setIsJoined(true);
+      }
+
+    } catch (error) {
+       // Error toast is handled in the service
+      setUserTasks(prevTasks =>
+        prevTasks.map(task =>
+          task.taskId === taskId ? { ...task, isCompleting: false } : task
+        )
+      );
+    }
   };
   
-  const handleJoinCampaign = () => {
-    if(!isConnected) {
-        toast({ variant: 'destructive', title: 'Wallet Not Connected', description: 'Please connect your wallet to join.' });
-        return;
-    }
-    setIsJoining(true);
-    // Simulate smart contract interaction
-    setTimeout(() => {
-        setIsJoining(false);
-        setIsJoined(true);
-        toast({ title: 'Success!', description: `You have joined the ${campaign.title} campaign.` });
-    }, 1500);
-  }
-
   const handleClaimRewards = () => {
     setIsClaiming(true);
     // Simulate smart contract interaction
@@ -197,7 +200,7 @@ export default function CampaignDetailsPage() {
                         id={`task-${task.id}`}
                         size="sm"
                         variant={userTask?.completed ? "ghost" : "outline"}
-                        disabled={!isJoined || userTask?.completed || userTask?.isCompleting}
+                        disabled={userTask?.completed || userTask?.isCompleting || campaign.status !== 'Active' }
                         onClick={() => handleCompleteTask(task.id)}
                       >
                         {userTask?.isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -239,12 +242,7 @@ export default function CampaignDetailsPage() {
             <Card className="bg-card border sticky top-24">
                 <CardHeader><CardTitle>Your Actions</CardTitle></CardHeader>
                 <CardContent className='space-y-4'>
-                    {!isJoined ? (
-                        <Button className="w-full" onClick={handleJoinCampaign} disabled={isJoining || !isConnected || campaign.status !== 'Active'}>
-                            {isJoining && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            {campaign.status !== 'Active' ? 'Campaign Not Active' : 'Join Campaign'}
-                        </Button>
-                    ) : (
+                    {isJoined && (
                         <Alert variant="default" className="border-green-500 bg-green-500/10">
                             <CheckCircle className="h-4 w-4 text-green-500" />
                             <AlertTitle className="text-green-600">You've Joined!</AlertTitle>
@@ -256,8 +254,7 @@ export default function CampaignDetailsPage() {
                         {isClaiming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Claim Rewards
                     </Button>
-                    {!isCampaignEnded && <p className="text-xs text-center text-muted-foreground">Rewards can be claimed after the campaign ends.</p>}
-                    {isCampaignEnded && !allTasksCompleted && isJoined && <p className="text-xs text-center text-muted-foreground">Complete all tasks to claim rewards.</p>}
+                    {campaign.status === 'Ended' && !allTasksCompleted && isJoined && <p className="text-xs text-center text-muted-foreground">Complete all tasks to claim rewards.</p>}
                      {address && isConnected && 
                         <p className="text-xs text-center text-muted-foreground pt-2 break-all">
                             Connected as: {address}

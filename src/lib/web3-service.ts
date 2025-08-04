@@ -1,5 +1,6 @@
 
 
+
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
@@ -211,8 +212,8 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
                  console.error(`Failed to fetch campaign ${i}:`, error);
             }
         }
-        // Filter out draft campaigns for non-hosts
-        return campaigns.filter(c => c.status !== 'Draft');
+        // Show active and ended campaigns
+        return campaigns.filter(c => c.status === 'Active' || c.status === 'Ended');
     } catch (error: any) {
         if (error.code === 'CALL_EXCEPTION') {
             console.error("Contract call failed. Check contract address and network.", error)
@@ -483,5 +484,23 @@ export const endCampaign = async (campaignId: string) => {
         throw error;
     }
 };
+
+export const completeTask = async (campaignId: string, taskIndex: number) => {
+    if (!contract) throw new Error("Contract not initialized");
+    const signer = await getSigner();
+    const contractWithSigner = contract.connect(signer) as Contract;
+    try {
+        const tx = await contractWithSigner.completeTask(campaignId, taskIndex);
+        await tx.wait();
+    } catch (error: any) {
+        console.error(`Error completing task ${taskIndex} for campaign ${campaignId}:`, error);
+        let description = `Failed to complete task.`;
+        if (error.reason) {
+            description += ` Reason: ${error.reason}`;
+        }
+        toast({ variant: 'destructive', title: 'Transaction Failed', description });
+        throw error;
+    }
+}
 
     
