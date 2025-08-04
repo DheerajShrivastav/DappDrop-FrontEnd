@@ -1,6 +1,7 @@
 
 
 
+
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
@@ -26,7 +27,7 @@ let readOnlyContract: Contract | null = null;
 
 
 const SEPOLIA_CHAIN_ID = '0xaa36a7'; // Sepolia chain id in hex
-const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+const SEPOLIA_RPC_URL = 'https://ethereum-sepolia.publicnode.com';
 
 const initializeReadOnlyProvider = () => {
     if (readOnlyContract) return;
@@ -212,7 +213,7 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
                  console.error(`Failed to fetch campaign ${i}:`, error);
             }
         }
-        // Show active and ended campaigns
+        // Show active and ended campaigns, but not drafts
         return campaigns.filter(c => c.status === 'Active' || c.status === 'Ended');
     } catch (error: any) {
         if (error.code === 'CALL_EXCEPTION') {
@@ -503,4 +504,40 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     }
 }
 
+export const getCampaignParticipants = async (campaignId: string): Promise<any[]> => {
+    const contractToUse = readOnlyContract;
+    if (!contractToUse) return [];
+    try {
+        const filter = contractToUse.filters.ParticipantTaskCompleted(campaignId);
+        const events = await contractToUse.queryFilter(filter, 0, 'latest');
+        
+        const participantAddresses = [...new Set(events.map(event => (event.args as any).participant))];
+
+        const participantData = await Promise.all(participantAddresses.map(async (address) => {
+            let completedTasks = 0;
+            const campaign = await getCampaignById(campaignId);
+            if (campaign) {
+                for (let i = 0; i < campaign.tasks.length; i++) {
+                    const hasCompleted = await contractToUse.hasCompletedTask(campaignId, address, i);
+                    if (hasCompleted) {
+                        completedTasks++;
+                    }
+                }
+            }
+            const hasClaimed = await contractToUse.hasClaimedReward(campaignId, address);
+            return {
+                address,
+                tasksCompleted: completedTasks,
+                claimed: hasClaimed
+            };
+        }));
+
+        return participantData;
+
+    } catch (error) {
+        console.error("Error fetching participants:", error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch participant data.' });
+        return [];
+    }
+}
     

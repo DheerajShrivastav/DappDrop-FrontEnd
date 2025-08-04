@@ -13,7 +13,8 @@ import { CampaignCard } from '@/components/campaign-card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CampaignAnalytics } from '@/components/campaign-analytics';
 
 export default function DashboardPage() {
   const { address, role, isConnected } = useWallet();
@@ -81,7 +82,7 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="mb-8">
         <CardHeader>
           <CardTitle>Your Campaigns</CardTitle>
           <CardDescription>
@@ -114,12 +115,35 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
       
-       <Alert className="mt-12">
-            <AlertTitle>Coming Soon: Participant Analytics</AlertTitle>
-            <AlertDescription>
-                A detailed view of your campaign participants, task completion rates, and reward distribution status will be available here soon.
-            </AlertDescription>
-        </Alert>
+      <Card>
+        <CardHeader>
+            <CardTitle>Participant Analytics</CardTitle>
+            <CardDescription>A detailed view of your campaign participants, task completion rates, and reward distribution status.</CardDescription>
+        </CardHeader>
+        <CardContent>
+             {isLoading ? (
+                <div className="flex justify-center items-center h-40">
+                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                </div>
+            ) : hostCampaigns.length > 0 ? (
+                 <Tabs defaultValue={hostCampaigns[0].id} className="w-full">
+                    <TabsList>
+                        {hostCampaigns.map(campaign => (
+                             <TabsTrigger key={campaign.id} value={campaign.id}>{campaign.title}</TabsTrigger>
+                        ))}
+                    </TabsList>
+                    {hostCampaigns.map(campaign => (
+                         <TabsContent key={campaign.id} value={campaign.id}>
+                            <CampaignAnalytics campaign={campaign}/>
+                         </TabsContent>
+                    ))}
+                </Tabs>
+            ) : (
+                <p className="text-muted-foreground text-center py-8">No campaigns to analyze. Create one to get started!</p>
+            )}
+        </CardContent>
+      </Card>
+
     </div>
   );
 }
