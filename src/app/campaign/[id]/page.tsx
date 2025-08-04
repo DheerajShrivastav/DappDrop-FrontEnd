@@ -171,12 +171,13 @@ export default function CampaignDetailsPage() {
                       <div className="p-2 bg-background rounded-full">
                         <TaskIcon type={task.type} />
                       </div>
-                      <label htmlFor={task.id} className="text-sm font-medium leading-none">
+                      <label htmlFor={`task-${task.id}`} className="text-sm font-medium leading-none">
                         {task.description}
                       </label>
                     </div>
                     {role === 'participant' && (
                       <Button
+                        id={`task-${task.id}`}
                         size="sm"
                         variant={userTask?.completed ? "ghost" : "outline"}
                         disabled={!isJoined || userTask?.completed || userTask?.isCompleting}
