@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { Rocket, LogOut, PlusCircle, User, Wallet, Shield } from 'lucide-react';
+import { Rocket, LogOut, PlusCircle, User, Wallet, Shield, LayoutDashboard } from 'lucide-react';
 import { truncateAddress } from '@/lib/utils';
 import { Badge } from './ui/badge';
 
@@ -28,8 +28,8 @@ export default function Header() {
         </Link>
         <nav className="flex items-center gap-6 text-sm flex-1">
           {role === 'host' && (
-            <Link href="/create-campaign" className='text-muted-foreground hover:text-foreground transition-colors'>
-                Create Campaign
+            <Link href="/dashboard" className='text-muted-foreground hover:text-foreground transition-colors'>
+                Dashboard
             </Link>
           )}
           {isSuperAdmin && (
@@ -55,7 +55,7 @@ export default function Header() {
                 <DropdownMenuSeparator />
                  {role === 'host' && (
                   <DropdownMenuItem asChild className='cursor-pointer'>
-                    <Link href="/create-campaign"><PlusCircle className="mr-2 h-4 w-4"/>Create Campaign</Link>
+                    <Link href="/dashboard"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</Link>
                   </DropdownMenuItem>
                  )}
                  {isSuperAdmin && (

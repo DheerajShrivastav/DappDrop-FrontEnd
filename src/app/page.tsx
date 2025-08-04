@@ -7,17 +7,15 @@ import { CampaignCard } from '@/components/campaign-card';
 import { useWallet } from '@/context/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
-import { getAllCampaigns, getCampaignsByHostAddress, hasParticipated } from '@/lib/web3-service';
+import { getAllCampaigns, hasParticipated } from '@/lib/web3-service';
 import type { Campaign } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function Home() {
   const { role, address } = useWallet();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [hostCampaigns, setHostCampaigns] = useState<Campaign[]>([]);
   const [participantCampaigns, setParticipantCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoadingHost, setIsLoadingHost] = useState(false);
   const [isLoadingParticipant, setIsLoadingParticipant] = useState(false);
 
   const fetchAllCampaigns = async () => {
@@ -26,15 +24,6 @@ export default function Home() {
     setCampaigns(fetchedCampaigns);
     setIsLoading(false);
   };
-
-  const fetchHostCampaigns = async () => {
-    if (role === 'host' && address) {
-      setIsLoadingHost(true);
-      const fetchedCampaigns = await getCampaignsByHostAddress(address);
-      setHostCampaigns(fetchedCampaigns);
-      setIsLoadingHost(false);
-    }
-  }
 
   const fetchParticipantCampaigns = async () => {
     if (role === 'participant' && address) {
@@ -52,30 +41,17 @@ export default function Home() {
     }
   };
 
-  const onCampaignUpdate = () => {
-    // Re-fetch all relevant campaign lists
-    fetchAllCampaigns();
-    if (role === 'host' && address) {
-        fetchHostCampaigns();
-    }
-    if (role === 'participant' && address) {
-        fetchParticipantCampaigns();
-    }
-  }
-
   useEffect(() => {
     fetchAllCampaigns();
   }, []);
 
-  useEffect(() => {
-    if (role === 'host' && address) {
-      fetchHostCampaigns();
-    }
-  }, [role, address]);
-
    useEffect(() => {
     if (role === 'participant' && address) {
       fetchParticipantCampaigns();
+    }
+     // Clear participant campaigns if wallet disconnects or role changes
+    if (role !== 'participant') {
+      setParticipantCampaigns([]);
     }
   }, [role, address]);
 
@@ -217,42 +193,7 @@ export default function Home() {
         </div>
       </section>
 
-        {role === 'host' && (
-            <section id="host-campaigns" className="py-20 bg-card border-t">
-                <div className="container mx-auto px-4">
-                    <div className="flex justify-between items-center mb-8">
-                        <h2 className="text-3xl font-bold tracking-tight">Your Campaigns</h2>
-                        <Button asChild variant="outline">
-                            <Link href="/create-campaign"><PlusCircle className="mr-2 h-4 w-4" /> Create New</Link>
-                        </Button>
-                    </div>
-                     {isLoadingHost ? (
-                        <div className="flex justify-center items-center h-64">
-                            <Loader2 className="h-16 w-16 animate-spin text-primary" />
-                        </div>
-                    ) : hostCampaigns.length > 0 ? (
-                        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-                            {hostCampaigns.map((campaign) => (
-                                <CampaignCard key={campaign.id} campaign={campaign} onUpdate={onCampaignUpdate} />
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-center py-16 bg-background rounded-lg border-2 border-dashed">
-                            <h3 className="text-xl font-semibold">You haven't created any campaigns yet.</h3>
-                            <p className="text-muted-foreground mt-2 mb-4">Get started by creating your first campaign.</p>
-                            <Button asChild>
-                                <Link href="/create-campaign">
-                                    <PlusCircle className="mr-2 h-5 w-5" />
-                                    Create Your Campaign
-                                </Link>
-                            </Button>
-                        </div>
-                    )}
-                </div>
-            </section>
-        )}
-        
-        {role === 'participant' && (
+        {role === 'participant' && participantCampaigns.length > 0 && (
             <section id="participant-campaigns" className="py-20 bg-card border-t">
                 <div className="container mx-auto px-4">
                     <div className="flex justify-between items-center mb-8">
@@ -262,22 +203,11 @@ export default function Home() {
                         <div className="flex justify-center items-center h-64">
                             <Loader2 className="h-16 w-16 animate-spin text-primary" />
                         </div>
-                    ) : participantCampaigns.length > 0 ? (
+                    ) : (
                         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
                             {participantCampaigns.map((campaign) => (
                                 <CampaignCard key={campaign.id} campaign={campaign} />
                             ))}
-                        </div>
-                    ) : (
-                        <div className="text-center py-16 bg-background rounded-lg border-2 border-dashed">
-                            <h3 className="text-xl font-semibold">You haven't joined any campaigns yet.</h3>
-                            <p className="text-muted-foreground mt-2 mb-4">Explore the active campaigns below and join one!</p>
-                             <Button asChild>
-                                <Link href="#campaigns">
-                                   <Rocket className="mr-2 h-5 w-5" />
-                                    Explore Campaigns
-                                </Link>
-                            </Button>
                         </div>
                     )}
                 </div>
@@ -309,5 +239,3 @@ export default function Home() {
     </>
   );
 }
-
-    
