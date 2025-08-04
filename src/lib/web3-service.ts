@@ -23,7 +23,7 @@ let readOnlyContract: Contract | null = null;
 
 
 const SEPOLIA_CHAIN_ID = '0xaa36a7'; // Sepolia chain id in hex
-const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://rpc.sepolia.org';
+const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://endpoints.omniatech.io/v1/eth/sepolia/public';
 
 const initializeReadOnlyProvider = () => {
     if (readOnlyContract) return;
