@@ -254,8 +254,14 @@ export const getCampaignsByHostAddress = async (hostAddress: string): Promise<Ca
 
 
 export const getCampaignById = async (id: string): Promise<Campaign | null> => {
-    const contractToUse = readOnlyContract ?? contract;
-    if (!contractToUse || !id || isNaN(parseInt(id, 10))) return null;
+    const contractToUse = contract ?? readOnlyContract;
+    if (!contractToUse || !id || isNaN(parseInt(id, 10))) {
+        if(!readOnlyContract) {
+            console.warn("Neither wallet contract nor read-only contract is available.");
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not connect to blockchain.' });
+        }
+        return null;
+    }
     try {
         const campaignData = await contractToUse.getCampaign(id);
         return mapContractDataToCampaign(campaignData, parseInt(id));
