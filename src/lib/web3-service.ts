@@ -5,6 +5,7 @@ import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
 import config from '@/app/config';
 import Web3Campaigns from './abi/Web3Campaigns.json';
+import { endOfDay } from 'date-fns';
 
 // Extend the Window interface to include ethereum
 declare global {
@@ -24,7 +25,7 @@ let readOnlyContract: Contract | null = null;
 
 
 const SEPOLIA_CHAIN_ID = '0xaa36a7'; // Sepolia chain id in hex
-const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://endpoints.omniatech.io/v1/eth/sepolia/public';
+const SEPOLIA_RPC_URL = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
 
 const initializeReadOnlyProvider = () => {
     if (readOnlyContract) return;
@@ -199,15 +200,19 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
         if (campaignCount === 0) return [];
         
         const campaigns = [];
-        for (let i = 1; i < campaignCount; i++) {
+        // Start from 1 as campaign IDs are 1-based index
+        for (let i = 1; i <= campaignCount; i++) {
             try {
                 const campaignData = await contractToUse.getCampaign(i);
-                campaigns.push(mapContractDataToCampaign(campaignData, i));
+                if (Number(campaignData.status) !== 3) { // Not 'Closed'
+                    campaigns.push(mapContractDataToCampaign(campaignData, i));
+                }
             } catch (error) {
                  console.error(`Failed to fetch campaign ${i}:`, error);
             }
         }
-        return campaigns.filter(c => c.status !== 'Draft' && c.status !== 'Closed');
+        // Filter out draft campaigns for non-hosts
+        return campaigns.filter(c => c.status !== 'Draft');
     } catch (error: any) {
         if (error.code === 'CALL_EXCEPTION') {
             console.error("Contract call failed. Check contract address and network.", error)
@@ -255,12 +260,13 @@ export const getCampaignsByHostAddress = async (hostAddress: string): Promise<Ca
 
 
 export const getCampaignById = async (id: string): Promise<Campaign | null> => {
+    const campaignId = parseInt(id, 10);
+    if (isNaN(campaignId)) return null;
+
     const contractToUse = contract ?? readOnlyContract;
-    if (!contractToUse || !id || isNaN(parseInt(id, 10))) {
-        if(!readOnlyContract) {
-            console.warn("Neither wallet contract nor read-only contract is available.");
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not connect to blockchain.' });
-        }
+     if (!contractToUse) {
+        console.warn("Neither wallet contract nor read-only contract is available.");
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not connect to blockchain.' });
         return null;
     }
     try {
@@ -279,7 +285,8 @@ export const createCampaign = async (campaignData: any) => {
     const contractWithSigner = contract.connect(signer) as Contract;
     
     const startTime = Math.floor(campaignData.dates.from.getTime() / 1000);
-    const endTime = Math.floor(campaignData.dates.to.getTime() / 1000);
+    // Ensure end time is always after start time
+    const endTime = Math.floor(endOfDay(campaignData.dates.to).getTime() / 1000);
 
     try {
         const tx = await contractWithSigner.createCampaign(campaignData.title, startTime, endTime);
