@@ -1,4 +1,5 @@
 
+
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
@@ -443,3 +444,37 @@ export const revokeHostRole = async (address: string) => {
         throw error;
     }
 }
+
+export const openCampaign = async (campaignId: string) => {
+    if (!contract) throw new Error("Contract not initialized");
+    const signer = await getSigner();
+    const contractWithSigner = contract.connect(signer) as Contract;
+    try {
+        const tx = await contractWithSigner.openCampaign(campaignId);
+        await tx.wait();
+        toast({ title: 'Campaign is now Active!', description: `Campaign ${campaignId} has been successfully opened.` });
+    } catch (error: any) {
+        console.error(`Error opening campaign ${campaignId}:`, error);
+        const reason = error.reason || "An unknown error occurred.";
+        toast({ variant: 'destructive', title: 'Transaction Failed', description: `Failed to open campaign. Reason: ${reason}` });
+        throw error;
+    }
+};
+
+export const endCampaign = async (campaignId: string) => {
+    if (!contract) throw new Error("Contract not initialized");
+    const signer = await getSigner();
+    const contractWithSigner = contract.connect(signer) as Contract;
+    try {
+        const tx = await contractWithSigner.endCampaign(campaignId);
+        await tx.wait();
+        toast({ title: 'Campaign Ended', description: `Campaign ${campaignId} has been successfully ended.` });
+    } catch (error: any) {
+        console.error(`Error ending campaign ${campaignId}:`, error);
+        const reason = error.reason || "An unknown error occurred.";
+        toast({ variant: 'destructive', title: 'Transaction Failed', description: `Failed to end campaign. Reason: ${reason}` });
+        throw error;
+    }
+};
+
+    

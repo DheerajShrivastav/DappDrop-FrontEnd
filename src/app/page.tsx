@@ -20,46 +20,63 @@ export default function Home() {
   const [isLoadingHost, setIsLoadingHost] = useState(false);
   const [isLoadingParticipant, setIsLoadingParticipant] = useState(false);
 
-  useEffect(() => {
-    const fetchCampaigns = async () => {
-      setIsLoading(true);
-      const fetchedCampaigns = await getAllCampaigns();
-      setCampaigns(fetchedCampaigns);
-      setIsLoading(false);
-    };
+  const fetchAllCampaigns = async () => {
+    setIsLoading(true);
+    const fetchedCampaigns = await getAllCampaigns();
+    setCampaigns(fetchedCampaigns);
+    setIsLoading(false);
+  };
 
-    fetchCampaigns();
+  const fetchHostCampaigns = async () => {
+    if (role === 'host' && address) {
+      setIsLoadingHost(true);
+      const fetchedCampaigns = await getCampaignsByHostAddress(address);
+      setHostCampaigns(fetchedCampaigns);
+      setIsLoadingHost(false);
+    }
+  }
+
+  const fetchParticipantCampaigns = async () => {
+    if (role === 'participant' && address) {
+      setIsLoadingParticipant(true);
+      const allCampaigns = await getAllCampaigns();
+      const joinedCampaigns = [];
+      for (const campaign of allCampaigns) {
+        const joined = await hasParticipated(campaign.id, address);
+        if (joined) {
+          joinedCampaigns.push(campaign);
+        }
+      }
+      setParticipantCampaigns(joinedCampaigns);
+      setIsLoadingParticipant(false);
+    }
+  };
+
+  const onCampaignUpdate = () => {
+    // Re-fetch all relevant campaign lists
+    fetchAllCampaigns();
+    if (role === 'host' && address) {
+        fetchHostCampaigns();
+    }
+    if (role === 'participant' && address) {
+        fetchParticipantCampaigns();
+    }
+  }
+
+  useEffect(() => {
+    fetchAllCampaigns();
   }, []);
 
   useEffect(() => {
-    const fetchHostCampaigns = async () => {
-      if (role === 'host' && address) {
-        setIsLoadingHost(true);
-        const fetchedCampaigns = await getCampaignsByHostAddress(address);
-        setHostCampaigns(fetchedCampaigns);
-        setIsLoadingHost(false);
-      }
+    if (role === 'host' && address) {
+      fetchHostCampaigns();
     }
-    fetchHostCampaigns();
   }, [role, address]);
 
    useEffect(() => {
-    const fetchParticipantCampaigns = async () => {
-      if (role === 'participant' && address) {
-        setIsLoadingParticipant(true);
-        const allCampaigns = await getAllCampaigns();
-        const joinedCampaigns = [];
-        for (const campaign of allCampaigns) {
-          const joined = await hasParticipated(campaign.id, address);
-          if (joined) {
-            joinedCampaigns.push(campaign);
-          }
-        }
-        setParticipantCampaigns(joinedCampaigns);
-        setIsLoadingParticipant(false);
-      }
-    };
-    fetchParticipantCampaigns();
+    if (role === 'participant' && address) {
+      fetchParticipantCampaigns();
+    }
   }, [role, address]);
 
 
@@ -216,7 +233,7 @@ export default function Home() {
                     ) : hostCampaigns.length > 0 ? (
                         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
                             {hostCampaigns.map((campaign) => (
-                                <CampaignCard key={campaign.id} campaign={campaign} />
+                                <CampaignCard key={campaign.id} campaign={campaign} onUpdate={onCampaignUpdate} />
                             ))}
                         </div>
                     ) : (
@@ -292,3 +309,5 @@ export default function Home() {
     </>
   );
 }
+
+    
