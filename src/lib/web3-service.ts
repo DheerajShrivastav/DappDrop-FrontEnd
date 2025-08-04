@@ -219,6 +219,40 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
     }
 };
 
+export const getCampaignsByHostAddress = async (hostAddress: string): Promise<Campaign[]> => {
+    const contractToUse = readOnlyContract ?? contract;
+    if (!contractToUse) {
+        console.warn("Contract not initialized for getting host campaigns.");
+        return [];
+    }
+
+    try {
+        const campaignIdsBigInt: bigint[] = await contractToUse.getCampaignsByHost(hostAddress);
+        const campaignIds = campaignIdsBigInt.map(id => Number(id));
+
+        if (campaignIds.length === 0) return [];
+
+        const campaigns = await Promise.all(
+            campaignIds.map(async (id) => {
+                try {
+                    const campaignData = await contractToUse.getCampaign(id);
+                    return mapContractDataToCampaign(campaignData, id);
+                } catch (error) {
+                    console.error(`Failed to fetch campaign ${id} for host ${hostAddress}:`, error);
+                    return null;
+                }
+            })
+        );
+        
+        return campaigns.filter((c): c is Campaign => c !== null);
+    } catch (error) {
+        console.error(`Error fetching campaigns for host ${hostAddress}:`, error);
+        toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch your campaigns.' });
+        return [];
+    }
+};
+
+
 export const getCampaignById = async (id: string): Promise<Campaign | null> => {
     const contractToUse = readOnlyContract ?? contract;
     if (!contractToUse || !id || isNaN(parseInt(id, 10))) return null;
@@ -391,5 +425,7 @@ export const revokeHostRole = async (address: string) => {
         throw error;
     }
 }
+
+    
 
     

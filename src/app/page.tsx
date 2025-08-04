@@ -7,14 +7,16 @@ import { CampaignCard } from '@/components/campaign-card';
 import { useWallet } from '@/context/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
-import { getAllCampaigns } from '@/lib/web3-service';
+import { getAllCampaigns, getCampaignsByHostAddress } from '@/lib/web3-service';
 import type { Campaign } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 export default function Home() {
-  const { role } = useWallet();
+  const { role, address } = useWallet();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [hostCampaigns, setHostCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingHost, setIsLoadingHost] = useState(false);
 
   useEffect(() => {
     const fetchCampaigns = async () => {
@@ -26,6 +28,18 @@ export default function Home() {
 
     fetchCampaigns();
   }, []);
+
+  useEffect(() => {
+    const fetchHostCampaigns = async () => {
+      if (role === 'host' && address) {
+        setIsLoadingHost(true);
+        const fetchedCampaigns = await getCampaignsByHostAddress(address);
+        setHostCampaigns(fetchedCampaigns);
+        setIsLoadingHost(false);
+      }
+    }
+    fetchHostCampaigns();
+  }, [role, address]);
 
 
   return (
@@ -165,6 +179,42 @@ export default function Home() {
         </div>
       </section>
 
+        {role === 'host' && (
+            <section id="host-campaigns" className="py-20 bg-card border-t">
+                <div className="container mx-auto px-4">
+                    <div className="flex justify-between items-center mb-8">
+                        <h2 className="text-3xl font-bold tracking-tight">Your Campaigns</h2>
+                        <Button asChild variant="outline">
+                            <Link href="/create-campaign"><PlusCircle className="mr-2 h-4 w-4" /> Create New</Link>
+                        </Button>
+                    </div>
+                     {isLoadingHost ? (
+                        <div className="flex justify-center items-center h-64">
+                            <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                        </div>
+                    ) : hostCampaigns.length > 0 ? (
+                        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+                            {hostCampaigns.map((campaign) => (
+                                <CampaignCard key={campaign.id} campaign={campaign} />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-16 bg-background rounded-lg border-2 border-dashed">
+                            <h3 className="text-xl font-semibold">You haven't created any campaigns yet.</h3>
+                            <p className="text-muted-foreground mt-2 mb-4">Get started by creating your first campaign.</p>
+                            <Button asChild>
+                                <Link href="/create-campaign">
+                                    <PlusCircle className="mr-2 h-5 w-5" />
+                                    Create Your Campaign
+                                </Link>
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            </section>
+        )}
+
+
       <div id="campaigns" className="container mx-auto px-4 py-20">
         <div className="flex justify-between items-center mb-8">
           <h2 className="text-3xl font-bold tracking-tight">Active Campaigns</h2>
@@ -189,3 +239,5 @@ export default function Home() {
     </>
   );
 }
+
+    
