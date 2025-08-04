@@ -82,7 +82,7 @@ const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
         longDescription: `A campaign hosted by ${contractData.host} with the name ${contractData.name}. More details can be found on the blockchain.`, // Long description placeholder
         startDate: new Date(Number(contractData.startTime) * 1000),
         endDate: new Date(Number(contractData.endTime) * 1000),
-        status: statusMap[Number(contractData.status)] as 'Draft' | 'Active' | 'Ended',
+        status: statusMap[Number(contractData.status)] as 'Draft' | 'Active' | 'Ended' | 'Closed',
         participants: Number(contractData.totalParticipants),
         host: contractData.host,
         tasks: contractData.tasks.map((task: any, index: number) => ({
@@ -206,7 +206,7 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
                  console.error(`Failed to fetch campaign ${i}:`, error);
             }
         }
-        return campaigns.filter(c => c.status !== 'Draft'); // Only show non-draft campaigns
+        return campaigns.filter(c => c.status !== 'Draft' && c.status !== 'Closed');
     } catch (error: any) {
         if (error.code === 'CALL_EXCEPTION') {
             console.error("Contract call failed. Check contract address and network.", error)

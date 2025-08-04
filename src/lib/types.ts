@@ -27,7 +27,7 @@ export type Campaign = {
   longDescription: string;
   startDate: Date;
   endDate: Date;
-  status: 'Draft' | 'Active' | 'Ended';
+  status: 'Draft' | 'Active' | 'Ended' | 'Closed';
   participants: number;
   host: string;
   tasks: Task[];
@@ -35,4 +35,3 @@ export type Campaign = {
   imageUrl: string;
   'data-ai-hint'?: string;
 };
-
