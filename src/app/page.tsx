@@ -2,12 +2,12 @@
 'use client';
 
 import Link from 'next/link';
-import { PlusCircle, Loader2, Rocket, Zap, Award, Twitter, Github, Bot, ShieldCheck, DollarSign, Image as ImageIcon } from 'lucide-react';
+import { PlusCircle, Loader2, Rocket, Zap, Award, Twitter, Github, Bot, ShieldCheck, DollarSign, Image as ImageIcon, CheckCircle } from 'lucide-react';
 import { CampaignCard } from '@/components/campaign-card';
 import { useWallet } from '@/context/wallet-provider';
 import { Button } from '@/components/ui/button';
 import { useEffect, useState } from 'react';
-import { getAllCampaigns, getCampaignsByHostAddress } from '@/lib/web3-service';
+import { getAllCampaigns, getCampaignsByHostAddress, hasParticipated } from '@/lib/web3-service';
 import type { Campaign } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -15,8 +15,10 @@ export default function Home() {
   const { role, address } = useWallet();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [hostCampaigns, setHostCampaigns] = useState<Campaign[]>([]);
+  const [participantCampaigns, setParticipantCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingHost, setIsLoadingHost] = useState(false);
+  const [isLoadingParticipant, setIsLoadingParticipant] = useState(false);
 
   useEffect(() => {
     const fetchCampaigns = async () => {
@@ -41,12 +43,31 @@ export default function Home() {
     fetchHostCampaigns();
   }, [role, address]);
 
+   useEffect(() => {
+    const fetchParticipantCampaigns = async () => {
+      if (role === 'participant' && address) {
+        setIsLoadingParticipant(true);
+        const allCampaigns = await getAllCampaigns();
+        const joinedCampaigns = [];
+        for (const campaign of allCampaigns) {
+          const joined = await hasParticipated(campaign.id, address);
+          if (joined) {
+            joinedCampaigns.push(campaign);
+          }
+        }
+        setParticipantCampaigns(joinedCampaigns);
+        setIsLoadingParticipant(false);
+      }
+    };
+    fetchParticipantCampaigns();
+  }, [role, address]);
+
 
   return (
     <>
       <section className="bg-background border-b border-primary/20">
         <div className="container mx-auto px-4 py-20 text-center">
-            <div className="bg-primary/10 rounded-full px-4 py-1.5 text-sm text-primary inline-block mb-4 animate-in fade-in slide-in-from-bottom-8 duration-700 shadow-lg shadow-primary/20">
+             <div className="bg-primary/10 rounded-full px-4 py-1.5 text-sm text-primary inline-block mb-4 animate-in fade-in slide-in-from-bottom-8 duration-700 shadow-lg shadow-primary/20">
                 Find The Next Billion Real Users For Your Project
             </div>
           <h1 className="text-4xl md:text-6xl font-bold tracking-tighter text-foreground animate-in fade-in slide-in-from-bottom-10 duration-700">
@@ -213,6 +234,38 @@ export default function Home() {
                 </div>
             </section>
         )}
+        
+        {role === 'participant' && (
+            <section id="participant-campaigns" className="py-20 bg-card border-t">
+                <div className="container mx-auto px-4">
+                    <div className="flex justify-between items-center mb-8">
+                        <h2 className="text-3xl font-bold tracking-tight">Your Joined Campaigns</h2>
+                    </div>
+                     {isLoadingParticipant ? (
+                        <div className="flex justify-center items-center h-64">
+                            <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                        </div>
+                    ) : participantCampaigns.length > 0 ? (
+                        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+                            {participantCampaigns.map((campaign) => (
+                                <CampaignCard key={campaign.id} campaign={campaign} />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-16 bg-background rounded-lg border-2 border-dashed">
+                            <h3 className="text-xl font-semibold">You haven't joined any campaigns yet.</h3>
+                            <p className="text-muted-foreground mt-2 mb-4">Explore the active campaigns below and join one!</p>
+                             <Button asChild>
+                                <Link href="#campaigns">
+                                   <Rocket className="mr-2 h-5 w-5" />
+                                    Explore Campaigns
+                                </Link>
+                            </Button>
+                        </div>
+                    )}
+                </div>
+            </section>
+        )}
 
 
       <div id="campaigns" className="container mx-auto px-4 py-20">
@@ -239,5 +292,3 @@ export default function Home() {
     </>
   );
 }
-
-    
