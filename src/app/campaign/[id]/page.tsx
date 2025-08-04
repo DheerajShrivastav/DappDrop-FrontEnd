@@ -66,8 +66,10 @@ export default function CampaignDetailsPage() {
   }, [fetchCampaignData]);
 
   useEffect(() => {
-    checkParticipation();
-  }, [checkParticipation]);
+    if(isConnected && address) {
+      checkParticipation();
+    }
+  }, [isConnected, address, checkParticipation]);
 
   const handleShare = () => {
     const url = window.location.href;
@@ -87,7 +89,7 @@ export default function CampaignDetailsPage() {
     );
   }
 
-  const isCampaignEnded = new Date() > campaign.endDate;
+  const isCampaignEnded = campaign.status === 'Ended' || campaign.status === 'Closed';
   const allTasksCompleted = userTasks.every(task => task.completed);
   const canClaim = isConnected && isJoined && isCampaignEnded && allTasksCompleted;
 
@@ -220,8 +222,8 @@ export default function CampaignDetailsPage() {
               <div className="flex items-center"><Users className="h-4 w-4 mr-3 text-muted-foreground" /> <span>{campaign.participants.toLocaleString()} participants</span></div>
               <div className="flex items-center"><Calendar className="h-4 w-4 mr-3 text-muted-foreground" /> <span>Ends on {format(campaign.endDate, 'PPP')}</span></div>
               <div className="flex items-center"><Clock className="h-4 w-4 mr-3 text-muted-foreground" /> 
-                <Badge variant={isCampaignEnded ? "secondary" : "default"}>
-                  {isCampaignEnded ? "Ended" : "Active"}
+                <Badge variant={campaign.status === 'Active' ? 'default' : 'secondary'}>
+                  {campaign.status}
                 </Badge>
               </div>
               <div className="flex items-start font-semibold"><Gift className="h-4 w-4 mr-3 text-primary shrink-0 mt-1" /> 
@@ -278,4 +280,5 @@ export default function CampaignDetailsPage() {
       </div>
     </div>
   );
-}
+
+    
