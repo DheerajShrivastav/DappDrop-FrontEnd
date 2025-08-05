@@ -27,6 +27,9 @@ export default function Header() {
           <span className="font-bold text-lg">DApp Drop Zone</span>
         </Link>
         <nav className="flex items-center gap-6 text-sm flex-1">
+           <Link href="/about" className='text-muted-foreground hover:text-foreground transition-colors'>
+                About
+            </Link>
           {role === 'host' && (
             <Link href="/dashboard" className='text-muted-foreground hover:text-foreground transition-colors'>
                 Dashboard
