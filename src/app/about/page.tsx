@@ -1,8 +1,8 @@
 
 'use client';
 
-import { CheckCircle, Gift, PlusCircle, Rocket, Users, Zap } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { CheckCircle, Gift, PlusCircle, Rocket, Users, Zap, ShieldCheck, ShieldOff, Bot } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 export default function AboutPage() {
   return (
@@ -128,25 +128,88 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <section className="py-20 bg-card border-y">
+       <section className="py-20 bg-card border-t">
+        <div className="container mx-auto px-4">
+          <div className="text-center max-w-4xl mx-auto">
+            <h2 className="text-3xl font-bold tracking-tight mb-4">Beyond the Form: Why On-Chain Engagement Matters</h2>
+            <p className="text-muted-foreground mb-12">
+              Tired of sifting through thousands of bot entries from a Google Form? DApp Drop Zone leverages the power of the blockchain to ensure every participant is genuine and every action is verifiable.
+            </p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+            <Card className="bg-background border-destructive/30">
+              <CardHeader>
+                <div className="flex items-center gap-4">
+                    <ShieldOff className="h-10 w-10 text-destructive" />
+                    <div>
+                        <CardTitle className="text-2xl">The Old Way: Forms &amp; Bots</CardTitle>
+                        <CardDescription>Manual, inefficient, and vulnerable to spam.</CardDescription>
+                    </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 text-muted-foreground">
+                <div className="flex items-start gap-3">
+                  <Bot className="h-5 w-5 mt-1 shrink-0" />
+                  <p><strong className="text-foreground">Bot Magnet:</strong> Simple forms are easily spammed by bots, creating thousands of fake entries and making it impossible to find real users.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Bot className="h-5 w-5 mt-1 shrink-0" />
+                   <p><strong className="text-foreground">Manual Verification Hell:</strong> Hosts spend countless hours trying to manually verify social follows or other tasks, often with unreliable results.</p>
+                </div>
+                 <div className="flex items-start gap-3">
+                  <Bot className="h-5 w-5 mt-1 shrink-0" />
+                   <p><strong className="text-foreground">No Real Engagement:</strong> Participants just fill out a form. There's no meaningful interaction with your project or its on-chain assets.</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-background border-primary/30">
+              <CardHeader>
+                <div className="flex items-center gap-4">
+                    <ShieldCheck className="h-10 w-10 text-primary" />
+                    <div>
+                        <CardTitle className="text-2xl">The New Way: DApp Drop Zone</CardTitle>
+                        <CardDescription>Automated, transparent, and bot-resistant.</CardDescription>
+                    </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3 text-muted-foreground">
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="h-5 w-5 mt-1 shrink-0 text-primary" />
+                  <p><strong className="text-foreground">Verifiable On-Chain Actions:</strong> Tasks are completed and verified directly through smart contracts, proving genuine participation.</p>
+                </div>
+                <div className="flex items-start gap-3">
+                  <CheckCircle className="h-5 w-5 mt-1 shrink-0 text-primary" />
+                   <p><strong className="text-foreground">Automated &amp; Trustless:</strong> The smart contract handles everything from task validation to reward distribution, eliminating manual work and bias.</p>
+                </div>
+                 <div className="flex items-start gap-3">
+                  <CheckCircle className="h-5 w-5 mt-1 shrink-0 text-primary" />
+                   <p><strong className="text-foreground">Sybil Resistant:</strong> Requiring a wallet connection and on-chain interactions naturally filters out low-effort bots and ensures a higher quality audience.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20">
         <div className="container mx-auto px-4">
             <h2 className="text-3xl font-bold tracking-tight text-center mb-12">Core Features</h2>
             <div className="grid md:grid-cols-3 gap-8 text-center max-w-5xl mx-auto">
-                <div className="flex flex-col items-center p-6 bg-background rounded-lg">
+                <div className="flex flex-col items-center p-6 bg-card rounded-lg">
                     <div className="bg-primary/10 p-4 rounded-full mb-4">
                         <Zap className="h-8 w-8 text-primary"/>
                     </div>
                     <h3 className="text-xl font-semibold mb-2">Decentralized &amp; Transparent</h3>
                     <p className="text-muted-foreground">All campaign logic, participation data, and reward distributions are handled by smart contracts on the Sepolia testnet, ensuring fairness and transparency.</p>
                 </div>
-                <div className="flex flex-col items-center p-6 bg-background rounded-lg">
+                <div className="flex flex-col items-center p-6 bg-card rounded-lg">
                     <div className="bg-primary/10 p-4 rounded-full mb-4">
                         <PlusCircle className="h-8 w-8 text-primary"/>
                     </div>
                     <h3 className="text-xl font-semibold mb-2">Flexible Campaign Creation</h3>
                     <p className="text-muted-foreground">Hosts can easily create custom campaigns with a variety of on-chain and off-chain tasks to suit their project's specific engagement goals.</p>
                 </div>
-                 <div className="flex flex-col items-center p-6 bg-background rounded-lg">
+                 <div className="flex flex-col items-center p-6 bg-card rounded-lg">
                     <div className="bg-primary/10 p-4 rounded-full mb-4">
                         <Gift className="h-8 w-8 text-primary"/>
                     </div>
@@ -159,3 +222,5 @@ export default function AboutPage() {
     </div>
   );
 }
+
+    
