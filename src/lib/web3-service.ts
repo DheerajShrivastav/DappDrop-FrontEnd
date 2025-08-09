@@ -2,6 +2,7 @@
 
 
 
+
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
@@ -403,12 +404,14 @@ export const getAllHosts = async (): Promise<string[]> => {
     if (!contractToUse) return [];
     try {
         const hostRole = await contractToUse.HOST_ROLE();
+        const latestBlock = await (readOnlyContract?.provider?.getBlockNumber() ?? 0);
+        const fromBlock = Math.max(0, latestBlock - 49999);
         const filter = contractToUse.filters.RoleGranted(hostRole);
-        const events = await contractToUse.queryFilter(filter, 0, 'latest');
+        const events = await contractToUse.queryFilter(filter, fromBlock, 'latest');
         const hosts = events.map(event => (event.args as any).account);
         // We need to also check who has been revoked
         const revokedFilter = contractToUse.filters.RoleRevoked(hostRole);
-        const revokedEvents = await contractToUse.queryFilter(revokedFilter, 0, 'latest');
+        const revokedEvents = await contractToUse.queryFilter(revokedFilter, fromBlock, 'latest');
         const revokedHosts = new Set(revokedEvents.map(event => (event.args as any).account));
 
         const uniqueHosts = [...new Set(hosts)].filter(host => !revokedHosts.has(host));
@@ -508,8 +511,10 @@ export const getCampaignParticipants = async (campaignId: string): Promise<any[]
     const contractToUse = readOnlyContract;
     if (!contractToUse) return [];
     try {
+        const latestBlock = await (readOnlyContract?.provider?.getBlockNumber() ?? 0);
+        const fromBlock = Math.max(0, latestBlock - 49999);
         const filter = contractToUse.filters.ParticipantTaskCompleted(campaignId);
-        const events = await contractToUse.queryFilter(filter, 0, 'latest');
+        const events = await contractToUse.queryFilter(filter, fromBlock, 'latest');
         
         const participantAddresses = [...new Set(events.map(event => (event.args as any).participant))];
 
