@@ -7,7 +7,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addDays, format } from 'date-fns';
-import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ExternalLink, ArrowRight, ArrowLeft, Check, Info } from 'lucide-react';
+import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ExternalLink, ArrowRight, ArrowLeft, Check, Info, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ import React from 'react';
 import type { TaskType } from '@/lib/types';
 import { createCampaign } from '@/lib/web3-service';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
+import { generateCampaign } from '@/ai/flows/generate-campaign-flow';
 
 const taskSchema = z.object({
   type: z.enum(['SOCIAL_FOLLOW', 'JOIN_DISCORD', 'RETWEET', 'ONCHAIN_TX']),
@@ -74,8 +75,10 @@ const TASK_TYPE_OPTIONS: { value: TaskType, label: string }[] = [
 ]
 
 export default function CreateCampaignPage() {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
   const router = useRouter();
   const { toast } = useToast();
   const { address, isConnected, role } = useWallet();
@@ -132,6 +135,32 @@ export default function CreateCampaignPage() {
   }
 
   const prevStep = () => setStep(s => s - 1);
+  
+  const handleGenerate = async () => {
+    if (!aiPrompt) {
+        toast({variant: 'destructive', title: 'Error', description: 'Please provide a project description.'});
+        return;
+    }
+    setIsGenerating(true);
+    try {
+        const result = await generateCampaign(aiPrompt);
+        const currentValues = form.getValues();
+        form.reset({
+            ...currentValues, // Keep existing values for reward, dates, etc.
+            title: result.title,
+            shortDescription: result.shortDescription,
+            description: result.description,
+            tasks: result.tasks,
+        });
+        toast({title: 'Campaign Drafted!', description: 'The campaign details have been filled in for you.'});
+        setStep(1); // Move to the first step of the form
+    } catch (e) {
+        console.error("Error generating campaign:", e);
+        toast({variant: 'destructive', title: 'AI Generation Failed', description: 'Could not generate the campaign. Please try again.'});
+    } finally {
+        setIsGenerating(false);
+    }
+  }
 
   const steps = [
     { id: 1, name: 'Details' },
@@ -180,19 +209,44 @@ export default function CreateCampaignPage() {
           <CardDescription className="text-center">Follow the steps to launch your next successful campaign.</CardDescription>
         </CardHeader>
         <CardContent>
-            <div className="mb-8 flex justify-center">
-                <ol className="flex items-center w-full max-w-2xl">
-                    {steps.map((s, index) => (
-                        <li key={s.id} className={cn("flex w-full items-center", { "after:content-[''] after:w-full after:h-1 after:border-b after:border-border after:border-4 after:inline-block": index !== steps.length - 1 })}>
-                            <span className={cn("flex items-center justify-center w-10 h-10 rounded-full lg:h-12 lg:w-12 shrink-0 font-bold", step > s.id ? 'bg-primary text-primary-foreground' : step === s.id ? 'bg-primary/20 border-2 border-primary text-primary' : 'bg-secondary')}>
-                                {step > s.id ? <Check className="w-6 h-6" /> : s.id}
-                            </span>
-                        </li>
-                    ))}
-                </ol>
-            </div>
+            {step > 0 && (
+                <div className="mb-8 flex justify-center">
+                    <ol className="flex items-center w-full max-w-2xl">
+                        {steps.map((s, index) => (
+                            <li key={s.id} className={cn("flex w-full items-center", { "after:content-[''] after:w-full after:h-1 after:border-b after:border-border after:border-4 after:inline-block": index !== steps.length - 1 })}>
+                                <span className={cn("flex items-center justify-center w-10 h-10 rounded-full lg:h-12 lg:w-12 shrink-0 font-bold", step > s.id ? 'bg-primary text-primary-foreground' : step === s.id ? 'bg-primary/20 border-2 border-primary text-primary' : 'bg-secondary')}>
+                                    {step > s.id ? <Check className="w-6 h-6" /> : s.id}
+                                </span>
+                            </li>
+                        ))}
+                    </ol>
+                </div>
+            )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              {step === 0 && (
+                <section className="space-y-6 animate-in fade-in-50">
+                    <h2 className="text-xl font-semibold border-b pb-2 flex items-center gap-2"><Sparkles className="h-5 w-5 text-primary" /> Generate with AI</h2>
+                    <div className="p-6 border-dashed border-2 rounded-lg bg-secondary/50">
+                         <p className="mb-1 text-sm font-medium">Describe your project</p>
+                         <Textarea 
+                            placeholder="E.g., 'My project is a decentralized lending protocol on Sepolia that allows users to borrow against their NFTs...'"
+                            value={aiPrompt}
+                            onChange={(e) => setAiPrompt(e.target.value)}
+                            rows={4}
+                            className="bg-card"
+                         />
+                         <p className="text-xs text-muted-foreground mt-2">Our AI will draft a campaign title, description, and tasks for you.</p>
+                         <div className="flex justify-end gap-4 mt-4">
+                             <Button type="button" variant="ghost" onClick={() => setStep(1)}>Skip &amp; Create Manually</Button>
+                             <Button type="button" onClick={handleGenerate} disabled={isGenerating}>
+                                {isGenerating && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                Generate Campaign
+                             </Button>
+                         </div>
+                    </div>
+                </section>
+              )}
               {step === 1 && (
                 <section className="space-y-6 animate-in fade-in-50">
                    <h2 className="text-xl font-semibold border-b pb-2">{steps[0].name}</h2>
@@ -308,25 +362,27 @@ export default function CreateCampaignPage() {
                   </div>
                 </section>
               )}
-
-              <div className="flex justify-between pt-4 mt-8 border-t">
-                <Button type="button" variant="outline" onClick={prevStep} disabled={step === 1}>
-                    <ArrowLeft className="mr-2 h-4 w-4" />
-                    Previous
-                </Button>
-                
-                {step < 4 ? (
-                    <Button type="button" onClick={nextStep}>
-                        Next
-                        <ArrowRight className="ml-2 h-4 w-4" />
+              
+              {step > 0 && (
+                <div className="flex justify-between pt-4 mt-8 border-t">
+                    <Button type="button" variant="outline" onClick={prevStep} disabled={step === 1}>
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        Previous
                     </Button>
-                ) : (
-                  <Button type="submit" disabled={isLoading}>
-                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Create Campaign
-                  </Button>
-                )}
-              </div>
+                    
+                    {step < 4 ? (
+                        <Button type="button" onClick={nextStep}>
+                            Next
+                            <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                    ) : (
+                    <Button type="submit" disabled={isLoading}>
+                        {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Create Campaign
+                    </Button>
+                    )}
+                </div>
+              )}
             </form>
           </Form>
         </CardContent>
