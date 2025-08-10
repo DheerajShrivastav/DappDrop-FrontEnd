@@ -34,7 +34,7 @@ export function CampaignAnalytics({ campaign }: CampaignAnalyticsProps) {
   useEffect(() => {
     const fetchParticipants = async () => {
       setIsLoading(true);
-      if (campaign) {
+      if (campaign?.id) {
         const data = await getCampaignParticipants(campaign);
         setParticipants(data);
       }
