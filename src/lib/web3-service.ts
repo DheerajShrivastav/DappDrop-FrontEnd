@@ -515,18 +515,22 @@ export const getCampaignParticipants = async (campaign: Campaign): Promise<any[]
     const contractToUse = readOnlyContract;
     if (!contractToUse) return [];
     try {
-        const latestBlock = await (readOnlyContract?.provider?.getBlockNumber() ?? 0);
-        const fromBlock = Math.max(latestBlock, latestBlock - 499);
-        
-        const filter = contractToUse.filters.ParticipantTaskCompleted(campaign.id);
-        const events = await contractToUse.queryFilter(filter, fromBlock, 'latest');
-        
-        const participantTaskCompletion = new Map<string, Set<string>>();
+        const latestBlock = await (provider?.getBlockNumber() ?? 0);
+        const maxRange = 50000; // set to provider's maximum block range
+        const startBlock = 	8896026; // Change this to your starting block
 
+        let events: any[] = [];
+        for (let fromBlock = startBlock; fromBlock <= latestBlock; fromBlock += maxRange) {
+            const toBlock = Math.min(fromBlock + maxRange - 1, latestBlock);
+            const filter = contractToUse.filters.ParticipantTaskCompleted(campaign.id);
+            const chunkEvents = await contractToUse.queryFilter(filter, fromBlock, toBlock);
+            events.push(...chunkEvents);
+        }
+
+        const participantTaskCompletion = new Map<string, Set<string>>();
         for (const event of events) {
             const participant = (event.args as any).participant;
             const taskId = (event.args as any).taskId.toString();
-
             if (!participantTaskCompletion.has(participant)) {
                 participantTaskCompletion.set(participant, new Set<string>());
             }
@@ -534,7 +538,6 @@ export const getCampaignParticipants = async (campaign: Campaign): Promise<any[]
         }
 
         const participantAddresses = Array.from(participantTaskCompletion.keys());
-
         const participantData = await Promise.all(participantAddresses.map(async (address) => {
             const hasClaimed = await contractToUse.hasClaimedReward(campaign.id, address);
             const completedTasksCount = participantTaskCompletion.get(address)?.size || 0;
@@ -546,10 +549,10 @@ export const getCampaignParticipants = async (campaign: Campaign): Promise<any[]
         }));
 
         return participantData;
-
     } catch (error) {
         console.error("Error fetching participants:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch participant data.' });
         return [];
     }
 }
+
