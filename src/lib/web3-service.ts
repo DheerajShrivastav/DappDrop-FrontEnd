@@ -6,6 +6,7 @@
 
 
 
+
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
@@ -516,23 +517,30 @@ export const getCampaignParticipants = async (campaign: Campaign): Promise<any[]
     try {
         const latestBlock = await (readOnlyContract?.provider?.getBlockNumber() ?? 0);
         const fromBlock = Math.max(0, latestBlock - 49999);
-        // A user is a participant if they have completed at least one task.
+        
         const filter = contractToUse.filters.ParticipantTaskCompleted(campaign.id);
         const events = await contractToUse.queryFilter(filter, fromBlock, 'latest');
         
-        const participantTaskCompletion = new Map<string, number>();
+        const participantTaskCompletion = new Map<string, Set<string>>();
+
         for (const event of events) {
             const participant = (event.args as any).participant;
-            participantTaskCompletion.set(participant, (participantTaskCompletion.get(participant) || 0) + 1);
+            const taskId = (event.args as any).taskId.toString();
+
+            if (!participantTaskCompletion.has(participant)) {
+                participantTaskCompletion.set(participant, new Set<string>());
+            }
+            participantTaskCompletion.get(participant)!.add(taskId);
         }
 
         const participantAddresses = Array.from(participantTaskCompletion.keys());
 
         const participantData = await Promise.all(participantAddresses.map(async (address) => {
             const hasClaimed = await contractToUse.hasClaimedReward(campaign.id, address);
+            const completedTasksCount = participantTaskCompletion.get(address)?.size || 0;
             return {
                 address,
-                tasksCompleted: participantTaskCompletion.get(address) || 0,
+                tasksCompleted: completedTasksCount,
                 claimed: hasClaimed
             };
         }));
