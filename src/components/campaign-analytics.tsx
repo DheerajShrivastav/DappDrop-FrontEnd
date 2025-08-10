@@ -34,13 +34,15 @@ export function CampaignAnalytics({ campaign }: CampaignAnalyticsProps) {
   useEffect(() => {
     const fetchParticipants = async () => {
       setIsLoading(true);
-      const data = await getCampaignParticipants(campaign.id);
-      setParticipants(data);
+      if (campaign) {
+        const data = await getCampaignParticipants(campaign);
+        setParticipants(data);
+      }
       setIsLoading(false);
     };
 
     fetchParticipants();
-  }, [campaign.id]);
+  }, [campaign]);
 
   if (isLoading) {
     return (

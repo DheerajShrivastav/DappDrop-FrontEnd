@@ -4,6 +4,7 @@
 
 
 
+
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign } from './types';
@@ -508,29 +509,28 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     }
 }
 
-export const getCampaignParticipants = async (campaignId: string): Promise<any[]> => {
+export const getCampaignParticipants = async (campaign: Campaign): Promise<any[]> => {
     const contractToUse = readOnlyContract;
     if (!contractToUse) return [];
     try {
         const latestBlock = await (readOnlyContract?.provider?.getBlockNumber() ?? 0);
         const fromBlock = Math.max(0, latestBlock - 49999);
-        const filter = contractToUse.filters.ParticipantTaskCompleted(campaignId);
+        const filter = contractToUse.filters.ParticipantTaskCompleted(campaign.id);
         const events = await contractToUse.queryFilter(filter, fromBlock, 'latest');
         
         const participantAddresses = [...new Set(events.map(event => (event.args as any).participant))];
 
         const participantData = await Promise.all(participantAddresses.map(async (address) => {
             let completedTasks = 0;
-            const campaign = await getCampaignById(campaignId);
-            if (campaign) {
+            if (campaign && campaign.tasks) {
                 for (let i = 0; i < campaign.tasks.length; i++) {
-                    const hasCompleted = await contractToUse.hasCompletedTask(campaignId, address, i);
+                    const hasCompleted = await contractToUse.hasCompletedTask(campaign.id, address, i);
                     if (hasCompleted) {
                         completedTasks++;
                     }
                 }
             }
-            const hasClaimed = await contractToUse.hasClaimedReward(campaignId, address);
+            const hasClaimed = await contractToUse.hasClaimedReward(campaign.id, address);
             return {
                 address,
                 tasksCompleted: completedTasks,
@@ -546,4 +546,3 @@ export const getCampaignParticipants = async (campaignId: string): Promise<any[]
         return [];
     }
 }
-    
