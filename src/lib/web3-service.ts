@@ -516,7 +516,7 @@ export const getCampaignParticipants = async (campaign: Campaign): Promise<any[]
     if (!contractToUse) return [];
     try {
         const latestBlock = await (readOnlyContract?.provider?.getBlockNumber() ?? 0);
-        const fromBlock = Math.max(0, latestBlock - 49999);
+        const fromBlock = Math.max(0, latestBlock - 499);
         
         const filter = contractToUse.filters.ParticipantTaskCompleted(campaign.id);
         const events = await contractToUse.queryFilter(filter, fromBlock, 'latest');
