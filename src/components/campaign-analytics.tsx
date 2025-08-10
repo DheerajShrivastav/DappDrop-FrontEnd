@@ -1,7 +1,6 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Loader2, CheckCircle, XCircle } from 'lucide-react';
 import {
   Table,
@@ -11,39 +10,19 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import type { Campaign } from '@/lib/types';
-import { getCampaignParticipants } from '@/lib/web3-service';
+import type { Campaign, ParticipantData } from '@/lib/types';
 import { truncateAddress } from '@/lib/utils';
 
 interface CampaignAnalyticsProps {
   campaign: Campaign;
+  participants: ParticipantData[];
+  isLoading: boolean;
 }
 
-interface ParticipantData {
-  address: string;
-  tasksCompleted: number;
-  claimed: boolean;
-}
-
-export function CampaignAnalytics({ campaign }: CampaignAnalyticsProps) {
-  const [participants, setParticipants] = useState<ParticipantData[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchParticipants = async () => {
-      setIsLoading(true);
-      if (campaign?.id) {
-        const data = await getCampaignParticipants(campaign);
-        setParticipants(data);
-      }
-      setIsLoading(false);
-    };
-
-    fetchParticipants();
-  }, [campaign]);
-
+export function CampaignAnalytics({ campaign, participants, isLoading }: CampaignAnalyticsProps) {
+  
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-40">
@@ -58,6 +37,10 @@ export function CampaignAnalytics({ campaign }: CampaignAnalyticsProps) {
 
   return (
     <Card>
+      <CardHeader>
+        <CardTitle>Participant Analytics</CardTitle>
+        <CardDescription>A detailed view of your campaign participants, task completion rates, and reward distribution status.</CardDescription>
+      </CardHeader>
       <CardContent className="p-0">
         <Table>
           <TableHeader>

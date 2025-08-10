@@ -6,18 +6,30 @@ import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import { format } from 'date-fns';
 
-import type { Campaign, UserTask, Task as TaskType } from '@/lib/types';
+import type { Campaign, UserTask, Task as TaskType, ParticipantData } from '@/lib/types';
 import { useWallet } from '@/context/wallet-provider';
 import { useToast } from '@/hooks/use-toast';
 import { truncateAddress } from '@/lib/utils';
-import { getCampaignById, hasParticipated, completeTask } from '@/lib/web3-service';
+import { getCampaignById, hasParticipated, completeTask, getCampaignParticipants } from '@/lib/web3-service';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Calendar, CheckCircle, Clock, Gift, Loader2, Users, Info, ShieldCheck, Twitter, MessageSquare, Bot, Share2 } from 'lucide-react';
+import { Calendar, CheckCircle, Clock, Gift, Loader2, Users, Info, ShieldCheck, Twitter, MessageSquare, Bot, Share2, Award, Trophy } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { CampaignAnalytics } from '@/components/campaign-analytics';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const TaskIcon = ({ type }: { type: TaskType['type'] }) => {
   switch (type) {
@@ -39,6 +51,14 @@ export default function CampaignDetailsPage() {
   const [userTasks, setUserTasks] = useState<UserTask[]>([]);
   const [isClaiming, setIsClaiming] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
+  const [participants, setParticipants] = useState<ParticipantData[]>([]);
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
+
+  // Winner selection state
+  const [numberOfWinners, setNumberOfWinners] = useState(1);
+  const [selectionMethod, setSelectionMethod] = useState<'random' | 'first' | 'last'>('random');
+  const [selectedWinners, setSelectedWinners] = useState<string[]>([]);
+  const [isWinnerDialogOpen, setIsWinnerDialogOpen] = useState(false);
 
   const campaignId = id as string;
 
@@ -51,6 +71,21 @@ export default function CampaignDetailsPage() {
         }
     }
   }, [campaignId]);
+  
+  const fetchParticipants = useCallback(async () => {
+      if (!campaign) return;
+      setIsAnalyticsLoading(true);
+      const data = await getCampaignParticipants(campaign);
+      setParticipants(data);
+      setIsAnalyticsLoading(false);
+    }, [campaign]);
+
+  useEffect(() => {
+    if(campaign && role === 'host' && address === campaign.host) {
+        fetchParticipants();
+    }
+  }, [campaign, role, address, fetchParticipants]);
+
 
   const checkParticipation = useCallback(async () => {
     if (campaignId && address && isConnected) {
@@ -80,6 +115,40 @@ export default function CampaignDetailsPage() {
     });
   };
 
+  const handleSelectWinners = () => {
+    if (!campaign) return;
+    const eligibleParticipants = participants.filter(p => p.tasksCompleted >= campaign.tasks.length);
+    
+    if (eligibleParticipants.length === 0) {
+      toast({ variant: 'destructive', title: 'No eligible participants', description: 'No one has completed all the required tasks yet.'});
+      return;
+    }
+
+    if (numberOfWinners > eligibleParticipants.length) {
+      toast({ variant: 'destructive', title: 'Not enough participants', description: `You requested ${numberOfWinners} winners, but only ${eligibleParticipants.length} are eligible.`});
+      return;
+    }
+    
+    let winners: ParticipantData[] = [];
+
+    switch(selectionMethod) {
+      case 'first':
+        winners = eligibleParticipants.slice(0, numberOfWinners);
+        break;
+      case 'last':
+        winners = eligibleParticipants.slice(-numberOfWinners);
+        break;
+      case 'random':
+        const shuffled = [...eligibleParticipants].sort(() => 0.5 - Math.random());
+        winners = shuffled.slice(0, numberOfWinners);
+        break;
+    }
+
+    setSelectedWinners(winners.map(p => p.address));
+    setIsWinnerDialogOpen(true);
+  };
+
+
   if (!campaign) {
     return (
         <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
@@ -90,6 +159,8 @@ export default function CampaignDetailsPage() {
 
   const allTasksCompleted = userTasks.every(task => task.completed);
   const canClaim = isConnected && isJoined && campaign.status === 'Ended' && allTasksCompleted;
+  const isHostView = role === 'host' && address?.toLowerCase() === campaign.host.toLowerCase();
+
 
   const handleCompleteTask = async (taskId: string) => {
     if (!isConnected || !address) {
@@ -216,13 +287,52 @@ export default function CampaignDetailsPage() {
               })}
             </CardContent>
           </Card>
+
+          {isHostView && (
+             <Card className="bg-card border">
+                <CardHeader>
+                  <CardTitle>Host Controls & Analytics</CardTitle>
+                  <CardDescription>View participant data and manage your campaign.</CardDescription>
+                </CardHeader>
+                <CardContent className='space-y-6'>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-xl"><Trophy className='h-5 w-5 text-primary' /> Select Winners</CardTitle>
+                        <CardDescription>Pick winners from eligible participants who have completed all tasks.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex items-end gap-4">
+                        <div className='flex-1'>
+                          <Label htmlFor="num-winners">Number of Winners</Label>
+                          <Input id="num-winners" type="number" min="1" value={numberOfWinners} onChange={(e) => setNumberOfWinners(parseInt(e.target.value, 10))} />
+                        </div>
+                        <div className='flex-1'>
+                          <Label htmlFor="selection-method">Selection Method</Label>
+                          <Select value={selectionMethod} onValueChange={(value) => setSelectionMethod(value as any)}>
+                            <SelectTrigger id="selection-method">
+                              <SelectValue placeholder="Select method" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="random">Random</SelectItem>
+                              <SelectItem value="first">First Participants</SelectItem>
+                              <SelectItem value="last">Last Participants</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button onClick={handleSelectWinners}>Select</Button>
+                      </CardContent>
+                    </Card>
+                    <CampaignAnalytics campaign={campaign} participants={participants} isLoading={isAnalyticsLoading}/>
+                </CardContent>
+             </Card>
+          )}
+
         </div>
 
         <div className="lg:col-span-1 space-y-6">
           <Card className="bg-card border">
             <CardHeader><CardTitle>Campaign Info</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-sm">
-              <div className="flex items-center"><Users className="h-4 w-4 mr-3 text-muted-foreground" /> <span>{campaign.participants.toLocaleString()} participants</span></div>
+              <div className="flex items-center"><Users className="h-4 w-4 mr-3 text-muted-foreground" /> <span>{participants.length} participants</span></div>
               <div className="flex items-center"><Calendar className="h-4 w-4 mr-3 text-muted-foreground" /> <span>Ends on {format(campaign.endDate, 'PPP')}</span></div>
               <div className="flex items-center"><Clock className="h-4 w-4 mr-3 text-muted-foreground" /> 
                 <Badge variant={campaign.status === 'Active' ? 'default' : 'secondary'}>
@@ -264,18 +374,34 @@ export default function CampaignDetailsPage() {
             </Card>
           )}
 
-           {role === 'host' && (
+           {role === 'host' && !isHostView && (
              <Alert>
                 <Info className="h-4 w-4"/>
                 <AlertTitle>Host View</AlertTitle>
                 <AlertDescription>
-                    You are viewing this campaign as its host. Participant actions are disabled.
+                    You are a host, but not the host of this specific campaign.
                 </AlertDescription>
             </Alert>
            )}
         </div>
       </div>
+      <Dialog open={isWinnerDialogOpen} onOpenChange={setIsWinnerDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Selected Winners</DialogTitle>
+            <DialogDescription>
+              Here are the {selectedWinners.length} winner(s) selected based on your criteria. You can now airdrop the rewards to these addresses.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-64 overflow-y-auto space-y-2 p-2 bg-secondary/50 rounded-md">
+            {selectedWinners.map((winner, index) => (
+              <div key={winner} className="font-mono text-sm p-2 bg-background rounded-sm">
+                {index + 1}. {winner}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-    

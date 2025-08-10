@@ -35,3 +35,9 @@ export type Campaign = {
   imageUrl: string;
   'data-ai-hint'?: string;
 };
+
+export interface ParticipantData {
+  address: string;
+  tasksCompleted: number;
+  claimed: boolean;
+}
