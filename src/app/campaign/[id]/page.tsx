@@ -52,7 +52,7 @@ export default function CampaignDetailsPage() {
   const [isClaiming, setIsClaiming] = useState(false);
   const [isJoined, setIsJoined] = useState(false);
   const [participants, setParticipants] = useState<ParticipantData[]>([]);
-  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Winner selection state
   const [numberOfWinners, setNumberOfWinners] = useState(1);
@@ -61,49 +61,42 @@ export default function CampaignDetailsPage() {
   const [isWinnerDialogOpen, setIsWinnerDialogOpen] = useState(false);
 
   const campaignId = id as string;
-
-  const fetchCampaignData = useCallback(async () => {
-    if (campaignId) {
-        const fetchedCampaign = await getCampaignById(campaignId);
-        if (fetchedCampaign) {
-            setCampaign(fetchedCampaign);
-            setUserTasks(fetchedCampaign.tasks.map(task => ({ taskId: task.id, completed: false })));
-        }
-    }
-  }, [campaignId]);
   
-  const fetchParticipants = useCallback(async () => {
-      if (!campaign) return;
-      setIsAnalyticsLoading(true);
-      const data = await getCampaignParticipants(campaign);
-      setParticipants(data);
-      setIsAnalyticsLoading(false);
-    }, [campaign]);
+  const fetchAllCampaignData = useCallback(async () => {
+    if (!campaignId) return;
+
+    setIsLoading(true);
+    const fetchedCampaign = await getCampaignById(campaignId);
+    
+    if (fetchedCampaign) {
+        setCampaign(fetchedCampaign);
+        setUserTasks(fetchedCampaign.tasks.map(task => ({ taskId: task.id, completed: false })));
+
+        if (address && isConnected) {
+            const hasJoined = await hasParticipated(campaignId, address);
+            setIsJoined(hasJoined);
+        }
+
+        // Fetch analytics data if the current user is the host
+        if (role === 'host' && address?.toLowerCase() === fetchedCampaign.host.toLowerCase()) {
+            const data = await getCampaignParticipants(fetchedCampaign);
+            setParticipants(data);
+        }
+
+    } else {
+        toast({
+            variant: 'destructive',
+            title: 'Campaign Not Found',
+            description: 'Could not load data for this campaign.',
+        });
+    }
+    setIsLoading(false);
+  }, [campaignId, address, isConnected, role, toast]);
 
   useEffect(() => {
-    if(campaign && role === 'host' && address === campaign.host) {
-        fetchParticipants();
-    }
-  }, [campaign, role, address, fetchParticipants]);
+    fetchAllCampaignData();
+  }, [fetchAllCampaignData]);
 
-
-  const checkParticipation = useCallback(async () => {
-    if (campaignId && address && isConnected) {
-        const hasJoined = await hasParticipated(campaignId, address);
-        setIsJoined(hasJoined);
-    }
-  }, [campaignId, address, isConnected]);
-
-
-  useEffect(() => {
-    fetchCampaignData();
-  }, [fetchCampaignData]);
-
-  useEffect(() => {
-    if(isConnected && address) {
-      checkParticipation();
-    }
-  }, [isConnected, address, checkParticipation]);
 
   const handleShare = () => {
     const url = window.location.href;
@@ -149,7 +142,7 @@ export default function CampaignDetailsPage() {
   };
 
 
-  if (!campaign) {
+  if (isLoading || !campaign) {
     return (
         <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
           <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -321,7 +314,7 @@ export default function CampaignDetailsPage() {
                         <Button onClick={handleSelectWinners}>Select</Button>
                       </CardContent>
                     </Card>
-                    <CampaignAnalytics campaign={campaign} participants={participants} isLoading={isAnalyticsLoading}/>
+                    <CampaignAnalytics campaign={campaign} participants={participants} isLoading={isLoading}/>
                 </CardContent>
              </Card>
           )}
