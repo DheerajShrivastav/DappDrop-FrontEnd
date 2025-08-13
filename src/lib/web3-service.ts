@@ -375,7 +375,7 @@ export const isHost = async (address: string): Promise<boolean> => {
         console.error("Error checking for host role:", error);
         return false;
     }
-}
+};
 
 export const becomeHost = async () => {
     if (!contract) throw new Error("Contract not initialized");
@@ -452,7 +452,7 @@ export const getCampaignParticipants = async (campaign: Campaign): Promise<Parti
         if (!provider) return [];
         const latestBlock = await provider.getBlockNumber();
         
-        const maxRange = 50000; // Set to your provider's maximum safe block range
+        const maxRange = 50000;
         const startBlock = Math.max(0, latestBlock - 49999);
 
         let events: any[] = [];
