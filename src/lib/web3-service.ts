@@ -404,7 +404,13 @@ export const openCampaign = async (campaignId: string) => {
         toast({ title: 'Campaign is now Active!', description: `Campaign ${campaignId} has been successfully opened.` });
     } catch (error: any) {
         console.error(`Error opening campaign ${campaignId}:`, error);
-        const reason = error.reason || "An unknown error occurred.";
+        let reason = "An unknown error occurred.";
+        if (error.reason) {
+            reason = error.reason;
+        } else if (error.data === '0xa1c02e1f') {
+            reason = 'The campaign start time has not been reached yet.';
+        }
+        
         toast({ variant: 'destructive', title: 'Transaction Failed', description: `Failed to open campaign. Reason: ${reason}` });
         throw error;
     }
