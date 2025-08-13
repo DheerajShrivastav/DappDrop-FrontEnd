@@ -2,7 +2,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import { connectWallet as web3Connect, isSuperAdmin as web3IsSuperAdmin, isHost as web3IsHost } from '@/lib/web3-service';
+import { connectWallet as web3Connect, isHost as web3IsHost } from '@/lib/web3-service';
 
 type Role = 'host' | 'participant' | null;
 
@@ -10,9 +10,9 @@ interface WalletContextType {
   isConnected: boolean;
   address: string | null;
   role: Role;
-  isSuperAdmin: boolean;
   connectWallet: () => void;
   disconnectWallet: () => void;
+  checkRoles: (address: string) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -21,18 +21,8 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
   const [isConnected, setIsConnected] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
   const [role, setRole] = useState<Role>(null);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const checkRoles = useCallback(async (currentAddress: string) => {
-      const isAdmin = await web3IsSuperAdmin(currentAddress);
-      setIsSuperAdmin(isAdmin);
-
-      // Super Admins are also hosts by default
-      if (isAdmin) {
-          setRole('host');
-          return;
-      }
-
       const isHost = await web3IsHost(currentAddress);
       setRole(isHost ? 'host' : 'participant');
   }, []);
@@ -40,7 +30,6 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
   const disconnectWallet = useCallback(() => {
     setAddress(null);
     setIsConnected(false);
-    setIsSuperAdmin(false);
     setRole(null);
   }, []);
   
@@ -78,7 +67,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
   }, [handleAccountsChanged]);
 
 
-  const value = { isConnected, address, role, isSuperAdmin, connectWallet, disconnectWallet };
+  const value = { isConnected, address, role, connectWallet, disconnectWallet, checkRoles };
 
   return (
     <WalletContext.Provider value={value}>

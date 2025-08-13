@@ -1,15 +1,7 @@
 
-
-
-
-
-
-
-
-
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
-import type { Campaign } from './types';
+import type { Campaign, ParticipantData } from './types';
 import config from '@/app/config';
 import Web3Campaigns from './abi/Web3Campaigns.json';
 import { endOfDay } from 'date-fns';
@@ -352,13 +344,8 @@ export const createCampaign = async (campaignData: any) => {
         const reason = error.reason || error.message;
         let description = `Transaction failed: ${reason}`;
         
-        // This is a generic way to check for custom errors.
-        if (error.data?.includes('0x6352211e')) { // Web3Campaigns__CallerIsNotHost
-            description = 'Your wallet does not have the HOST_ROLE. Please ask the contract owner to grant you this role.';
-        } else if (error.data?.includes('0xa1c02e1f')) { // Web3Campaigns__InvalidCampaignDuration
-            description = 'Invalid campaign duration. The end date must be after the start date.';
-        } else if (error.code === 'CALL_EXCEPTION' && !reason) {
-            description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE, an invalid campaign duration, or another contract requirement was not met. Please contact the contract administrator.';
+        if (error.code === 'CALL_EXCEPTION' && !reason) {
+            description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE, an invalid campaign duration, or another contract requirement was not met.';
         }
         
         toast({ variant: 'destructive', title: 'Transaction Failed', description });
@@ -378,19 +365,6 @@ export const hasParticipated = async (campaignId: string, participantAddress: st
     }
 }
 
-export const isSuperAdmin = async (address: string): Promise<boolean> => {
-    const contractToUse = contract ?? readOnlyContract;
-    if (!contractToUse || !address) return false;
-    try {
-        const adminRole = await contractToUse.DEFAULT_ADMIN_ROLE();
-        const hasAdminRole = await contractToUse.hasRole(adminRole, address);
-        return hasAdminRole;
-    } catch (error) {
-        console.error("Error checking for admin role:", error);
-        return false;
-    }
-};
-
 export const isHost = async (address: string): Promise<boolean> => {
     const contractToUse = contract ?? readOnlyContract;
     if (!contractToUse || !address) return false;
@@ -403,63 +377,22 @@ export const isHost = async (address: string): Promise<boolean> => {
     }
 }
 
-export const getAllHosts = async (): Promise<string[]> => {
-    const contractToUse = readOnlyContract;
-    if (!contractToUse) return [];
-    try {
-        const hostRole = await contractToUse.HOST_ROLE();
-        const latestBlock = await (readOnlyContract?.provider?.getBlockNumber() ?? 0);
-        const fromBlock = Math.max(0, latestBlock - 49999);
-        const filter = contractToUse.filters.RoleGranted(hostRole);
-        const events = await contractToUse.queryFilter(filter, fromBlock, 'latest');
-        const hosts = events.map(event => (event.args as any).account);
-        // We need to also check who has been revoked
-        const revokedFilter = contractToUse.filters.RoleRevoked(hostRole);
-        const revokedEvents = await contractToUse.queryFilter(revokedFilter, fromBlock, 'latest');
-        const revokedHosts = new Set(revokedEvents.map(event => (event.args as any).account));
-
-        const uniqueHosts = [...new Set(hosts)].filter(host => !revokedHosts.has(host));
-        return uniqueHosts;
-
-    } catch (error) {
-        console.error("Error fetching hosts:", error);
-        toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch host list.' });
-        return [];
-    }
-}
-
-
-export const grantHostRole = async (address: string) => {
+export const becomeHost = async () => {
     if (!contract) throw new Error("Contract not initialized");
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     try {
-        const tx = await contractWithSigner.grantHostRole(address);
+        // The user grants the role to themselves.
+        const tx = await contractWithSigner.grantHostRole(signer.address);
         await tx.wait();
-        toast({ title: 'Success!', description: `HOST_ROLE granted to ${address}` });
+        toast({ title: 'Success!', description: `You have been granted the HOST_ROLE.` });
     } catch (error: any) {
         console.error("Error granting host role:", error);
         const reason = error.reason || "An unknown error occurred.";
-        toast({ variant: 'destructive', title: 'Transaction Failed', description: `Failed to grant host role. Reason: ${reason}` });
+        toast({ variant: 'destructive', title: 'Transaction Failed', description: `Failed to get host role. Reason: ${reason}` });
         throw error;
     }
 };
-
-export const revokeHostRole = async (address: string) => {
-    if (!contract) throw new Error("Contract not initialized");
-    const signer = await getSigner();
-    const contractWithSigner = contract.connect(signer) as Contract;
-    try {
-        const tx = await contractWithSigner.revokeHostRole(address);
-        await tx.wait();
-        toast({ title: 'Success!', description: `HOST_ROLE revoked from ${address}` });
-    } catch (error: any) {
-        console.error("Error revoking host role:", error);
-        const reason = error.reason || "An unknown error occurred.";
-        toast({ variant: 'destructive', title: 'Transaction Failed', description: `Failed to revoke host role. Reason: ${reason}` });
-        throw error;
-    }
-}
 
 export const openCampaign = async (campaignId: string) => {
     if (!contract) throw new Error("Contract not initialized");
@@ -511,13 +444,16 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     }
 }
 
-export const getCampaignParticipants = async (campaign: Campaign): Promise<any[]> => {
+export const getCampaignParticipants = async (campaign: Campaign): Promise<ParticipantData[]> => {
     const contractToUse = readOnlyContract;
     if (!contractToUse) return [];
     try {
-        const latestBlock = await (provider?.getBlockNumber() ?? 0);
-        const maxRange = 50000; // set to provider's maximum block range
-        const startBlock = 	8896026; // Change this to your starting block
+        const provider = contractToUse.provider;
+        if (!provider) return [];
+        const latestBlock = await provider.getBlockNumber();
+        
+        const maxRange = 50000; // Set to your provider's maximum safe block range
+        const startBlock = Math.max(0, latestBlock - 49999);
 
         let events: any[] = [];
         for (let fromBlock = startBlock; fromBlock <= latestBlock; fromBlock += maxRange) {
@@ -529,12 +465,12 @@ export const getCampaignParticipants = async (campaign: Campaign): Promise<any[]
 
         const participantTaskCompletion = new Map<string, Set<string>>();
         for (const event of events) {
-            const participant = (event.args as any).participant;
-            const taskId = (event.args as any).taskId.toString();
+            const [_, participant, taskId] = event.args;
+            const taskIdStr = taskId.toString();
             if (!participantTaskCompletion.has(participant)) {
                 participantTaskCompletion.set(participant, new Set<string>());
             }
-            participantTaskCompletion.get(participant)!.add(taskId);
+            participantTaskCompletion.get(participant)!.add(taskIdStr);
         }
 
         const participantAddresses = Array.from(participantTaskCompletion.keys());
@@ -555,4 +491,3 @@ export const getCampaignParticipants = async (campaign: Campaign): Promise<any[]
         return [];
     }
 }
-

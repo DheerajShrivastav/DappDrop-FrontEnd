@@ -7,8 +7,7 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addDays, format } from 'date-fns';
-import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ExternalLink, ArrowRight, ArrowLeft, Check, Info, Sparkles } from 'lucide-react';
-import Link from 'next/link';
+import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ArrowRight, ArrowLeft, Check, Info, Sparkles, UserPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -24,7 +23,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useWallet } from '@/context/wallet-provider';
 import React from 'react';
 import type { TaskType } from '@/lib/types';
-import { createCampaign } from '@/lib/web3-service';
+import { becomeHost, createCampaign } from '@/lib/web3-service';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow';
 
@@ -78,10 +77,11 @@ export default function CreateCampaignPage() {
   const [step, setStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isBecomingHost, setIsBecomingHost] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const router = useRouter();
   const { toast } = useToast();
-  const { address, isConnected, role } = useWallet();
+  const { address, isConnected, role, checkRoles } = useWallet();
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignSchema),
@@ -123,6 +123,23 @@ export default function CreateCampaignPage() {
       setIsLoading(false);
     }
   };
+
+  const handleBecomeHost = async () => {
+    if (!isConnected || !address) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Please connect your wallet first.' });
+      return;
+    }
+    setIsBecomingHost(true);
+    try {
+      await becomeHost();
+      // Re-check role after transaction
+      await checkRoles(address);
+    } catch (e) {
+        // Error toast is handled in the service
+    } finally {
+      setIsBecomingHost(false);
+    }
+  }
   
   const nextStep = async () => {
     let fieldsToValidate: (keyof CampaignFormValues)[] | `tasks.${number}.${"description"|"type"}`[] | `reward.${"type"|"tokenAddress"|"amount"|"name"}`[] = [];
@@ -174,25 +191,24 @@ export default function CreateCampaignPage() {
         <div className="container mx-auto px-4 py-12 max-w-4xl">
             <Card className="bg-card border shadow-lg">
               <CardHeader>
-                <CardTitle className="text-3xl font-bold text-center">Become a Host</CardTitle>
-                <CardDescription className="text-center">Apply to get the HOST_ROLE and start creating campaigns.</CardDescription>
+                <CardTitle className="text-3xl font-bold text-center flex items-center justify-center gap-2"><UserPlus /> Become a Host</CardTitle>
+                <CardDescription className="text-center">Get the HOST_ROLE to start creating campaigns.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Alert variant="default" className="border-primary/20 bg-card mb-6">
                     <Info className="h-4 w-4 text-primary" />
-                    <AlertTitle>Why an Application?</AlertTitle>
+                    <AlertTitle>Permissionless Hosting</AlertTitle>
                     <AlertDescription>
-                        To maintain a high-quality and secure platform for all users, we require project owners to complete a short application. This helps us prevent spam and ensures that only legitimate projects can create campaigns.
+                        To create a campaign, you need the HOST_ROLE. You can grant this role to your connected wallet address yourself.
                     </AlertDescription>
                 </Alert>
                 <div className="text-center">
                   <p className="mb-4 text-muted-foreground">
-                    Please fill out our Google Form to apply for the HOST_ROLE. Our team will review your application and grant access if it's approved.
+                    Click the button below to sign a transaction and grant yourself the HOST_ROLE.
                   </p>
-                  <Button asChild size="lg">
-                      <Link href="https://docs.google.com/forms/d/e/1FAIpQLScoKWvHpz_9KkRxH9Euf9AcjZDJIhdfIVT3n5G8__ZTSN8Bwg/viewform?usp=dialog" target="_blank">
-                        Apply for Host Role <ExternalLink className="ml-2 h-4 w-4" />
-                      </Link>
+                  <Button size="lg" onClick={handleBecomeHost} disabled={isBecomingHost || !isConnected}>
+                      {isBecomingHost ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                      Get Host Role
                   </Button>
                 </div>
               </CardContent>

@@ -12,12 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
-import { Rocket, LogOut, PlusCircle, User, Wallet, Shield, LayoutDashboard } from 'lucide-react';
+import { Rocket, LogOut, User, Wallet, LayoutDashboard } from 'lucide-react';
 import { truncateAddress } from '@/lib/utils';
 import { Badge } from './ui/badge';
 
 export default function Header() {
-  const { isConnected, address, connectWallet, disconnectWallet, role, isSuperAdmin } = useWallet();
+  const { isConnected, address, connectWallet, disconnectWallet, role } = useWallet();
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -33,11 +33,6 @@ export default function Header() {
           {role === 'host' && (
             <Link href="/dashboard" className='text-muted-foreground hover:text-foreground transition-colors'>
                 Dashboard
-            </Link>
-          )}
-          {isSuperAdmin && (
-             <Link href="/admin" className='text-muted-foreground hover:text-foreground transition-colors'>
-                Admin Panel
             </Link>
           )}
         </nav>
@@ -59,11 +54,6 @@ export default function Header() {
                  {role === 'host' && (
                   <DropdownMenuItem asChild className='cursor-pointer'>
                     <Link href="/dashboard"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</Link>
-                  </DropdownMenuItem>
-                 )}
-                 {isSuperAdmin && (
-                  <DropdownMenuItem asChild className='cursor-pointer'>
-                     <Link href="/admin"><Shield className="mr-2 h-4 w-4" />Admin Panel</Link>
                   </DropdownMenuItem>
                  )}
                 <DropdownMenuSeparator />
