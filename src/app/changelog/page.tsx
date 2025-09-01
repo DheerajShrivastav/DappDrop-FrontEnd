@@ -4,7 +4,7 @@
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GitCommit, ShieldCheck, Zap, Bot } from 'lucide-react';
+import { GitCommit, ShieldCheck, Zap, Bot, UserPlus } from 'lucide-react';
 
 const changelogData = [
     {
@@ -52,6 +52,24 @@ const changelogData = [
                 text: 'Integrated an AI generation UI into the "Create Campaign" page to autofill the form for hosts.',
             },
         ],
+    },
+    {
+        date: new Date('2025-08-05T18:00:00Z'),
+        version: 'Governance Update',
+        title: 'Permissionless Host Role',
+        description: 'Decentralized campaign creation by allowing any user to grant themselves the HOST_ROLE directly via a smart contract interaction.',
+        changes: [
+            {
+                type: 'Feature',
+                icon: UserPlus,
+                text: 'Users can now self-assign the HOST_ROLE on the "Create Campaign" page without needing admin approval.',
+            },
+            {
+                type: 'Improvement',
+                icon: GitCommit,
+                text: 'This change removes a centralized bottleneck, empowering the community to create campaigns freely and fostering a more open platform.',
+            },
+        ],
     }
 ];
 
@@ -61,6 +79,7 @@ const ChangeTypeIcon = ({ type, icon: Icon }: { type: string; icon: React.Elemen
             case 'Security': return 'destructive';
             case 'Feature': return 'default';
             case 'Improvement': return 'secondary';
+            case 'Governance': return 'outline';
             default: return 'outline';
         }
     }
@@ -73,6 +92,9 @@ const ChangeTypeIcon = ({ type, icon: Icon }: { type: string; icon: React.Elemen
 };
 
 export default function ChangelogPage() {
+    // Sort data descending by date
+    const sortedChangelogData = changelogData.sort((a, b) => b.date.getTime() - a.date.getTime());
+
     return (
         <div className="bg-background text-foreground">
             <section className="bg-card border-b border-primary/20">
@@ -91,7 +113,7 @@ export default function ChangelogPage() {
                    <div className="relative">
                         <div className="absolute left-4 top-0 h-full w-0.5 bg-border -translate-x-1/2" aria-hidden="true"></div>
                         <div className="space-y-12">
-                            {changelogData.map((entry, index) => (
+                            {sortedChangelogData.map((entry, index) => (
                                 <div key={index} className="relative pl-8">
                                     <div className="absolute left-4 top-2 h-4 w-4 bg-primary rounded-full -translate-x-1/2 border-4 border-card"></div>
                                     <p className="text-sm text-muted-foreground font-medium mb-1">{format(entry.date, 'MMMM dd, yyyy')}</p>
