@@ -8,7 +8,7 @@ import { GitCommit, ShieldCheck, Zap, Bot } from 'lucide-react';
 
 const changelogData = [
     {
-        date: new Date('2024-07-28T10:00:00Z'),
+        date: new Date('2025-08-31T10:00:00Z'),
         version: 'Phase 1 Launch',
         title: 'Smart Contract Security Upgrade',
         description: 'Deployed Phase 1 of our smart contract with critical security upgrades to lay the foundation for a scalable, secure Web3 campaign platform.',
