@@ -407,7 +407,7 @@ export const openCampaign = async (campaignId: string) => {
         let reason = "An unknown error occurred.";
         if (error.reason) {
             reason = error.reason;
-        } else if (error.data === '0xa1c02e1f') {
+        } else if (error.data === '0xa1c02e1f') { // Web3Campaigns__CampaignStartTimeNotYetStrated
             reason = 'The campaign start time has not been reached yet.';
         }
         
@@ -495,5 +495,16 @@ export const getCampaignParticipants = async (campaign: Campaign): Promise<Parti
         console.error("Error fetching participants:", error);
         toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch participant data.' });
         return [];
+    }
+}
+
+export const isPaused = async (): Promise<boolean> => {
+    const contractToUse = readOnlyContract;
+    if (!contractToUse) return false;
+    try {
+        return await contractToUse.paused();
+    } catch (error) {
+        console.error("Error checking for paused state:", error);
+        return false;
     }
 }

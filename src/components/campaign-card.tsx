@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Campaign } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -11,7 +11,7 @@ import Image from 'next/image';
 import { format } from 'date-fns';
 import { useWallet } from '@/context/wallet-provider';
 import { Button } from './ui/button';
-import { openCampaign, endCampaign } from '@/lib/web3-service';
+import { openCampaign, endCampaign, isPaused } from '@/lib/web3-service';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,8 +31,17 @@ interface CampaignCardProps {
 export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
   const { address } = useWallet();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isContractPaused, setIsContractPaused] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [actionToConfirm, setActionToConfirm] = useState<'open' | 'end' | null>(null);
+
+  useEffect(() => {
+    const checkPausedState = async () => {
+      const paused = await isPaused();
+      setIsContractPaused(paused);
+    };
+    checkPausedState();
+  }, []);
 
   const isHost = address && address.toLowerCase() === campaign.host.toLowerCase();
 
@@ -114,12 +123,12 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
             {isHost && onUpdate && (
                 <div className="flex items-center gap-2">
                     {campaign.status === 'Draft' && (
-                        <Button size="sm" variant="outline" onClick={() => openConfirmationDialog('open')} disabled={isUpdating}>
+                        <Button size="sm" variant="outline" onClick={() => openConfirmationDialog('open')} disabled={isUpdating || isContractPaused} title={isContractPaused ? "Contract is paused" : "Open campaign"}>
                              {isUpdating && actionToConfirm === 'open' ? <Loader2 className="h-4 w-4 animate-spin"/> : <Rocket className="h-4 w-4" />}
                         </Button>
                     )}
                     {campaign.status === 'Active' && (
-                        <Button size="sm" variant="destructive" onClick={() => openConfirmationDialog('end')} disabled={isUpdating}>
+                        <Button size="sm" variant="destructive" onClick={() => openConfirmationDialog('end')} disabled={isUpdating || isContractPaused} title={isContractPaused ? "Contract is paused" : "End campaign"}>
                             {isUpdating && actionToConfirm === 'end' ? <Loader2 className="h-4 w-4 animate-spin"/> : <XCircle className="h-4 w-4" />}
                         </Button>
                     )}
