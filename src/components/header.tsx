@@ -30,6 +30,9 @@ export default function Header() {
            <Link href="/about" className='text-muted-foreground hover:text-foreground transition-colors'>
                 About
             </Link>
+            <Link href="/changelog" className='text-muted-foreground hover:text-foreground transition-colors'>
+                Changelog
+            </Link>
           {role === 'host' && (
             <Link href="/dashboard" className='text-muted-foreground hover:text-foreground transition-colors'>
                 Dashboard
