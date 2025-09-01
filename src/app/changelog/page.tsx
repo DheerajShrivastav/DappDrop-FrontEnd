@@ -4,7 +4,7 @@
 import { format } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { GitCommit, ShieldCheck, Zap, Bot, UserPlus } from 'lucide-react';
+import { GitCommit, ShieldCheck, Zap, Bot, UserPlus, Rocket } from 'lucide-react';
 
 const changelogData = [
     {
@@ -68,6 +68,29 @@ const changelogData = [
                 type: 'Improvement',
                 icon: GitCommit,
                 text: 'This change removes a centralized bottleneck, empowering the community to create campaigns freely and fostering a more open platform.',
+            },
+        ],
+    },
+    {
+        date: new Date('2025-08-02T12:00:00Z'),
+        version: 'Initial Launch',
+        title: 'DApp Drop Zone v1.0 Launch',
+        description: 'The first version of DApp Drop Zone is live, introducing the core functionalities for creating, managing, and participating in Web3 campaigns.',
+        changes: [
+            {
+                type: 'Feature',
+                icon: Rocket,
+                text: 'Hosts can create, manage, and add tasks to on-chain campaigns.',
+            },
+            {
+                type: 'Feature',
+                icon: UserPlus,
+                text: 'Participants can join campaigns, complete tasks, and track their progress.',
+            },
+            {
+                type: 'Feature',
+                icon: GitCommit,
+                text: 'Added a host dashboard with analytics to monitor participant engagement.',
             },
         ],
     }
@@ -142,3 +165,4 @@ export default function ChangelogPage() {
         </div>
     );
 }
+
