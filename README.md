@@ -18,6 +18,7 @@ You will need to fill in the following values in your new `.env.local` file:
 
 - `NEXT_PUBLIC_CAMPAIGN_FACTORY_CONTRACT`: The address of your deployed `Web3Campaigns` smart contract on the Sepolia testnet.
 - `NEXT_PUBLIC_SEPOLIA_RPC_URL`: Your Sepolia RPC URL. You can get one from a service like Alchemy or Infura, or use a public one like `https://rpc.sepolia.org`.
+- `GEMINI_API_KEY`: Your API key for Google AI Studio. You can get one from [https://aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
 
 **Important**: You must deploy the smart contract (found in the `contracts` directory of your project) to the Sepolia testnet and place its deployed address in this file for the application to function correctly.
 
