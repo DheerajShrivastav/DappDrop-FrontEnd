@@ -36,7 +36,7 @@ const changelogData = [
         ],
     },
     {
-        date: new Date('2024-07-27T14:30:00Z'),
+        date: new Date('2025-08-13T14:30:00Z'),
         version: 'Feature Update',
         title: 'AI-Powered Campaign Generation',
         description: 'Introduced a new feature allowing hosts to generate complete campaign drafts using AI, streamlining the creation process.',
