@@ -377,7 +377,7 @@ export const isHost = async (address: string): Promise<boolean> => {
     const contractToUse = readOnlyContract;
     if (!contractToUse || !address) return false;
     try {
-        const hostRole = await contractToUse.HOST_ROLE();
+        const hostRole = "0x9767f44d5a9d6e7f1c42236a8c3d79a29a008c9d5f69c3a37d2e057416e91f1a";
         return await contractToUse.hasRole(hostRole, address);
     } catch (error) {
         console.error("Error checking for host role:", error);
@@ -450,7 +450,9 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     } catch (error: any) {
         console.error(`Error completing task ${taskIndex} for campaign ${campaignId}:`, error);
         let description = `Failed to complete task.`;
-        if (error.reason) {
+        if (error.reason && error.reason.includes("Campaign not in active period")) {
+             description = `This campaign is not currently active.`
+        } else if (error.reason) {
             description += ` Reason: ${error.reason}`;
         }
         toast({ variant: 'destructive', title: 'Transaction Failed', description });
