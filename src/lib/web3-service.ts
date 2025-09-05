@@ -4,7 +4,7 @@ import { toast } from '@/hooks/use-toast';
 import type { Campaign, ParticipantData, TaskType } from './types';
 import config from '@/app/config';
 import Web3Campaigns from './abi/Web3Campaigns.json';
-import { endOfDay } from 'date-fns';
+import { endOfDay, subMinutes } from 'date-fns';
 
 // Extend the Window interface to include ethereum
 declare global {
@@ -284,7 +284,8 @@ export const createCampaign = async (campaignData: any) => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     
-    const startTime = Math.floor(campaignData.dates.from.getTime() / 1000);
+    // Set start time to 1 minute ago to avoid race conditions with block timestamps
+    const startTime = Math.floor(subMinutes(campaignData.dates.from, 1).getTime() / 1000);
     // Ensure end time is always after start time
     const endTime = Math.floor(endOfDay(campaignData.dates.to).getTime() / 1000);
 
@@ -519,3 +520,5 @@ export const isPaused = async (): Promise<boolean> => {
     }
 }
 
+
+    
