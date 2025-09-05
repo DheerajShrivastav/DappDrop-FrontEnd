@@ -1,7 +1,7 @@
 
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
-import type { Campaign, ParticipantData } from './types';
+import type { Campaign, ParticipantData, TaskType } from './types';
 import config from '@/app/config';
 import Web3Campaigns from './abi/Web3Campaigns.json';
 import { endOfDay } from 'date-fns';
@@ -69,6 +69,7 @@ const getSigner = async () => {
 const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
     const statusMap = ['Draft', 'Active', 'Ended', 'Closed'];
     const rewardTypeMap = ['ERC20', 'ERC721', 'None'];
+    const taskTypeMap: TaskType[] = ['SOCIAL_FOLLOW', 'JOIN_DISCORD', 'RETWEET', 'ONCHAIN_TX'];
 
     let rewardName = `Reward for ${contractData.name}`;
     if (Number(contractData.reward.rewardType) === 2) { // "None" type
@@ -88,7 +89,7 @@ const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
         host: contractData.host,
         tasks: contractData.tasks.map((task: any, index: number) => ({
             id: index.toString(),
-            type: 'ONCHAIN_TX', // Placeholder type
+            type: taskTypeMap[Number(task.taskType)] as TaskType,
             description: task.description,
         })),
         reward: {
