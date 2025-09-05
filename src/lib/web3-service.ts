@@ -4,7 +4,7 @@ import { toast } from '@/hooks/use-toast';
 import type { Campaign, ParticipantData, TaskType } from './types';
 import config from '@/app/config';
 import Web3Campaigns from './abi/Web3Campaigns.json';
-import { addDays, endOfDay } from 'date-fns';
+import { addDays, endOfDay, differenceInSeconds } from 'date-fns';
 
 // Extend the Window interface to include ethereum
 declare global {
@@ -287,8 +287,11 @@ export const createCampaign = async (campaignData: any) => {
     // To ensure the campaign is in a Draft state for modifications,
     // we create it with a start date far in the future.
     // The host will later call `openCampaign` to set the real start time.
-    const futureStartTime = Math.floor(addDays(new Date(), 365 * 100).getTime() / 1000);
-    const endTime = Math.floor(endOfDay(campaignData.dates.to).getTime() / 1000);
+    const futureDate = addDays(new Date(), 365 * 100);
+    const futureStartTime = Math.floor(futureDate.getTime() / 1000);
+    
+    const durationInSeconds = differenceInSeconds(campaignData.dates.to, campaignData.dates.from);
+    const endTime = futureStartTime + durationInSeconds;
 
     const taskTypeMap: Record<TaskType, number> = {
         'SOCIAL_FOLLOW': 0,
@@ -417,12 +420,7 @@ export const openCampaign = async (campaignId: string) => {
     } catch (error: any) {
         console.error(`Error opening campaign ${campaignId}:`, error);
         let reason = "An unknown error occurred.";
-        // The contract might revert if the start time is already set or if the campaign is not in Draft state.
-        // The error code '0xa1c02e1f' corresponds to `Web3Campaigns__CampaignStartTimeNotYetStrated`
-        // but can also be used for other time-related checks by the contract.
-        if (error.code === 'CALL_EXCEPTION' && error.data === '0xa1c02e1f') {
-            reason = 'The campaign start time has not been reached yet.';
-        } else if (error.reason) {
+        if (error.reason) {
             reason = error.reason;
         }
         
