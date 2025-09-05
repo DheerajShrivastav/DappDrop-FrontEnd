@@ -282,7 +282,7 @@ export default function CreateCampaignPage() {
                         <Popover>
                           <PopoverTrigger asChild>
                             <FormControl>
-                              <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value.from && "text-muted-foreground")}>
+                              <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value?.from && "text-muted-foreground")}>
                                 <CalendarIcon className="mr-2 h-4 w-4" />
                                 {field.value?.from ? (field.value.to ? (<>{format(field.value.from, "LLL dd, y HH:mm")} - {format(field.value.to, "LLL dd, y HH:mm")}</>) : (format(field.value.from, "LLL dd, y HH:mm"))) : (<span>Pick a date range</span>)}
                               </Button>
@@ -294,15 +294,15 @@ export default function CreateCampaignPage() {
                                <div className="space-y-2">
                                   <Label htmlFor="start-time-h">Start Time</Label>
                                    <div className="flex gap-2">
-                                    <Input type="number" id="start-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates.from.getHours()} onChange={e => field.onChange({ ...dates, from: setHours(dates.from, parseInt(e.target.value,10))})} />
-                                    <Input type="number" id="start-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates.from.getMinutes()} onChange={e => field.onChange({ ...dates, from: setMinutes(dates.from, parseInt(e.target.value,10))})} />
+                                    <Input type="number" id="start-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates?.from?.getHours() ?? 0} onChange={e => field.onChange({ ...dates, from: setHours(dates.from, parseInt(e.target.value,10))})} />
+                                    <Input type="number" id="start-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates?.from?.getMinutes() ?? 0} onChange={e => field.onChange({ ...dates, from: setMinutes(dates.from, parseInt(e.target.value,10))})} />
                                   </div>
                                </div>
                                <div className="space-y-2">
                                    <Label htmlFor="end-time-h">End Time</Label>
                                    <div className="flex gap-2">
-                                    <Input type="number" id="end-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates.to?.getMinutes() ?? 0} onChange={e => field.onChange({ ...dates, to: setHours(dates.to ?? new Date(), parseInt(e.target.value,10))})} />
-                                    <Input type="number" id="end-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates.to?.getMinutes() ?? 0} onChange={e => field.onChange({ ...dates, to: setMinutes(dates.to ?? new Date(), parseInt(e.target.value,10))})} />
+                                    <Input type="number" id="end-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates?.to?.getHours() ?? 0} onChange={e => field.onChange({ ...dates, to: setHours(dates.to ?? new Date(), parseInt(e.target.value,10))})} />
+                                    <Input type="number" id="end-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates?.to?.getMinutes() ?? 0} onChange={e => field.onChange({ ...dates, to: setMinutes(dates.to ?? new Date(), parseInt(e.target.value,10))})} />
                                    </div>
                                </div>
                             </div>
