@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { addDays, format } from 'date-fns';
+import { addDays, format, setHours, setMinutes } from 'date-fns';
 import { Calendar as CalendarIcon, Loader2, Plus, ShieldCheck, Trash2, ArrowRight, ArrowLeft, Check, Info, Sparkles, UserPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -106,6 +106,7 @@ export default function CreateCampaignPage() {
   });
 
   const rewardType = form.watch('reward.type');
+  const dates = form.watch('dates');
 
   const onSubmit = async (data: CampaignFormValues) => {
     if (!isConnected || !address) {
@@ -282,11 +283,29 @@ export default function CreateCampaignPage() {
                             <FormControl>
                               <Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !field.value.from && "text-muted-foreground")}>
                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                {field.value?.from ? (field.value.to ? (<>{format(field.value.from, "LLL dd, y")} - {format(field.value.to, "LLL dd, y")}</>) : (format(field.value.from, "LLL dd, y"))) : (<span>Pick a date range</span>)}
+                                {field.value?.from ? (field.value.to ? (<>{format(field.value.from, "LLL dd, y HH:mm")} - {format(field.value.to, "LLL dd, y HH:mm")}</>) : (format(field.value.from, "LLL dd, y HH:mm"))) : (<span>Pick a date range</span>)}
                               </Button>
                             </FormControl>
                           </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start"><Calendar mode="range" selected={field.value} onSelect={field.onChange} initialFocus numberOfMonths={2} /></PopoverContent>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar mode="range" selected={field.value} onSelect={field.onChange} initialFocus numberOfMonths={2} />
+                            <div className="p-4 border-t grid grid-cols-2 gap-4">
+                               <div className="space-y-2">
+                                  <Label htmlFor="start-time-h">Start Time</Label>
+                                   <div className="flex gap-2">
+                                    <Input type="number" id="start-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates.from.getHours()} onChange={e => field.onChange({ ...dates, from: setHours(dates.from, parseInt(e.target.value,10))})} />
+                                    <Input type="number" id="start-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates.from.getMinutes()} onChange={e => field.onChange({ ...dates, from: setMinutes(dates.from, parseInt(e.target.value,10))})} />
+                                  </div>
+                               </div>
+                               <div className="space-y-2">
+                                   <Label htmlFor="end-time-h">End Time</Label>
+                                   <div className="flex gap-2">
+                                    <Input type="number" id="end-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates.to?.getMinutes() ?? 0} onChange={e => field.onChange({ ...dates, to: setHours(dates.to ?? new Date(), parseInt(e.target.value,10))})} />
+                                    <Input type="number" id="end-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates.to?.getMinutes() ?? 0} onChange={e => field.onChange({ ...dates, to: setMinutes(dates.to ?? new Date(), parseInt(e.target.value,10))})} />
+                                   </div>
+                               </div>
+                            </div>
+                          </PopoverContent>
                         </Popover><FormMessage />
                       </FormItem>
                     )}
