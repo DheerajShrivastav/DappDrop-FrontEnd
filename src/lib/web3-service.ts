@@ -284,14 +284,13 @@ export const createCampaign = async (campaignData: any) => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     
-    // To ensure the campaign is in a Draft state for modifications,
-    // we create it with a start date far in the future.
-    // The host will later call `openCampaign` to set the real start time.
-    const futureDate = addDays(new Date(), 365 * 100);
-    const futureStartTime = Math.floor(futureDate.getTime() / 1000);
+    // Set a start time a few seconds in the future to satisfy the createCampaign check.
+    // The addTask and setReward calls will happen immediately after, so block.timestamp
+    // should be within the active period for the campaignTimeValid modifier.
+    const startTime = Math.floor(Date.now() / 1000) + 15; // 15 seconds in the future
     
     const durationInSeconds = differenceInSeconds(campaignData.dates.to, campaignData.dates.from);
-    const endTime = futureStartTime + durationInSeconds;
+    const endTime = startTime + durationInSeconds;
 
     const taskTypeMap: Record<TaskType, number> = {
         'SOCIAL_FOLLOW': 0,
@@ -301,7 +300,7 @@ export const createCampaign = async (campaignData: any) => {
     };
 
     try {
-        const tx = await contractWithSigner.createCampaign(campaignData.title, futureStartTime, endTime);
+        const tx = await contractWithSigner.createCampaign(campaignData.title, startTime, endTime);
         const receipt = await tx.wait();
         
         const event = receipt.logs.map((log: any) => {
@@ -342,15 +341,18 @@ export const createCampaign = async (campaignData: any) => {
              await rewardTx.wait();
         }
 
-
-        // Add tasks
         for (const task of campaignData.tasks) {
             const taskType = taskTypeMap[task.type as TaskType];
             const taskTx = await contractWithSigner.addTaskToCampaign(campaignId, taskType, task.description, "0x", false);
             await taskTx.wait();
         }
 
-        toast({ title: 'Success!', description: 'Your campaign has been created on-chain.' });
+        // The campaign is created as 'Draft' but will become 'Active' automatically
+        // after the startTime. We will open it manually from the UI.
+        const openTx = await contractWithSigner.openCampaign(campaignId);
+        await openTx.wait();
+
+        toast({ title: 'Success!', description: 'Your campaign has been created and is now active.' });
         return campaignId;
     } catch(error: any) {
         console.error("Error creating campaign:", error);
@@ -358,8 +360,8 @@ export const createCampaign = async (campaignData: any) => {
         let description = `Transaction failed: ${reason}`;
         
         if (error.code === 'CALL_EXCEPTION' && !reason) {
-            description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE, an invalid campaign duration, or another contract requirement was not met.';
-        } else if (reason.includes("Campaign not in active period")) {
+            description = 'Transaction failed. This may be due to an invalid campaign duration, or another contract requirement was not met.';
+        } else if (reason?.includes("Campaign not in active period")) {
              description = `The campaign is not in an active period for this action.`
         }
         
@@ -413,7 +415,6 @@ export const openCampaign = async (campaignId: string) => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     try {
-        // This function will now also set the start time.
         const tx = await contractWithSigner.openCampaign(campaignId);
         await tx.wait();
         toast({ title: 'Campaign is now Active!', description: `Campaign ${campaignId} has been successfully opened.` });
