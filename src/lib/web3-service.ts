@@ -375,10 +375,9 @@ export const hasParticipated = async (campaignId: string, participantAddress: st
 }
 
 export const isHost = async (address: string): Promise<boolean> => {
-    const contractToUse = readOnlyContract;
+    const contractToUse = readOnlyContract ?? contract;
     if (!contractToUse || !address) return false;
     try {
-        // This is a more robust way to get the role hash
         const hostRole = await contractToUse.HOST_ROLE();
         return await contractToUse.hasRole(hostRole, address);
     } catch (error) {
@@ -414,10 +413,10 @@ export const openCampaign = async (campaignId: string) => {
     } catch (error: any) {
         console.error(`Error opening campaign ${campaignId}:`, error);
         let reason = "An unknown error occurred.";
-        if (error.reason) {
-            reason = error.reason;
-        } else if (error.data === '0xa1c02e1f') { // Web3Campaigns__CampaignStartTimeNotYetStrated
+        if (error.code === 'CALL_EXCEPTION' && error.data === '0xa1c02e1f') {
             reason = 'The campaign start time has not been reached yet.';
+        } else if (error.reason) {
+            reason = error.reason;
         }
         
         toast({ variant: 'destructive', title: 'Transaction Failed', description: `Failed to open campaign. Reason: ${reason}` });
