@@ -294,15 +294,27 @@ export default function CreateCampaignPage() {
                                <div className="space-y-2">
                                   <Label htmlFor="start-time-h">Start Time</Label>
                                    <div className="flex gap-2">
-                                    <Input type="number" id="start-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates?.from?.getHours() ?? 0} onChange={e => field.onChange({ ...dates, from: setHours(dates.from, parseInt(e.target.value,10))})} />
-                                    <Input type="number" id="start-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates?.from?.getMinutes() ?? 0} onChange={e => field.onChange({ ...dates, from: setMinutes(dates.from, parseInt(e.target.value,10))})} />
+                                    <Input type="number" id="start-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates?.from?.getHours() ?? 0} onChange={e => {
+                                      const newHour = parseInt(e.target.value, 10);
+                                      if (!isNaN(newHour)) field.onChange({ ...dates, from: setHours(dates.from ?? new Date(), newHour)})
+                                    }} />
+                                    <Input type="number" id="start-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates?.from?.getMinutes() ?? 0} onChange={e => {
+                                      const newMin = parseInt(e.target.value, 10);
+                                      if (!isNaN(newMin)) field.onChange({ ...dates, from: setMinutes(dates.from ?? new Date(), newMin)})
+                                    }} />
                                   </div>
                                </div>
                                <div className="space-y-2">
                                    <Label htmlFor="end-time-h">End Time</Label>
                                    <div className="flex gap-2">
-                                    <Input type="number" id="end-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates?.to?.getHours() ?? 0} onChange={e => field.onChange({ ...dates, to: setHours(dates.to ?? new Date(), parseInt(e.target.value,10))})} />
-                                    <Input type="number" id="end-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates?.to?.getMinutes() ?? 0} onChange={e => field.onChange({ ...dates, to: setMinutes(dates.to ?? new Date(), parseInt(e.target.value,10))})} />
+                                    <Input type="number" id="end-time-h" min="0" max="23" className="w-16" placeholder="HH" value={dates?.to?.getHours() ?? 0} onChange={e => {
+                                       const newHour = parseInt(e.target.value, 10);
+                                       if (!isNaN(newHour)) field.onChange({ ...dates, to: setHours(dates.to ?? new Date(), newHour)})
+                                    }} />
+                                    <Input type="number" id="end-time-m" min="0" max="59" className="w-16" placeholder="MM" value={dates?.to?.getMinutes() ?? 0} onChange={e => {
+                                      const newMin = parseInt(e.target.value, 10);
+                                      if (!isNaN(newMin)) field.onChange({ ...dates, to: setMinutes(dates.to ?? new Date(), newMin)})
+                                    }} />
                                    </div>
                                </div>
                             </div>
