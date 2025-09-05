@@ -284,13 +284,10 @@ export const createCampaign = async (campaignData: any) => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     
-    // Set a start time a few seconds in the future to satisfy the createCampaign check.
-    // The addTask and setReward calls will happen immediately after, so block.timestamp
-    // should be within the active period for the campaignTimeValid modifier.
-    const startTime = Math.floor(Date.now() / 1000) + 15; // 15 seconds in the future
-    
+    // Set a start time far in the future to ensure the campaign is in Draft state
+    const futureStartTime = Math.floor(addDays(new Date(), 365 * 100).getTime() / 1000);
     const durationInSeconds = differenceInSeconds(campaignData.dates.to, campaignData.dates.from);
-    const endTime = startTime + durationInSeconds;
+    const endTime = futureStartTime + durationInSeconds;
 
     const taskTypeMap: Record<TaskType, number> = {
         'SOCIAL_FOLLOW': 0,
@@ -300,7 +297,7 @@ export const createCampaign = async (campaignData: any) => {
     };
 
     try {
-        const tx = await contractWithSigner.createCampaign(campaignData.title, startTime, endTime);
+        const tx = await contractWithSigner.createCampaign(campaignData.title, futureStartTime, endTime);
         const receipt = await tx.wait();
         
         const event = receipt.logs.map((log: any) => {
@@ -347,12 +344,7 @@ export const createCampaign = async (campaignData: any) => {
             await taskTx.wait();
         }
 
-        // The campaign is created as 'Draft' but will become 'Active' automatically
-        // after the startTime. We will open it manually from the UI.
-        const openTx = await contractWithSigner.openCampaign(campaignId);
-        await openTx.wait();
-
-        toast({ title: 'Success!', description: 'Your campaign has been created and is now active.' });
+        toast({ title: 'Success!', description: 'Your campaign has been created in Draft status. Open it from your dashboard.' });
         return campaignId;
     } catch(error: any) {
         console.error("Error creating campaign:", error);
@@ -421,7 +413,9 @@ export const openCampaign = async (campaignId: string) => {
     } catch (error: any) {
         console.error(`Error opening campaign ${campaignId}:`, error);
         let reason = "An unknown error occurred.";
-        if (error.reason) {
+        if (error.reason && error.reason.includes("start time not yet started")) {
+            reason = "The campaign's start time has not been reached yet.";
+        } else if (error.reason) {
             reason = error.reason;
         }
         
