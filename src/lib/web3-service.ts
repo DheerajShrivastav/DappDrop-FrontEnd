@@ -284,9 +284,7 @@ export const createCampaign = async (campaignData: any) => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     
-    // Set start time to 1 minute ago to avoid race conditions with block timestamps
-    const startTime = Math.floor(subMinutes(campaignData.dates.from, 1).getTime() / 1000);
-    // Ensure end time is always after start time
+    const startTime = Math.floor(subMinutes(new Date(), 1).getTime() / 1000);
     const endTime = Math.floor(endOfDay(campaignData.dates.to).getTime() / 1000);
 
     const taskTypeMap: Record<TaskType, number> = {
@@ -355,6 +353,8 @@ export const createCampaign = async (campaignData: any) => {
         
         if (error.code === 'CALL_EXCEPTION' && !reason) {
             description = 'Transaction failed. This may be due to your wallet not having the HOST_ROLE, an invalid campaign duration, or another contract requirement was not met.';
+        } else if (reason.includes("Campaign not in active period")) {
+             description = `The campaign is not in an active period for this action.`
         }
         
         toast({ variant: 'destructive', title: 'Transaction Failed', description });
@@ -378,7 +378,8 @@ export const isHost = async (address: string): Promise<boolean> => {
     const contractToUse = readOnlyContract;
     if (!contractToUse || !address) return false;
     try {
-        const hostRole = "0x9767f44d5a9d6e7f1c42236a8c3d79a29a008c9d5f69c3a37d2e057416e91f1a";
+        // This is a more robust way to get the role hash
+        const hostRole = await contractToUse.HOST_ROLE();
         return await contractToUse.hasRole(hostRole, address);
     } catch (error) {
         console.error("Error checking for host role:", error);
@@ -391,7 +392,6 @@ export const becomeHost = async () => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     try {
-        // The user grants the role to themselves.
         const tx = await contractWithSigner.grantHostRole(signer.address);
         await tx.wait();
         toast({ title: 'Success!', description: `You have been granted the HOST_ROLE.` });
