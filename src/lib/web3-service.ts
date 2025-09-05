@@ -4,7 +4,7 @@ import { toast } from '@/hooks/use-toast';
 import type { Campaign, ParticipantData, TaskType } from './types';
 import config from '@/app/config';
 import Web3Campaigns from './abi/Web3Campaigns.json';
-import { endOfDay } from 'date-fns';
+import { addDays, endOfDay } from 'date-fns';
 
 // Extend the Window interface to include ethereum
 declare global {
