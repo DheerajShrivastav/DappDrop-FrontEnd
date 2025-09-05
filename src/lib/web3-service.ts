@@ -288,6 +288,13 @@ export const createCampaign = async (campaignData: any) => {
     // Ensure end time is always after start time
     const endTime = Math.floor(endOfDay(campaignData.dates.to).getTime() / 1000);
 
+    const taskTypeMap: Record<TaskType, number> = {
+        'SOCIAL_FOLLOW': 0,
+        'JOIN_DISCORD': 1,
+        'RETWEET': 2,
+        'ONCHAIN_TX': 3
+    };
+
     try {
         const tx = await contractWithSigner.createCampaign(campaignData.title, startTime, endTime);
         const receipt = await tx.wait();
@@ -333,7 +340,7 @@ export const createCampaign = async (campaignData: any) => {
 
         // Add tasks
         for (const task of campaignData.tasks) {
-            const taskType = 0; // Placeholder for ONCHAIN_TX - assuming all tasks are generic for now
+            const taskType = taskTypeMap[task.type as TaskType];
             const taskTx = await contractWithSigner.addTaskToCampaign(campaignId, taskType, task.description, "0x", false);
             await taskTx.wait();
         }
@@ -367,7 +374,7 @@ export const hasParticipated = async (campaignId: string, participantAddress: st
 }
 
 export const isHost = async (address: string): Promise<boolean> => {
-    const contractToUse = contract ?? readOnlyContract;
+    const contractToUse = readOnlyContract;
     if (!contractToUse || !address) return false;
     try {
         const hostRole = await contractToUse.HOST_ROLE();
@@ -509,3 +516,4 @@ export const isPaused = async (): Promise<boolean> => {
         return false;
     }
 }
+
