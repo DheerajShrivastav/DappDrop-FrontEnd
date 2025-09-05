@@ -284,8 +284,8 @@ export const createCampaign = async (campaignData: any) => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     
-    // Set startTime to the current time to ensure modifications are allowed in Draft state.
-    const startTime = Math.floor(new Date().getTime() / 1000);
+    // Set startTime from the form, endTime from the form.
+    const startTime = Math.floor(campaignData.dates.from.getTime() / 1000);
     const endTime = Math.floor(endOfDay(campaignData.dates.to).getTime() / 1000);
 
     const taskTypeMap: Record<TaskType, number> = {
@@ -521,4 +521,5 @@ export const isPaused = async (): Promise<boolean> => {
 }
 
 
+    
     
