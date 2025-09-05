@@ -284,7 +284,8 @@ export const createCampaign = async (campaignData: any) => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     
-    const startTime = Math.floor(subMinutes(new Date(), 1).getTime() / 1000);
+    // Set startTime to the current time to ensure modifications are allowed in Draft state.
+    const startTime = Math.floor(new Date().getTime() / 1000);
     const endTime = Math.floor(endOfDay(campaignData.dates.to).getTime() / 1000);
 
     const taskTypeMap: Record<TaskType, number> = {
