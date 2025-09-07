@@ -1,4 +1,5 @@
 
+
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers';
 import { toast } from '@/hooks/use-toast';
 import type { Campaign, ParticipantData, TaskType } from './types';
@@ -310,33 +311,6 @@ export const createCampaign = async (campaignData: any) => {
         
         if (!event) throw new Error("CampaignCreated event not found");
         const campaignId = event.args.campaignId.toString();
-        
-        let rewardType;
-        let tokenAddress = ethers.ZeroAddress;
-        let rewardAmount = '0';
-
-        switch(campaignData.reward.type) {
-            case 'ERC20':
-                rewardType = 0;
-                tokenAddress = campaignData.reward.tokenAddress;
-                rewardAmount = ethers.parseUnits(campaignData.reward.amount, 18);
-                break;
-            case 'ERC721':
-                rewardType = 1;
-                tokenAddress = campaignData.reward.tokenAddress;
-                rewardAmount = '0'; 
-                break;
-            case 'None':
-                rewardType = 2;
-                break;
-            default:
-                throw new Error("Invalid reward type");
-        }
-
-        if (rewardType !== 2) {
-             const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, tokenAddress, rewardAmount);
-             await rewardTx.wait();
-        }
 
         for (const task of campaignData.tasks) {
             const taskType = taskTypeMap[task.type as TaskType];
@@ -406,7 +380,42 @@ export const openCampaign = async (campaignId: string) => {
     if (!contract) throw new Error("Contract not initialized");
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
+
     try {
+        const campaign = await getCampaignById(campaignId);
+        if (!campaign) {
+            throw new Error("Campaign not found");
+        }
+
+        // Set reward before opening
+        let rewardType;
+        let tokenAddress = ethers.ZeroAddress;
+        let rewardAmount = '0';
+
+        switch (campaign.reward.type) {
+            case 'ERC20':
+                rewardType = 0;
+                tokenAddress = campaign.reward.tokenAddress;
+                rewardAmount = ethers.parseUnits(campaign.reward.amount || '0', 18);
+                break;
+            case 'ERC721':
+                rewardType = 1;
+                tokenAddress = campaign.reward.tokenAddress;
+                rewardAmount = '0';
+                break;
+            case 'None':
+                rewardType = 2;
+                break;
+            default:
+                throw new Error("Invalid reward type");
+        }
+
+        if (rewardType !== 2) {
+            const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, tokenAddress, rewardAmount);
+            await rewardTx.wait();
+        }
+        
+        // Now open the campaign
         const tx = await contractWithSigner.openCampaign(campaignId);
         await tx.wait();
         toast({ title: 'Campaign is now Active!', description: `Campaign ${campaignId} has been successfully opened.` });
