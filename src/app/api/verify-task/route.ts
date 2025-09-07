@@ -6,7 +6,7 @@ import { verifyDiscordJoin } from '@/lib/verification-service';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { campaignId, taskId, userAddress } = body;
+    const { campaignId, taskId, userAddress, discordUsername } = body;
 
     if (!campaignId || !taskId || !userAddress) {
       return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
@@ -23,9 +23,14 @@ export async function POST(request: Request) {
     let isVerified = false;
 
     if (task.type === 'JOIN_DISCORD') {
-      // In a real app, the server ID would be stored in the task's verificationData
-      const discordServerId = "MOCK_SERVER_ID"; 
-      isVerified = await verifyDiscordJoin(userAddress, discordServerId);
+      const discordServerId = task.verificationData; 
+      if (!discordServerId) {
+          return NextResponse.json({ error: 'Discord Server ID not configured for this task.' }, { status: 500 });
+      }
+      if (!discordUsername) {
+          return NextResponse.json({ error: 'Discord username is required for verification.' }, { status: 400 });
+      }
+      isVerified = await verifyDiscordJoin(discordUsername, discordServerId);
     } else {
         // For now, only JOIN_DISCORD is handled by this backend verifier
         // Other off-chain tasks could be added here.
@@ -33,14 +38,13 @@ export async function POST(request: Request) {
     }
 
     if (isVerified) {
-        // This part is tricky without a secure way to call the contract on the user's behalf.
-        // In a real production app, you might use a backend wallet with permissions,
-        // or a system that generates a signature for the user to use.
-        // For this example, we'll assume the client will handle the smart contract call
-        // after getting a success response from this API.
-        
-        // Simulating success of verification, client should now call completeTask
-        return NextResponse.json({ success: true, message: 'Task verified successfully.' });
+        // Since verification is successful on the backend, we now call the smart contract
+        // to mark the task as complete on-chain. This uses a backend wallet/signer
+        // that has permission to call `completeTask`.
+        // IMPORTANT: In a real production app, the `completeTask` function in the contract
+        // should be protected, only allowing a trusted backend address (a 'verifier') to call it.
+        await completeTask(campaignId, taskIndex, userAddress);
+        return NextResponse.json({ success: true, message: 'Task verified and completed successfully.' });
     } else {
       return NextResponse.json({ error: 'Task verification failed.' }, { status: 400 });
     }

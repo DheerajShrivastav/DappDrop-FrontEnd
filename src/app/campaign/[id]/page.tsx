@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
@@ -11,7 +12,7 @@ import type { Campaign, UserTask, Task as TaskType, ParticipantData } from '@/li
 import { useWallet } from '@/context/wallet-provider';
 import { useToast } from '@/hooks/use-toast';
 import { truncateAddress } from '@/lib/utils';
-import { getCampaignById, hasParticipated, completeTask, getCampaignParticipants } from '@/lib/web3-service';
+import { getCampaignById, hasParticipated, getCampaignParticipants } from '@/lib/web3-service';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -27,6 +28,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
+  DialogClose
 } from "@/components/ui/dialog"
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,6 +63,12 @@ export default function CampaignDetailsPage() {
   const [selectionMethod, setSelectionMethod] = useState<'random' | 'first' | 'last'>('random');
   const [selectedWinners, setSelectedWinners] = useState<string[]>([]);
   const [isWinnerDialogOpen, setIsWinnerDialogOpen] = useState(false);
+
+  // Discord Verification State
+  const [isVerifyDialogOpen, setIsVerifyDialogOpen] = useState(false);
+  const [discordUsername, setDiscordUsername] = useState('');
+  const [verifyingTaskId, setVerifyingTaskId] = useState<string | null>(null);
+
 
   const campaignId = id as string;
   
@@ -156,7 +165,7 @@ export default function CampaignDetailsPage() {
   const isHostView = role === 'host' && address?.toLowerCase() === campaign.host.toLowerCase();
 
 
-  const handleCompleteTask = async (taskId: string, taskType: TaskType['type']) => {
+  const handleCompleteTask = async (taskId: string, taskType: TaskType['type'], username?: string) => {
     if (!isConnected || !address) {
       toast({ variant: 'destructive', title: 'Wallet Not Connected', description: 'Please connect your wallet.' });
       return;
@@ -169,25 +178,19 @@ export default function CampaignDetailsPage() {
     );
 
     try {
-        if (taskType === 'JOIN_DISCORD') {
-            // Call our backend API for verification
-            const response = await fetch('/api/verify-task', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ campaignId, taskId, userAddress: address }),
-            });
+        // All tasks now call our backend API for verification/completion
+        const response = await fetch('/api/verify-task', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ campaignId, taskId, userAddress: address, discordUsername: username }),
+        });
 
-            const result = await response.json();
+        const result = await response.json();
 
-            if (!response.ok || !result.success) {
-                throw new Error(result.error || 'Verification failed.');
-            }
-            // If backend verification is successful, now call the smart contract
+        if (!response.ok || !result.success) {
+            throw new Error(result.error || 'Verification failed.');
         }
 
-        // For all tasks (including verified Discord join), call the contract
-        await completeTask(campaignId, parseInt(taskId, 10));
-        
         toast({ title: 'Task Completed!', description: 'Great job, one step closer to your reward.' });
       
         setUserTasks(prevTasks =>
@@ -205,11 +208,14 @@ export default function CampaignDetailsPage() {
             ? 'This campaign is not currently active.'
             : error.message || 'Failed to complete task.';
         toast({ variant: 'destructive', title: 'Error', description });
-        setUserTasks(prevTasks =>
+    } finally {
+         setUserTasks(prevTasks =>
             prevTasks.map(task =>
             task.taskId === taskId ? { ...task, isCompleting: false } : task
             )
         );
+        setIsVerifyDialogOpen(false);
+        setVerifyingTaskId(null);
     }
   };
   
@@ -288,14 +294,17 @@ export default function CampaignDetailsPage() {
                         ) : task.type === 'JOIN_DISCORD' ? (
                           <>
                              <Button size="sm" asChild variant='outline'>
-                               <Link href="https://discord.gg/placeholder" target="_blank">Join</Link>
+                               <Link href={`https://discord.gg/${task.verificationData || 'placeholder'}`} target="_blank">Join</Link>
                              </Button>
                              <Button
                                id={`task-${task.id}`}
                                size="sm"
                                variant="outline"
                                disabled={isTaskDisabled}
-                               onClick={() => handleCompleteTask(task.id, task.type)}
+                               onClick={() => {
+                                 setVerifyingTaskId(task.id);
+                                 setIsVerifyDialogOpen(true);
+                               }}
                              >
                                {userTask?.isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4"/>}
                                Verify
@@ -433,6 +442,36 @@ export default function CampaignDetailsPage() {
               </div>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={isVerifyDialogOpen} onOpenChange={setIsVerifyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Verify Discord Task</DialogTitle>
+            <DialogDescription>
+              Please enter your Discord username (e.g., `username#1234` or just `username`) to verify that you've joined the server.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="discord-username" className="text-right">
+                Username
+              </Label>
+              <Input
+                id="discord-username"
+                value={discordUsername}
+                onChange={(e) => setDiscordUsername(e.target.value)}
+                className="col-span-3"
+                placeholder="YourDiscordUsername"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+            <Button onClick={() => handleCompleteTask(verifyingTaskId!, 'JOIN_DISCORD', discordUsername)} disabled={!discordUsername}>
+              Confirm & Verify
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

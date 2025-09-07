@@ -92,6 +92,7 @@ const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
             id: index.toString(),
             type: taskTypeMap[Number(task.taskType)] as TaskType,
             description: task.description,
+            verificationData: ethers.decodeBytes32String(task.verificationData || ethers.encodeBytes32String("")),
         })),
         reward: {
             type: rewardTypeMap[Number(contractData.reward.rewardType)] as 'ERC20' | 'ERC721' | 'None',
@@ -296,6 +297,7 @@ export const createCampaign = async (campaignData: any) => {
     };
 
     try {
+        // 1. Create Campaign
         const tx = await contractWithSigner.createCampaign(campaignData.title, startTime, endTime);
         const receipt = await tx.wait();
         
@@ -310,14 +312,15 @@ export const createCampaign = async (campaignData: any) => {
         if (!event) throw new Error("CampaignCreated event not found");
         const campaignId = event.args.campaignId.toString();
 
-        // Add tasks
+        // 2. Add Tasks
         for (const task of campaignData.tasks) {
             const taskType = taskTypeMap[task.type as TaskType];
-            const taskTx = await contractWithSigner.addTaskToCampaign(campaignId, taskType, task.description, "0x", false);
+            const verificationDataBytes = ethers.encodeBytes32String(task.verificationData || "");
+            const taskTx = await contractWithSigner.addTaskToCampaign(campaignId, taskType, task.description, verificationDataBytes, false);
             await taskTx.wait();
         }
 
-        // Set reward
+        // 3. Set Reward
         let rewardType;
         let tokenAddress = ethers.ZeroAddress;
         let rewardAmount: string | bigint = '0';
@@ -326,13 +329,12 @@ export const createCampaign = async (campaignData: any) => {
             case 'ERC20':
                 rewardType = 0;
                 tokenAddress = campaignData.reward.tokenAddress;
-                // Assuming amount is a string representing ether, needs to be converted to wei
                 rewardAmount = ethers.parseUnits(campaignData.reward.amount || '0', 18);
                 break;
             case 'ERC721':
                 rewardType = 1;
                 tokenAddress = campaignData.reward.tokenAddress;
-                rewardAmount = '0'; // For ERC721, amount is not used, maybe tokenId later
+                rewardAmount = '0';
                 break;
             case 'None':
                 rewardType = 2;
@@ -346,7 +348,12 @@ export const createCampaign = async (campaignData: any) => {
             await rewardTx.wait();
         }
 
-        toast({ title: 'Success!', description: 'Your campaign has been created in Draft status. Open it from your dashboard.' });
+        // 4. Open Campaign
+        const openTx = await contractWithSigner.openCampaign(campaignId);
+        await openTx.wait();
+
+
+        toast({ title: 'Success!', description: 'Your campaign has been created and is now active.' });
         return campaignId;
     } catch(error: any) {
         console.error("Error creating campaign:", error);
@@ -443,12 +450,18 @@ export const endCampaign = async (campaignId: string) => {
     }
 };
 
-export const completeTask = async (campaignId: string, taskIndex: number) => {
+export const completeTask = async (campaignId: string, taskIndex: number, userAddress: string) => {
     if (!contract) throw new Error("Contract not initialized");
+    
+    // This function can now be called by the backend verifier.
+    // It needs a signer, which in a real app would be a secure backend wallet.
+    // For local development, it will still use the user's connected wallet.
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
+    
     try {
-        const tx = await contractWithSigner.completeTask(campaignId, taskIndex);
+        // The address to complete the task for is now passed as an argument.
+        const tx = await contractWithSigner.completeTask(campaignId, taskIndex, userAddress);
         await tx.wait();
     } catch (error: any) {
         console.error(`Error completing task ${taskIndex} for campaign ${campaignId}:`, error);
@@ -521,8 +534,3 @@ export const isPaused = async (): Promise<boolean> => {
         return false;
     }
 }
-
-
-    
-    
-

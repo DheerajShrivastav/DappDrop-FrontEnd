@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState } from 'react';
@@ -31,6 +32,7 @@ import { generateCampaign } from '@/ai/flows/generate-campaign-flow';
 const taskSchema = z.object({
   type: z.enum(['SOCIAL_FOLLOW', 'JOIN_DISCORD', 'RETWEET', 'ONCHAIN_TX']),
   description: z.string().min(3, 'Task description must be at least 3 characters long.'),
+  verificationData: z.string().optional(),
 });
 
 const campaignSchema = z.object({
@@ -95,7 +97,7 @@ export default function CreateCampaignPage() {
         to: addDays(new Date(), 1),
       },
       imageUrl: `https://placehold.co/600x400`,
-      tasks: [{ type: 'SOCIAL_FOLLOW', description: '' }],
+      tasks: [{ type: 'SOCIAL_FOLLOW', description: '', verificationData: '' }],
       reward: { type: 'ERC20', tokenAddress: '', amount: '', name: '' },
     },
     mode: 'onChange',
@@ -108,6 +110,7 @@ export default function CreateCampaignPage() {
 
   const rewardType = form.watch('reward.type');
   const dates = form.watch('dates');
+  const tasks = form.watch('tasks');
 
   const onSubmit = async (data: CampaignFormValues) => {
     if (!isConnected || !address) {
@@ -333,26 +336,33 @@ export default function CreateCampaignPage() {
                  <section className="space-y-6 animate-in fade-in-50">
                     <h2 className="text-xl font-semibold border-b pb-2">{steps[1].name}</h2>
                     {fields.map((field, index) => (
-                        <div key={field.id} className="flex gap-4 items-start p-4 border rounded-md">
-                             <FormField control={form.control} name={`tasks.${index}.type`} render={({ field }) => (
-                                <FormItem className="w-1/3"><FormLabel>Type</FormLabel>
-                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                        <FormControl><SelectTrigger><SelectValue placeholder="Select task type" /></SelectTrigger></FormControl>
-                                        <SelectContent>
-                                            {TASK_TYPE_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                <FormMessage /></FormItem>
-                            )} />
-                            <FormField control={form.control} name={`tasks.${index}.description`} render={({ field }) => (
-                                <FormItem className="flex-1"><FormLabel>Description</FormLabel><FormControl><Input placeholder={`E.g., Follow @project on X`} {...field} /></FormControl><FormMessage /></FormItem>
-                            )}/>
-                            <Button type="button" variant="ghost" size="icon" className="mt-8 text-muted-foreground hover:text-destructive" onClick={() => remove(index)} disabled={fields.length <= 1}>
-                                <Trash2 className="h-4 w-4" /><span className="sr-only">Remove Task</span>
-                            </Button>
+                        <div key={field.id} className="flex flex-col gap-4 p-4 border rounded-md">
+                             <div className="flex gap-4 items-start">
+                                <FormField control={form.control} name={`tasks.${index}.type`} render={({ field }) => (
+                                    <FormItem className="w-1/3"><FormLabel>Type</FormLabel>
+                                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                            <FormControl><SelectTrigger><SelectValue placeholder="Select task type" /></SelectTrigger></FormControl>
+                                            <SelectContent>
+                                                {TASK_TYPE_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    <FormMessage /></FormItem>
+                                )} />
+                                <FormField control={form.control} name={`tasks.${index}.description`} render={({ field }) => (
+                                    <FormItem className="flex-1"><FormLabel>Description</FormLabel><FormControl><Input placeholder={`E.g., Follow @project on X`} {...field} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                                <Button type="button" variant="ghost" size="icon" className="mt-8 text-muted-foreground hover:text-destructive" onClick={() => remove(index)} disabled={fields.length <= 1}>
+                                    <Trash2 className="h-4 w-4" /><span className="sr-only">Remove Task</span>
+                                </Button>
+                             </div>
+                             {tasks[index].type === 'JOIN_DISCORD' && (
+                                <FormField control={form.control} name={`tasks.${index}.verificationData`} render={({ field }) => (
+                                    <FormItem className="flex-1"><FormLabel>Discord Server ID</FormLabel><FormControl><Input placeholder="e.g., 1024849645714206720" {...field} /></FormControl><FormMessage /></FormItem>
+                                )}/>
+                             )}
                         </div>
                     ))}
-                     <Button type="button" variant="outline" size="sm" onClick={() => append({ type: 'SOCIAL_FOLLOW', description: "" })}>
+                     <Button type="button" variant="outline" size="sm" onClick={() => append({ type: 'SOCIAL_FOLLOW', description: "", verificationData: "" })}>
                        <Plus className="mr-2 h-4 w-4" /> Add Task
                     </Button>
                 </section>

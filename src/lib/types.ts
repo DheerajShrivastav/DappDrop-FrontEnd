@@ -1,10 +1,12 @@
 
+
 export type TaskType = 'SOCIAL_FOLLOW' | 'JOIN_DISCORD' | 'RETWEET' | 'ONCHAIN_TX';
 
 export type Task = {
   id: string;
   type: TaskType;
   description: string;
+  verificationData?: string;
 };
 
 export type UserTask = {
