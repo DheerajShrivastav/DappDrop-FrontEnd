@@ -88,12 +88,23 @@ const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
         status: statusMap[Number(contractData.status)] as 'Draft' | 'Active' | 'Ended' | 'Closed',
         participants: Number(contractData.totalParticipants),
         host: contractData.host,
-        tasks: contractData.tasks.map((task: any, index: number) => ({
-            id: index.toString(),
-            type: taskTypeMap[Number(task.taskType)] as TaskType,
-            description: task.description,
-            verificationData: ethers.decodeBytes32String(task.verificationData || ethers.encodeBytes32String("")),
-        })),
+        tasks: contractData.tasks.map((task: any, index: number) => {
+            let verificationDataString = "";
+            if (task.verificationData && ethers.isBytesLike(task.verificationData) && task.verificationData.length === 66) {
+                try {
+                    verificationDataString = ethers.decodeBytes32String(task.verificationData);
+                } catch(e) {
+                    console.error("Failed to decode bytes32 string:", e);
+                }
+            }
+
+            return {
+                id: index.toString(),
+                type: taskTypeMap[Number(task.taskType)] as TaskType,
+                description: task.description,
+                verificationData: verificationDataString,
+            }
+        }),
         reward: {
             type: rewardTypeMap[Number(contractData.reward.rewardType)] as 'ERC20' | 'ERC721' | 'None',
             tokenAddress: contractData.reward.tokenAddress,
@@ -286,8 +297,13 @@ export const createCampaign = async (campaignData: any) => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     
-    const startTime = Math.floor(campaignData.dates.from.getTime() / 1000);
-    const endTime = Math.floor(campaignData.dates.to.getTime() / 1000);
+    // Create campaign with a start time 100 years in the future to keep it in Draft
+    const DRAFT_START_TIME_OFFSET = 100 * 365 * 24 * 60 * 60; // 100 years in seconds
+    const draftStartTime = Math.floor(Date.now() / 1000) + DRAFT_START_TIME_OFFSET;
+    
+    const durationInSeconds = differenceInSeconds(campaignData.dates.to, campaignData.dates.from);
+    const draftEndTime = draftStartTime + durationInSeconds;
+
 
     const taskTypeMap: Record<TaskType, number> = {
         'SOCIAL_FOLLOW': 0,
@@ -298,7 +314,7 @@ export const createCampaign = async (campaignData: any) => {
 
     try {
         // 1. Create Campaign
-        const tx = await contractWithSigner.createCampaign(campaignData.title, startTime, endTime);
+        const tx = await contractWithSigner.createCampaign(campaignData.title, draftStartTime, draftEndTime);
         const receipt = await tx.wait();
         
         const event = receipt.logs.map((log: any) => {
@@ -348,12 +364,7 @@ export const createCampaign = async (campaignData: any) => {
             await rewardTx.wait();
         }
 
-        // 4. Open Campaign
-        const openTx = await contractWithSigner.openCampaign(campaignId);
-        await openTx.wait();
-
-
-        toast({ title: 'Success!', description: 'Your campaign has been created and is now active.' });
+        toast({ title: 'Success!', description: 'Your campaign has been created in Draft status. Open it from your dashboard.' });
         return campaignId;
     } catch(error: any) {
         console.error("Error creating campaign:", error);
@@ -534,3 +545,4 @@ export const isPaused = async (): Promise<boolean> => {
         return false;
     }
 }
+
