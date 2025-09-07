@@ -5,6 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Image from 'next/image';
 import { format } from 'date-fns';
+import Link from 'next/link';
 
 import type { Campaign, UserTask, Task as TaskType, ParticipantData } from '@/lib/types';
 import { useWallet } from '@/context/wallet-provider';
@@ -155,7 +156,7 @@ export default function CampaignDetailsPage() {
   const isHostView = role === 'host' && address?.toLowerCase() === campaign.host.toLowerCase();
 
 
-  const handleCompleteTask = async (taskId: string, taskType: TaskType) => {
+  const handleCompleteTask = async (taskId: string, taskType: TaskType['type']) => {
     if (!isConnected || !address) {
       toast({ variant: 'destructive', title: 'Wallet Not Connected', description: 'Please connect your wallet.' });
       return;
@@ -266,6 +267,8 @@ export default function CampaignDetailsPage() {
                )}
               {campaign.tasks.map((task) => {
                 const userTask = userTasks.find(ut => ut.taskId === task.id);
+                const isTaskDisabled = userTask?.completed || userTask?.isCompleting || campaign.status !== 'Active';
+
                 return (
                   <div key={task.id} className="flex items-center justify-between p-4 rounded-md bg-secondary/50">
                     <div className="flex items-center space-x-4">
@@ -277,20 +280,40 @@ export default function CampaignDetailsPage() {
                       </label>
                     </div>
                     {role === 'participant' && (
-                      <Button
-                        id={`task-${task.id}`}
-                        size="sm"
-                        variant={userTask?.completed ? "ghost" : "outline"}
-                        disabled={userTask?.completed || userTask?.isCompleting || campaign.status !== 'Active' }
-                        onClick={() => handleCompleteTask(task.id, task.type)}
-                      >
-                        {userTask?.isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                       <div className="flex items-center gap-2">
                         {userTask?.completed ? (
+                           <Button id={`task-${task.id}`} size="sm" variant="ghost" disabled>
+                             <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> Completed
+                           </Button>
+                        ) : task.type === 'JOIN_DISCORD' ? (
                           <>
-                            <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> Completed
+                             <Button size="sm" asChild variant='outline'>
+                               <Link href="https://discord.gg/placeholder" target="_blank">Join</Link>
+                             </Button>
+                             <Button
+                               id={`task-${task.id}`}
+                               size="sm"
+                               variant="outline"
+                               disabled={isTaskDisabled}
+                               onClick={() => handleCompleteTask(task.id, task.type)}
+                             >
+                               {userTask?.isCompleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4"/>}
+                               Verify
+                             </Button>
                           </>
-                        ) : 'Complete Task'}
-                      </Button>
+                        ) : (
+                          <Button
+                            id={`task-${task.id}`}
+                            size="sm"
+                            variant="outline"
+                            disabled={isTaskDisabled}
+                            onClick={() => handleCompleteTask(task.id, task.type)}
+                          >
+                            {userTask?.isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Complete Task
+                          </Button>
+                        )}
+                      </div>
                     )}
                   </div>
                 )
