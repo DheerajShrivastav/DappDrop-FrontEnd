@@ -285,10 +285,8 @@ export const createCampaign = async (campaignData: any) => {
     const signer = await getSigner();
     const contractWithSigner = contract.connect(signer) as Contract;
     
-    // Set a start time far in the future to ensure the campaign is in Draft state
-    const futureStartTime = Math.floor(addDays(new Date(), 365 * 100).getTime() / 1000);
-    const durationInSeconds = differenceInSeconds(campaignData.dates.to, campaignData.dates.from);
-    const endTime = futureStartTime + durationInSeconds;
+    const startTime = Math.floor(campaignData.dates.from.getTime() / 1000);
+    const endTime = Math.floor(campaignData.dates.to.getTime() / 1000);
 
     const taskTypeMap: Record<TaskType, number> = {
         'SOCIAL_FOLLOW': 0,
@@ -298,7 +296,7 @@ export const createCampaign = async (campaignData: any) => {
     };
 
     try {
-        const tx = await contractWithSigner.createCampaign(campaignData.title, futureStartTime, endTime);
+        const tx = await contractWithSigner.createCampaign(campaignData.title, startTime, endTime);
         const receipt = await tx.wait();
         
         const event = receipt.logs.map((log: any) => {
@@ -312,10 +310,40 @@ export const createCampaign = async (campaignData: any) => {
         if (!event) throw new Error("CampaignCreated event not found");
         const campaignId = event.args.campaignId.toString();
 
+        // Add tasks
         for (const task of campaignData.tasks) {
             const taskType = taskTypeMap[task.type as TaskType];
             const taskTx = await contractWithSigner.addTaskToCampaign(campaignId, taskType, task.description, "0x", false);
             await taskTx.wait();
+        }
+
+        // Set reward
+        let rewardType;
+        let tokenAddress = ethers.ZeroAddress;
+        let rewardAmount: string | bigint = '0';
+
+        switch (campaignData.reward.type) {
+            case 'ERC20':
+                rewardType = 0;
+                tokenAddress = campaignData.reward.tokenAddress;
+                // Assuming amount is a string representing ether, needs to be converted to wei
+                rewardAmount = ethers.parseUnits(campaignData.reward.amount || '0', 18);
+                break;
+            case 'ERC721':
+                rewardType = 1;
+                tokenAddress = campaignData.reward.tokenAddress;
+                rewardAmount = '0'; // For ERC721, amount is not used, maybe tokenId later
+                break;
+            case 'None':
+                rewardType = 2;
+                break;
+            default:
+                throw new Error("Invalid reward type");
+        }
+        
+        if (rewardType !== 2) {
+            const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, tokenAddress, rewardAmount);
+            await rewardTx.wait();
         }
 
         toast({ title: 'Success!', description: 'Your campaign has been created in Draft status. Open it from your dashboard.' });
@@ -382,40 +410,6 @@ export const openCampaign = async (campaignId: string) => {
     const contractWithSigner = contract.connect(signer) as Contract;
 
     try {
-        const campaign = await getCampaignById(campaignId);
-        if (!campaign) {
-            throw new Error("Campaign not found");
-        }
-
-        // Set reward before opening
-        let rewardType;
-        let tokenAddress = ethers.ZeroAddress;
-        let rewardAmount = '0';
-
-        switch (campaign.reward.type) {
-            case 'ERC20':
-                rewardType = 0;
-                tokenAddress = campaign.reward.tokenAddress;
-                rewardAmount = ethers.parseUnits(campaign.reward.amount || '0', 18);
-                break;
-            case 'ERC721':
-                rewardType = 1;
-                tokenAddress = campaign.reward.tokenAddress;
-                rewardAmount = '0';
-                break;
-            case 'None':
-                rewardType = 2;
-                break;
-            default:
-                throw new Error("Invalid reward type");
-        }
-
-        if (rewardType !== 2) {
-            const rewardTx = await contractWithSigner.setCampaignReward(campaignId, rewardType, tokenAddress, rewardAmount);
-            await rewardTx.wait();
-        }
-        
-        // Now open the campaign
         const tx = await contractWithSigner.openCampaign(campaignId);
         await tx.wait();
         toast({ title: 'Campaign is now Active!', description: `Campaign ${campaignId} has been successfully opened.` });
@@ -531,3 +525,4 @@ export const isPaused = async (): Promise<boolean> => {
 
     
     
+
