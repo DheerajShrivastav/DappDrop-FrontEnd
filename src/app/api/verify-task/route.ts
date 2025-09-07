@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { completeTask, getCampaignById } from '@/lib/web3-service';
 import { verifyDiscordJoin } from '@/lib/verification-service';
+import prisma from '@/lib/prisma';
 
 export async function POST(request: Request) {
   try {
@@ -31,18 +32,32 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: 'Discord username is required for verification.' }, { status: 400 });
       }
       isVerified = await verifyDiscordJoin(discordUsername, discordServerId);
+
+      if (isVerified) {
+          // Store verification proof in the database
+          await prisma.socialVerification.create({
+              data: {
+                  userAddress: userAddress,
+                  taskId: `${campaignId}-${taskId}`, // Create a unique ID for the task instance
+                  platform: 'DISCORD',
+                  proofData: {
+                      username: discordUsername,
+                      serverId: discordServerId,
+                  },
+                  verifiedAt: new Date(),
+                  isValid: true,
+              }
+          });
+      }
+
     } else {
-        // For now, only JOIN_DISCORD is handled by this backend verifier
-        // Other off-chain tasks could be added here.
+        // For other task types that might need backend verification in the future
         isVerified = true;
     }
 
     if (isVerified) {
         // Since verification is successful on the backend, we now call the smart contract
-        // to mark the task as complete on-chain. This uses a backend wallet/signer
-        // that has permission to call `completeTask`.
-        // IMPORTANT: In a real production app, the `completeTask` function in the contract
-        // should be protected, only allowing a trusted backend address (a 'verifier') to call it.
+        // to mark the task as complete on-chain.
         await completeTask(campaignId, taskIndex, userAddress);
         return NextResponse.json({ success: true, message: 'Task verified and completed successfully.' });
     } else {
@@ -51,6 +66,7 @@ export async function POST(request: Request) {
 
   } catch (error: any) {
     console.error('API Error:', error);
+    // Check for Prisma-specific errors if necessary
     return NextResponse.json({ error: error.message || 'An unknown error occurred' }, { status: 500 });
   }
 }
