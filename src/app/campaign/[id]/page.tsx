@@ -155,14 +155,12 @@ export default function CampaignDetailsPage() {
   const isHostView = role === 'host' && address?.toLowerCase() === campaign.host.toLowerCase();
 
 
-  const handleCompleteTask = async (taskId: string) => {
+  const handleCompleteTask = async (taskId: string, taskType: TaskType) => {
     if (!isConnected || !address) {
       toast({ variant: 'destructive', title: 'Wallet Not Connected', description: 'Please connect your wallet.' });
       return;
     }
-
-    const taskIndex = parseInt(taskId, 10);
-
+    
     setUserTasks(prevTasks =>
       prevTasks.map(task =>
         task.taskId === taskId ? { ...task, isCompleting: true } : task
@@ -170,28 +168,47 @@ export default function CampaignDetailsPage() {
     );
 
     try {
-      await completeTask(campaignId, taskIndex);
-      toast({ title: 'Task Completed!', description: 'Great job, one step closer to your reward.' });
+        if (taskType === 'JOIN_DISCORD') {
+            // Call our backend API for verification
+            const response = await fetch('/api/verify-task', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ campaignId, taskId, userAddress: address }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Verification failed.');
+            }
+            // If backend verification is successful, now call the smart contract
+        }
+
+        // For all tasks (including verified Discord join), call the contract
+        await completeTask(campaignId, parseInt(taskId, 10));
+        
+        toast({ title: 'Task Completed!', description: 'Great job, one step closer to your reward.' });
       
-      // Update local state on success
-      setUserTasks(prevTasks =>
-        prevTasks.map(task =>
-          task.taskId === taskId ? { ...task, completed: true, isCompleting: false } : task
-        )
-      );
+        setUserTasks(prevTasks =>
+            prevTasks.map(task =>
+            task.taskId === taskId ? { ...task, completed: true, isCompleting: false } : task
+            )
+        );
 
-      // If they weren't marked as joined before, they are now
-      if (!isJoined) {
-          setIsJoined(true);
-      }
+        if (!isJoined) {
+            setIsJoined(true);
+        }
 
-    } catch (error) {
-       // Error toast is handled in the service
-      setUserTasks(prevTasks =>
-        prevTasks.map(task =>
-          task.taskId === taskId ? { ...task, isCompleting: false } : task
-        )
-      );
+    } catch (error: any) {
+        const description = error.message.includes("not in active period")
+            ? 'This campaign is not currently active.'
+            : error.message || 'Failed to complete task.';
+        toast({ variant: 'destructive', title: 'Error', description });
+        setUserTasks(prevTasks =>
+            prevTasks.map(task =>
+            task.taskId === taskId ? { ...task, isCompleting: false } : task
+            )
+        );
     }
   };
   
@@ -265,7 +282,7 @@ export default function CampaignDetailsPage() {
                         size="sm"
                         variant={userTask?.completed ? "ghost" : "outline"}
                         disabled={userTask?.completed || userTask?.isCompleting || campaign.status !== 'Active' }
-                        onClick={() => handleCompleteTask(task.id)}
+                        onClick={() => handleCompleteTask(task.id, task.type)}
                       >
                         {userTask?.isCompleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         {userTask?.completed ? (
