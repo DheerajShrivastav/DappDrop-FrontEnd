@@ -1,0 +1,71 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Simplified schema focusing on enhancements, not duplicating on-chain data
+
+model User {
+  id              String   @id @default(cuid())
+  walletAddress   String   @unique
+  
+  // OFF-CHAIN ONLY enhancements
+  username        String?
+  email           String?
+  notificationSettings Json?
+  preferences     Json?
+  
+  createdAt       DateTime @default(now())
+}
+
+model CampaignCache {
+  id              String   @id @default(cuid())
+  campaignId      Int      // Reference to on-chain campaign ID
+  contractAddress String
+  
+  // CACHED data for performance (synced from blockchain)
+  title           String
+  description     String
+  hostAddress     String
+  isActive        Boolean
+  
+  // OFF-CHAIN enhancements
+  imageUrl        String?
+  tags            String[]
+  featuredUntil   DateTime?
+  
+  lastSyncedAt    DateTime @default(now())
+}
+
+model SocialVerification {
+  id              String   @id @default(cuid())
+  userAddress     String
+  taskId          String   // On-chain task reference
+  platform        String   // twitter, discord, etc.
+  
+  // Verification proof (off-chain)
+  proofData       Json
+  verifiedAt      DateTime?
+  isValid         Boolean  @default(false)
+}
+
+model Analytics {
+  id              String   @id @default(cuid())
+  eventType       String
+  userAddress     String?
+  campaignId      Int?     // On-chain campaign ID reference
+  
+  data            Json
+  timestamp       DateTime @default(now())
+}
