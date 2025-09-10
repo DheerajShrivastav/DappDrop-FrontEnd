@@ -21,6 +21,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Calendar, CheckCircle, Clock, Gift, Loader2, Users, Info, ShieldCheck, Twitter, MessageSquare, Bot, Share2, Award, Trophy } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { CampaignAnalytics } from '@/components/campaign-analytics';
+import { DiscordAuthButton } from '@/components/discord-auth-button';
 import {
   Dialog,
   DialogContent,
@@ -66,7 +67,7 @@ export default function CampaignDetailsPage() {
 
   // Discord Verification State
   const [isVerifyDialogOpen, setIsVerifyDialogOpen] = useState(false);
-  const [discordUsername, setDiscordUsername] = useState('');
+  const [discordUserData, setDiscordUserData] = useState<{ id: string; username: string; discriminator?: string } | null>(null);
   const [verifyingTaskId, setVerifyingTaskId] = useState<string | null>(null);
 
 
@@ -165,7 +166,7 @@ export default function CampaignDetailsPage() {
   const isHostView = role === 'host' && address?.toLowerCase() === campaign.host.toLowerCase();
 
 
-  const handleCompleteTask = async (taskId: string, taskType: TaskType['type'], username?: string) => {
+  const handleCompleteTask = async (taskId: string, taskType: TaskType['type'], discordData?: any) => {
     if (!isConnected || !address) {
       toast({ variant: 'destructive', title: 'Wallet Not Connected', description: 'Please connect your wallet.' });
       return;
@@ -178,11 +179,22 @@ export default function CampaignDetailsPage() {
     );
 
     try {
+        // Format discord username with discriminator if available
+        const discordUsername = discordData?.username && discordData?.discriminator 
+          ? `${discordData.username}#${discordData.discriminator}`
+          : discordData?.username || null;
+          
         // All tasks now call our backend API for verification/completion
         const response = await fetch('/api/verify-task', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ campaignId, taskId, userAddress: address, discordUsername: username }),
+            body: JSON.stringify({ 
+              campaignId, 
+              taskId, 
+              userAddress: address, 
+              discordUsername,
+              discordId: discordData?.id || null
+            }),
         });
 
         const result = await response.json();
@@ -216,6 +228,7 @@ export default function CampaignDetailsPage() {
         );
         setIsVerifyDialogOpen(false);
         setVerifyingTaskId(null);
+        setDiscordUserData(null);
     }
   };
   
@@ -449,26 +462,51 @@ export default function CampaignDetailsPage() {
           <DialogHeader>
             <DialogTitle>Verify Discord Task</DialogTitle>
             <DialogDescription>
-              Please enter your Discord username (e.g., `username#1234` or just `username`) to verify that you've joined the server.
+              Please connect your Discord account to verify that you've joined the server.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="discord-username" className="text-right">
-                Username
-              </Label>
-              <Input
-                id="discord-username"
-                value={discordUsername}
-                onChange={(e) => setDiscordUsername(e.target.value)}
-                className="col-span-3"
-                placeholder="YourDiscordUsername"
+          <div className="flex flex-col items-center py-6 space-y-4">
+            {!discordUserData ? (
+              <DiscordAuthButton 
+                onSuccess={(userData) => {
+                  setDiscordUserData(userData);
+                  toast({ 
+                    title: 'Discord Connected', 
+                    description: `Successfully connected as ${userData.username}${userData.discriminator ? `#${userData.discriminator}` : ''}` 
+                  });
+                }}
+                onError={(error) => {
+                  toast({ 
+                    variant: 'destructive', 
+                    title: 'Discord Connection Failed', 
+                    description: error.message 
+                  });
+                }}
               />
-            </div>
+            ) : (
+              <div className="flex flex-col items-center space-y-3 p-4 bg-secondary/30 rounded-lg w-full">
+                <div className="text-lg font-medium flex items-center">
+                  <MessageSquare className="mr-2 h-5 w-5 text-[#5865F2]" />
+                  {discordUserData.username}
+                  {discordUserData.discriminator && <span className="text-muted-foreground">#{discordUserData.discriminator}</span>}
+                </div>
+                <p className="text-xs text-muted-foreground">Discord account connected</p>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => setDiscordUserData(null)}
+                >
+                  Change Account
+                </Button>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-            <Button onClick={() => handleCompleteTask(verifyingTaskId!, 'JOIN_DISCORD', discordUsername)} disabled={!discordUsername}>
+            <Button 
+              onClick={() => handleCompleteTask(verifyingTaskId!, 'JOIN_DISCORD', discordUserData)} 
+              disabled={!discordUserData}
+            >
               Confirm & Verify
             </Button>
           </DialogFooter>

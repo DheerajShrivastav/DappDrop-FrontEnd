@@ -81,7 +81,7 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
   return (
     <>
       <Card className="h-full flex flex-col transition-all duration-300 ease-in-out group-hover:shadow-xl group-hover:shadow-primary/10 bg-card border-border/50 hover:border-primary/50">
-         <Link href={`/campaign/${campaign.id}`} className="block group flex flex-col flex-grow">
+         <Link href={`/campaign/${campaign.id}`} className="group flex flex-col flex-grow">
             <CardHeader className="p-0">
             <div className="relative h-48 w-full">
                 <Image
