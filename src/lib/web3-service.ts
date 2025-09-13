@@ -154,9 +154,14 @@ const mapContractDataToCampaign = (
           const metadata = taskMetadata.find((tm) => tm.taskIndex === index)
           if (metadata && metadata.discordInviteLink) {
             discordInviteLink = metadata.discordInviteLink
-            console.log(`Found Discord invite link for task ${index}:`, discordInviteLink)
+            console.log(
+              `Found Discord invite link for task ${index}:`,
+              discordInviteLink
+            )
           } else {
-            console.warn(`No Discord invite link found for task ${index} in campaign ${id}`)
+            console.warn(
+              `No Discord invite link found for task ${index} in campaign ${id}`
+            )
           }
         } else {
           console.warn(`No task metadata available for campaign ${id}`)
@@ -238,7 +243,7 @@ const fetchTaskMetadata = async (campaignId: string) => {
   if (typeof window === 'undefined') {
     return []
   }
-  
+
   try {
     const response = await fetch(
       `/api/campaign-task-metadata?campaignId=${campaignId}`,
@@ -246,20 +251,27 @@ const fetchTaskMetadata = async (campaignId: string) => {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-        }
+        },
       }
     )
-    
+
     if (response.ok) {
       const result = await response.json()
       if (result.success && Array.isArray(result.data)) {
-        console.log(`Fetched task metadata for campaign ${campaignId}:`, result.data)
+        console.log(
+          `Fetched task metadata for campaign ${campaignId}:`,
+          result.data
+        )
         return result.data
       } else {
         console.warn(`No task metadata found for campaign ${campaignId}`)
       }
     } else {
-      console.warn(`Failed to fetch task metadata for campaign ${campaignId}:`, response.status, response.statusText)
+      console.warn(
+        `Failed to fetch task metadata for campaign ${campaignId}:`,
+        response.status,
+        response.statusText
+      )
     }
   } catch (e) {
     console.warn('Failed to fetch task metadata from database:', e)
@@ -538,7 +550,9 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
 }
 
 // Enhanced function to get campaign by ID with Discord invite links for client-side use
-export const getCampaignByIdWithMetadata = async (id: string): Promise<Campaign | null> => {
+export const getCampaignByIdWithMetadata = async (
+  id: string
+): Promise<Campaign | null> => {
   // First get the basic campaign data
   const campaign = await getCampaignById(id)
   if (!campaign) return null
@@ -551,11 +565,11 @@ export const getCampaignByIdWithMetadata = async (id: string): Promise<Campaign 
         // Update Discord tasks with invite links
         campaign.tasks = campaign.tasks.map((task, index) => {
           if (task.type === 'JOIN_DISCORD') {
-            const metadata = taskMetadata.find(tm => tm.taskIndex === index)
+            const metadata = taskMetadata.find((tm) => tm.taskIndex === index)
             if (metadata && metadata.discordInviteLink) {
               return {
                 ...task,
-                discordInviteLink: metadata.discordInviteLink
+                discordInviteLink: metadata.discordInviteLink,
               }
             }
           }
