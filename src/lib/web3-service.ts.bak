@@ -12,7 +12,6 @@ declare global {
       isMetaMask?: boolean
       request: (...args: any[]) => Promise<any>
       providers?: (Eip1193Provider & { isMetaMask?: boolean })[]
-    }
   }
 }
 
@@ -74,11 +73,7 @@ const getSigner = async () => {
   return signer
 }
 
-const mapContractDataToCampaign = (
-  contractData: any,
-  id: number,
-  taskMetadata?: Array<{ taskIndex: number; discordInviteLink?: string }>
-): Campaign => {
+const mapContractDataToCampaign = (contractData: any, id: number): Campaign => {
   const statusMap = ['Draft', 'Active', 'Ended', 'Closed']
   const rewardTypeMap = ['ERC20', 'ERC721', 'None']
   const taskTypeMap: TaskType[] = [
@@ -132,7 +127,6 @@ const mapContractDataToCampaign = (
     host: contractData.host,
     tasks: contractData.tasks.map((task: any, index: number) => {
       let verificationDataString = ''
-
       if (
         task.verificationData &&
         ethers.isBytesLike(task.verificationData) &&
@@ -147,28 +141,11 @@ const mapContractDataToCampaign = (
         }
       }
 
-      // For Discord tasks, try to load invite link from task metadata
-      let discordInviteLink = ''
-      if (taskTypeMap[Number(task.taskType)] === 'JOIN_DISCORD') {
-        if (taskMetadata && Array.isArray(taskMetadata)) {
-          const metadata = taskMetadata.find((tm) => tm.taskIndex === index)
-          if (metadata && metadata.discordInviteLink) {
-            discordInviteLink = metadata.discordInviteLink
-            console.log(`Found Discord invite link for task ${index}:`, discordInviteLink)
-          } else {
-            console.warn(`No Discord invite link found for task ${index} in campaign ${id}`)
-          }
-        } else {
-          console.warn(`No task metadata available for campaign ${id}`)
-        }
-      }
-
       return {
         id: index.toString(),
         type: taskTypeMap[Number(task.taskType)] as TaskType,
         description: task.description,
         verificationData: verificationDataString,
-        discordInviteLink: discordInviteLink || undefined,
       }
     }),
     reward: {
@@ -230,41 +207,6 @@ const switchOrAddSepoliaNetwork = async (ethereum: Eip1193Provider) => {
       throw switchError
     }
   }
-}
-
-// Helper function to fetch task metadata from database
-const fetchTaskMetadata = async (campaignId: string) => {
-  // Only fetch in browser environment, not during SSR
-  if (typeof window === 'undefined') {
-    return []
-  }
-  
-  try {
-    const response = await fetch(
-      `/api/campaign-task-metadata?campaignId=${campaignId}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      }
-    )
-    
-    if (response.ok) {
-      const result = await response.json()
-      if (result.success && Array.isArray(result.data)) {
-        console.log(`Fetched task metadata for campaign ${campaignId}:`, result.data)
-        return result.data
-      } else {
-        console.warn(`No task metadata found for campaign ${campaignId}`)
-      }
-    } else {
-      console.warn(`Failed to fetch task metadata for campaign ${campaignId}:`, response.status, response.statusText)
-    }
-  } catch (e) {
-    console.warn('Failed to fetch task metadata from database:', e)
-  }
-  return []
 }
 
 // --- Service Functions ---
@@ -353,7 +295,6 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
         const campaignData = await contractToUse.getCampaign(i)
         if (Number(campaignData.status) !== 3) {
           // Not 'Closed'
-
           const campaign = mapContractDataToCampaign(campaignData, i)
 
           // If it's a Draft campaign, check if it's showing a far future date (100+ years)
@@ -435,7 +376,6 @@ export const getCampaignsByHostAddress = async (
       campaignIds.map(async (id) => {
         try {
           const campaignData = await contractToUse.getCampaign(id)
-
           const campaign = mapContractDataToCampaign(campaignData, id)
 
           // If it's a Draft campaign, check if it's showing a far future date (100+ years)
@@ -501,7 +441,6 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
   }
   try {
     const campaignData = await contractToUse.getCampaign(id)
-
     const campaign = mapContractDataToCampaign(campaignData, parseInt(id))
 
     // If it's a Draft campaign, check if it's showing a far future date (100+ years)
@@ -535,39 +474,6 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
     })
     return null
   }
-}
-
-// Enhanced function to get campaign by ID with Discord invite links for client-side use
-export const getCampaignByIdWithMetadata = async (id: string): Promise<Campaign | null> => {
-  // First get the basic campaign data
-  const campaign = await getCampaignById(id)
-  if (!campaign) return null
-
-  // Then enhance it with task metadata (only on client-side)
-  if (typeof window !== 'undefined') {
-    try {
-      const taskMetadata = await fetchTaskMetadata(id)
-      if (taskMetadata && Array.isArray(taskMetadata)) {
-        // Update Discord tasks with invite links
-        campaign.tasks = campaign.tasks.map((task, index) => {
-          if (task.type === 'JOIN_DISCORD') {
-            const metadata = taskMetadata.find(tm => tm.taskIndex === index)
-            if (metadata && metadata.discordInviteLink) {
-              return {
-                ...task,
-                discordInviteLink: metadata.discordInviteLink
-              }
-            }
-          }
-          return task
-        })
-      }
-    } catch (e) {
-      console.warn('Failed to enhance campaign with task metadata:', e)
-    }
-  }
-
-  return campaign
 }
 
 export const createCampaign = async (campaignData: any) => {
@@ -635,15 +541,9 @@ export const createCampaign = async (campaignData: any) => {
     // 2. Add Tasks
     for (const task of campaignData.tasks) {
       const taskType = taskTypeMap[task.type as TaskType]
-
-      // For blockchain storage, we only store the server ID (needed for verification)
-      // The invite link will be stored separately in localStorage
-      let verificationDataToStore = task.verificationData || ''
-
       const verificationDataBytes = ethers.encodeBytes32String(
-        verificationDataToStore
+        task.verificationData || ''
       )
-
       const taskTx = await contractWithSigner.addTaskToCampaign(
         campaignId,
         taskType,
@@ -652,27 +552,6 @@ export const createCampaign = async (campaignData: any) => {
         false
       )
       await taskTx.wait()
-
-      // Store Discord invite links in database for this campaign
-      if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
-        try {
-          const taskIndex = campaignData.tasks.indexOf(task)
-          await fetch('/api/campaign-task-metadata', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              campaignId: campaignId,
-              taskIndex: taskIndex,
-              taskType: task.type,
-              discordInviteLink: task.discordInviteLink,
-            }),
-          })
-        } catch (e) {
-          console.warn('Failed to store Discord invite link in database:', e)
-        }
-      }
     }
 
     // 3. Set Reward
@@ -792,13 +671,12 @@ export const openCampaign = async (campaignId: string): Promise<string> => {
   try {
     // Only try to open the existing campaign - don't create a new one
     console.log(`Opening campaign ${campaignId}...`)
-
+    
     // Get the current campaign data to check its status
     const campaignData = await contractWithSigner.getCampaign(campaignId)
-
+    
     // Check if the campaign is already active
-    if (Number(campaignData.status) === 1) {
-      // 1 is Active status
+    if (Number(campaignData.status) === 1) { // 1 is Active status
       console.log(`Campaign ${campaignId} is already active.`)
       toast({
         title: 'Already Active',
@@ -806,34 +684,33 @@ export const openCampaign = async (campaignId: string): Promise<string> => {
       })
       return campaignId
     }
-
+    
     try {
       const tx = await contractWithSigner.openCampaign(campaignId)
       await tx.wait()
-
+      
       toast({
         title: 'Campaign is now Active!',
         description: `Campaign ${campaignId} has been successfully opened.`,
       })
-
+      
       return campaignId
     } catch (openError) {
       console.error(`Failed to open campaign ${campaignId}:`, openError)
-
+      
       toast({
         title: 'Failed to Open Campaign',
         description: `Could not open this campaign. It may have dates set too far in the future. Please create a new campaign with appropriate dates.`,
-        variant: 'destructive',
+        variant: 'destructive'
       })
-
+      
       throw new Error(`Cannot open campaign: ${openError.message}`)
     }
   } catch (error: any) {
     console.error(`Error opening campaign ${campaignId}:`, error)
     let reason = 'An unknown error occurred.'
     if (error.reason && error.reason.includes('start time not yet started')) {
-      reason =
-        "The campaign's start time has not been reached yet. Please create a new campaign with valid dates."
+      reason = "The campaign's start time has not been reached yet. Please create a new campaign with valid dates."
     } else if (error.reason) {
       reason = error.reason
     }

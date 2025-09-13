@@ -20,37 +20,109 @@
  * @param discordServerId - The ID of the Discord server to check.
  * @returns A promise that resolves to true if the user is in the server, false otherwise.
  */
-export const verifyDiscordJoin = async (discordUsername: string, discordServerId: string): Promise<boolean> => {
-  console.log(`Verifying if user "${discordUsername}" joined Discord server ${discordServerId}`);
-  
-  // --- EXAMPLE: Real implementation logic would go here ---
-  //
-  // try {
-  //   const response = await fetch(`https://discord.com/api/v10/guilds/${discordServerId}/members/search?query=${encodeURIComponent(discordUsername)}&limit=1`, {
-  //     headers: {
-  //       'Authorization': `Bot ${process.env.DISCORD_BOT_TOKEN}`
-  //     }
-  //   });
-  //
-  //   if (!response.ok) {
-  //     console.error("Failed to query Discord API:", response.statusText);
-  //     return false;
-  //   }
-  //
-  //   const members = await response.json();
-  //   // Check if the search returned a member with the exact username match
-  //   return members.some((member: any) => member.user.username.toLowerCase() === discordUsername.toLowerCase());
-  //
-  // } catch (error) {
-  //   console.error("Error verifying Discord join:", error);
-  //   return false;
-  // }
+export const verifyDiscordJoin = async (
+  discordUsername: string,
+  discordServerId: string,
+  discordId?: string
+): Promise<boolean> => {
+  console.log(
+    `Verifying if user "${discordUsername}" (ID: ${
+      discordId || 'unknown'
+    }) joined Discord server ${discordServerId}`
+  )
 
-  // Simulating a successful verification for demonstration purposes.
-  // In a real app, remove this and use the logic above.
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  if (discordUsername) { // Basic check to simulate success if a username is provided
-      return true;
+  if (!process.env.DISCORD_BOT_TOKEN) {
+    console.error('Discord bot token is not configured')
+    throw new Error(
+      'Discord bot token is missing. Please check your environment variables.'
+    )
   }
-  return false;
-};
+
+  // If we have a discordId from OAuth, we can perform a more accurate verification
+  if (discordId) {
+    console.log('Using OAuth Discord ID for verification')
+    try {
+      const response = await fetch(
+        `https://discord.com/api/v10/guilds/${discordServerId}/members/${discordId}`,
+        {
+          headers: {
+            Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+          },
+        }
+      )
+
+      if (response.ok) {
+        // If the member exists in the guild, they are verified
+        console.log(
+          `User with ID ${discordId} is a member of Discord server ${discordServerId}`
+        )
+        return true
+      }
+
+      if (response.status === 404) {
+        // User is not in the guild
+        console.log(
+          `User with ID ${discordId} is NOT a member of Discord server ${discordServerId}`
+        )
+        return false
+      }
+
+      console.error('Failed to query Discord API:', response.statusText)
+      const errorData = await response.text()
+      console.error('Error details:', errorData)
+      return false
+    } catch (error) {
+      console.error('Error verifying Discord join with ID:', error)
+      return false
+    }
+  } else {
+    // Fallback to username-based verification
+    console.log('Falling back to username-based verification')
+    try {
+      const response = await fetch(
+        `https://discord.com/api/v10/guilds/${discordServerId}/members/search?query=${encodeURIComponent(
+          discordUsername
+        )}&limit=10`,
+        {
+          headers: {
+            Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+          },
+        }
+      )
+
+      if (!response.ok) {
+        console.error('Failed to query Discord API:', response.statusText)
+        const errorData = await response.text()
+        console.error('Error details:', errorData)
+        return false
+      }
+
+      const members = await response.json()
+
+      if (!Array.isArray(members) || members.length === 0) {
+        console.log(`No members found with username ${discordUsername}`)
+        return false
+      }
+
+      // Check if any of the returned members match the username
+      // Discord usernames are case-sensitive
+      const usernameMatch = members.some((member: any) => {
+        const memberUsername = member.user?.username
+        return memberUsername === discordUsername
+      })
+
+      console.log(
+        `Username verification result: ${
+          usernameMatch ? 'User found in server' : 'User not found in server'
+        }`
+      )
+      return usernameMatch
+    } catch (error) {
+      console.error('Error verifying Discord join with username:', error)
+      return false
+    }
+  }
+
+  // If execution reaches here, both verification methods failed
+  return false
+}
