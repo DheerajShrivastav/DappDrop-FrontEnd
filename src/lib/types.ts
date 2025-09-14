@@ -32,7 +32,7 @@ export type Campaign = {
   longDescription: string
   startDate: Date
   endDate: Date
-  status: 'Draft' | 'Active' | 'Ended' | 'Closed'
+  status: 'Draft' | 'Open' | 'Ended' | 'Closed'
   participants: number
   host: string
   tasks: Task[]

@@ -19,6 +19,8 @@ import {
   getCampaignByIdWithMetadata,
   hasParticipated,
   getCampaignParticipants,
+  openCampaign,
+  completeTask,
 } from '@/lib/web3-service'
 
 import { Button } from '@/components/ui/button'
@@ -99,6 +101,7 @@ export default function CampaignDetailsPage() {
   const [isJoined, setIsJoined] = useState(false)
   const [participants, setParticipants] = useState<ParticipantData[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isActivating, setIsActivating] = useState(false)
 
   // Winner selection state
   const [numberOfWinners, setNumberOfWinners] = useState(1)
@@ -124,6 +127,14 @@ export default function CampaignDetailsPage() {
 
     setIsLoading(true)
     const fetchedCampaign = await getCampaignByIdWithMetadata(campaignId)
+    console.log('Fetched campaign data:', {
+      id: campaignId,
+      status: fetchedCampaign?.status,
+      startDate: fetchedCampaign?.startDate,
+      endDate: fetchedCampaign?.endDate,
+      isConnected,
+      address,
+    })
 
     if (fetchedCampaign) {
       setCampaign(fetchedCampaign)
@@ -330,9 +341,12 @@ export default function CampaignDetailsPage() {
 
       const result = await response.json()
 
-      if (!response.ok || !result.success) {
+      if (!response.ok || !result.success || !result.verified) {
         throw new Error(result.error || 'Verification failed.')
       }
+
+      // Backend verification successful - now complete the task on blockchain
+      await completeTask(campaignId, parseInt(taskId), address)
 
       toast({
         title: 'Task Completed!',
@@ -390,6 +404,21 @@ export default function CampaignDetailsPage() {
         description: 'Your rewards have been claimed successfully.',
       })
     }, 2000)
+  }
+
+  const handleActivateCampaign = async () => {
+    if (!campaign || !isConnected) return
+
+    setIsActivating(true)
+    try {
+      await openCampaign(campaign.id, toast)
+      // Refresh campaign data after activation
+      await fetchAllCampaignData()
+    } catch (error) {
+      console.error('Failed to activate campaign:', error)
+    } finally {
+      setIsActivating(false)
+    }
   }
 
   const completedTasksCount = userTasks.filter((t) => t.completed).length
@@ -453,7 +482,7 @@ export default function CampaignDetailsPage() {
                 const isTaskDisabled =
                   userTask?.completed ||
                   userTask?.isCompleting ||
-                  campaign.status !== 'Active'
+                  campaign.status !== 'Open'
 
                 return (
                   <div
@@ -624,15 +653,30 @@ export default function CampaignDetailsPage() {
                 <Calendar className="h-4 w-4 mr-3 text-muted-foreground" />{' '}
                 <span>Ends on {format(campaign.endDate, 'PPP')}</span>
               </div>
-              <div className="flex items-center">
-                <Clock className="h-4 w-4 mr-3 text-muted-foreground" />
-                <Badge
-                  variant={
-                    campaign.status === 'Active' ? 'default' : 'secondary'
-                  }
-                >
-                  {campaign.status}
-                </Badge>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Clock className="h-4 w-4 mr-3 text-muted-foreground" />
+                  <Badge
+                    variant={
+                      campaign.status === 'Open' ? 'default' : 'secondary'
+                    }
+                  >
+                    {campaign.status}
+                  </Badge>
+                </div>
+                {isHostView && campaign.status === 'Draft' && (
+                  <Button
+                    size="sm"
+                    onClick={handleActivateCampaign}
+                    disabled={isActivating}
+                    className="ml-2"
+                  >
+                    {isActivating ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Activate Campaign
+                  </Button>
+                )}
               </div>
               <div className="flex items-start font-semibold">
                 <Gift className="h-4 w-4 mr-3 text-primary shrink-0 mt-1" />

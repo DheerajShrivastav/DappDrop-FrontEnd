@@ -1,6 +1,6 @@
 // src/app/api/verify-task/route.ts
 import { NextResponse } from 'next/server'
-import { completeTask, getCampaignById } from '@/lib/web3-service'
+import { getCampaignById } from '@/lib/web3-service'
 import { verifyDiscordJoin } from '@/lib/verification-service'
 import { prisma } from '@/lib/prisma'
 
@@ -73,16 +73,16 @@ export async function POST(request: Request) {
     }
 
     if (isVerified) {
-      // Since verification is successful on the backend, we now call the smart contract
-      // to mark the task as complete on-chain.
-      await completeTask(campaignId, taskIndex, userAddress)
+      // Verification successful - let the frontend handle the smart contract call
+      // since it has access to the user's wallet
       return NextResponse.json({
         success: true,
-        message: 'Task verified and completed successfully.',
+        verified: true,
+        message: 'Task verified successfully. Ready for blockchain completion.',
       })
     } else {
       return NextResponse.json(
-        { error: 'Task verification failed.' },
+        { success: false, verified: false, error: 'Task verification failed.' },
         { status: 400 }
       )
     }

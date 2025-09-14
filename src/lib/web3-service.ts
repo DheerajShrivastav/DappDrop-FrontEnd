@@ -79,7 +79,7 @@ const mapContractDataToCampaign = (
   id: number,
   taskMetadata?: Array<{ taskIndex: number; discordInviteLink?: string }>
 ): Campaign => {
-  const statusMap = ['Draft', 'Active', 'Ended', 'Closed']
+  const statusMap = ['Draft', 'Open', 'Ended', 'Closed']
   const rewardTypeMap = ['ERC20', 'ERC721', 'None']
   const taskTypeMap: TaskType[] = [
     'SOCIAL_FOLLOW',
@@ -94,27 +94,21 @@ const mapContractDataToCampaign = (
     rewardName = 'A special off-chain reward'
   }
 
-  // Get the stored dates from localStorage if available and if the campaign is in Draft status
+  // Use the actual dates from the blockchain
   let startDate = new Date(Number(contractData.startTime) * 1000)
   let endDate = new Date(Number(contractData.endTime) * 1000)
 
-  // Check if localStorage is available (not server-side)
-  const hasLocalStorage = typeof window !== 'undefined' && window.localStorage
+  const contractStatus = Number(contractData.status)
+  const mappedStatus = statusMap[contractStatus]
 
-  const isDraft = Number(contractData.status) === 0 // Draft status
-  const storedCampaignDates =
-    isDraft && hasLocalStorage
-      ? localStorage.getItem(`campaign_dates_${id}`)
-      : null
-  if (storedCampaignDates) {
-    try {
-      const dates = JSON.parse(storedCampaignDates)
-      startDate = new Date(dates.from)
-      endDate = new Date(dates.to)
-    } catch (e) {
-      console.error('Failed to parse stored campaign dates:', e)
-    }
-  }
+  console.log('Campaign status mapping:', {
+    campaignId: id,
+    contractStatus,
+    mappedStatus,
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+    now: new Date().toISOString(),
+  })
 
   return {
     id: id.toString(),
@@ -125,7 +119,7 @@ const mapContractDataToCampaign = (
     endDate,
     status: statusMap[Number(contractData.status)] as
       | 'Draft'
-      | 'Active'
+      | 'Open'
       | 'Ended'
       | 'Closed',
     participants: Number(contractData.totalParticipants),
@@ -368,40 +362,14 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
 
           const campaign = mapContractDataToCampaign(campaignData, i)
 
-          // If it's a Draft campaign, check if it's showing a far future date (100+ years)
-          if (
-            campaign.status === 'Draft' &&
-            campaign.endDate.getFullYear() > 2100
-          ) {
-            // Check if localStorage is available (not server-side)
-            const hasLocalStorage =
-              typeof window !== 'undefined' && window.localStorage
-
-            // Try to load dates from localStorage as a backup
-            if (hasLocalStorage) {
-              const storedDates = localStorage.getItem(`campaign_dates_${i}`)
-              if (storedDates) {
-                try {
-                  const dates = JSON.parse(storedDates)
-                  campaign.startDate = new Date(dates.from)
-                  campaign.endDate = new Date(dates.to)
-                } catch (e) {
-                  console.error('Failed to parse stored campaign dates:', e)
-                }
-              }
-            }
-          }
-
           campaigns.push(campaign)
         }
       } catch (error) {
         console.error(`Failed to fetch campaign ${i}:`, error)
       }
     }
-    // Show active and ended campaigns, but not drafts
-    return campaigns.filter(
-      (c) => c.status === 'Active' || c.status === 'Ended'
-    )
+    // Show open and ended campaigns, but not drafts
+    return campaigns.filter((c) => c.status === 'Open' || c.status === 'Ended')
   } catch (error: any) {
     if (error.code === 'CALL_EXCEPTION') {
       console.error(
@@ -450,30 +418,6 @@ export const getCampaignsByHostAddress = async (
 
           const campaign = mapContractDataToCampaign(campaignData, id)
 
-          // If it's a Draft campaign, check if it's showing a far future date (100+ years)
-          if (
-            campaign.status === 'Draft' &&
-            campaign.endDate.getFullYear() > 2100
-          ) {
-            // Check if localStorage is available (not server-side)
-            const hasLocalStorage =
-              typeof window !== 'undefined' && window.localStorage
-
-            // Try to load dates from localStorage as a backup
-            if (hasLocalStorage) {
-              const storedDates = localStorage.getItem(`campaign_dates_${id}`)
-              if (storedDates) {
-                try {
-                  const dates = JSON.parse(storedDates)
-                  campaign.startDate = new Date(dates.from)
-                  campaign.endDate = new Date(dates.to)
-                } catch (e) {
-                  console.error('Failed to parse stored campaign dates:', e)
-                }
-              }
-            }
-          }
-
           return campaign
         } catch (error) {
           console.error(
@@ -515,27 +459,6 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
     const campaignData = await contractToUse.getCampaign(id)
 
     const campaign = mapContractDataToCampaign(campaignData, parseInt(id))
-
-    // If it's a Draft campaign, check if it's showing a far future date (100+ years)
-    if (campaign.status === 'Draft' && campaign.endDate.getFullYear() > 2100) {
-      // Check if localStorage is available (not server-side)
-      const hasLocalStorage =
-        typeof window !== 'undefined' && window.localStorage
-
-      // Try to load dates from localStorage as a backup
-      if (hasLocalStorage) {
-        const storedDates = localStorage.getItem(`campaign_dates_${id}`)
-        if (storedDates) {
-          try {
-            const dates = JSON.parse(storedDates)
-            campaign.startDate = new Date(dates.from)
-            campaign.endDate = new Date(dates.to)
-          } catch (e) {
-            console.error('Failed to parse stored campaign dates:', e)
-          }
-        }
-      }
-    }
 
     return campaign
   } catch (error) {
@@ -584,20 +507,19 @@ export const getCampaignByIdWithMetadata = async (
   return campaign
 }
 
-export const createCampaign = async (campaignData: any) => {
+export const createAndActivateCampaign = async (campaignData: any) => {
   if (!contract) throw new Error('Contract not initialized')
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
 
-  // Create campaign with a start time 100 years in the future to keep it in Draft
-  const DRAFT_START_TIME_OFFSET = 100 * 365 * 24 * 60 * 60 // 100 years in seconds
-  const draftStartTime = Math.floor(Date.now() / 1000) + DRAFT_START_TIME_OFFSET
+  // Use the actual dates provided by the user, but ensure start time is not in the past
+  const now = Math.floor(Date.now() / 1000)
+  const userStartTime = Math.floor(campaignData.dates.from.getTime() / 1000)
+  const userEndTime = Math.floor(campaignData.dates.to.getTime() / 1000)
 
-  const durationInSeconds = differenceInSeconds(
-    campaignData.dates.to,
-    campaignData.dates.from
-  )
-  const draftEndTime = draftStartTime + durationInSeconds
+  // If user's start time is in the past, set it to current time + 1 minute
+  const actualStartTime = userStartTime < now ? now + 60 : userStartTime
+  const actualEndTime = userEndTime
 
   // Check if localStorage is available (not server-side)
   const hasLocalStorage = typeof window !== 'undefined' && window.localStorage
@@ -610,11 +532,11 @@ export const createCampaign = async (campaignData: any) => {
   }
 
   try {
-    // 1. Create Campaign
+    // 1. Create Campaign with actual dates
     const tx = await contractWithSigner.createCampaign(
       campaignData.title,
-      draftStartTime,
-      draftEndTime
+      actualStartTime,
+      actualEndTime
     )
     const receipt = await tx.wait()
 
@@ -631,27 +553,162 @@ export const createCampaign = async (campaignData: any) => {
     if (!event) throw new Error('CampaignCreated event not found')
     const campaignId = event.args.campaignId.toString()
 
-    // Store the actual user-selected dates in localStorage if available
-    if (hasLocalStorage) {
-      try {
-        localStorage.setItem(
-          `campaign_dates_${campaignId}`,
-          JSON.stringify({
-            from: campaignData.dates.from.toISOString(),
-            to: campaignData.dates.to.toISOString(),
+    // 2. Add Tasks
+    for (const task of campaignData.tasks) {
+      const taskType = taskTypeMap[task.type as TaskType]
+
+      // For blockchain storage, we only store the server ID (needed for verification)
+      // The invite link will be stored separately in the database
+      let verificationDataToStore = task.verificationData || ''
+
+      const verificationDataBytes = ethers.encodeBytes32String(
+        verificationDataToStore
+      )
+
+      const taskTx = await contractWithSigner.addTaskToCampaign(
+        campaignId,
+        taskType,
+        task.description,
+        verificationDataBytes,
+        false
+      )
+      await taskTx.wait()
+
+      // Store Discord invite links in database for this campaign
+      if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
+        try {
+          const taskIndex = campaignData.tasks.indexOf(task)
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              campaignId: campaignId,
+              taskIndex: taskIndex,
+              taskType: task.type,
+              discordInviteLink: task.discordInviteLink,
+            }),
           })
-        )
-      } catch (e) {
-        console.warn('Failed to store campaign dates in localStorage:', e)
+        } catch (e) {
+          console.warn('Failed to store Discord invite link in database:', e)
+        }
       }
     }
+
+    // 3. Set Reward
+    let rewardType
+    let tokenAddress = ethers.ZeroAddress
+    let rewardAmount: string | bigint = '0'
+
+    switch (campaignData.reward.type) {
+      case 'ERC20':
+        rewardType = 0
+        tokenAddress = campaignData.reward.tokenAddress
+        rewardAmount = ethers.parseUnits(campaignData.reward.amount || '0', 18)
+        break
+      case 'ERC721':
+        rewardType = 1
+        tokenAddress = campaignData.reward.tokenAddress
+        rewardAmount = '0'
+        break
+      case 'None':
+        rewardType = 2
+        break
+      default:
+        throw new Error('Invalid reward type')
+    }
+
+    if (rewardType !== 2) {
+      const rewardTx = await contractWithSigner.setCampaignReward(
+        campaignId,
+        rewardType,
+        tokenAddress,
+        rewardAmount
+      )
+      await rewardTx.wait()
+    }
+
+    // 4. If the start time is in the future, the campaign will be in Draft status and can be opened later
+    // If the start time is now or very soon, it should automatically become Active
+
+    const statusMessage =
+      actualStartTime <= now + 60
+        ? 'Your campaign has been created and is now active!'
+        : `Your campaign has been created and will become active on ${new Date(
+            actualStartTime * 1000
+          ).toLocaleString()}.`
+
+    toast({
+      title: 'Success!',
+      description: statusMessage,
+    })
+
+    return campaignId
+  } catch (error: any) {
+    console.error('Error creating campaign:', error)
+    const reason = error.reason || error.message
+    let description = `Transaction failed: ${reason}`
+
+    if (error.code === 'CALL_EXCEPTION' && !reason) {
+      description =
+        'Transaction failed. This may be due to an invalid campaign duration, or another contract requirement was not met.'
+    } else if (reason?.includes('Campaign not in active period')) {
+      description = `The campaign is not in an active period for this action.`
+    }
+
+    toast({ variant: 'destructive', title: 'Transaction Failed', description })
+    throw error
+  }
+}
+
+export const createCampaign = async (campaignData: any) => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+
+  // Use the actual dates provided by the user
+  const userStartTime = Math.floor(campaignData.dates.from.getTime() / 1000)
+  const userEndTime = Math.floor(campaignData.dates.to.getTime() / 1000)
+
+  // Check if localStorage is available (not server-side)
+  const hasLocalStorage = typeof window !== 'undefined' && window.localStorage
+
+  const taskTypeMap: Record<TaskType, number> = {
+    SOCIAL_FOLLOW: 0,
+    JOIN_DISCORD: 1,
+    RETWEET: 2,
+    ONCHAIN_TX: 3,
+  }
+
+  try {
+    // 1. Create Campaign with user's actual dates
+    const tx = await contractWithSigner.createCampaign(
+      campaignData.title,
+      userStartTime,
+      userEndTime
+    )
+    const receipt = await tx.wait()
+
+    const event = receipt.logs
+      .map((log: any) => {
+        try {
+          return contractWithSigner.interface.parseLog(log)
+        } catch (e) {
+          return null
+        }
+      })
+      .find((e: any) => e && e.name === 'CampaignCreated')
+
+    if (!event) throw new Error('CampaignCreated event not found')
+    const campaignId = event.args.campaignId.toString()
 
     // 2. Add Tasks
     for (const task of campaignData.tasks) {
       const taskType = taskTypeMap[task.type as TaskType]
 
       // For blockchain storage, we only store the server ID (needed for verification)
-      // The invite link will be stored separately in localStorage
+      // The invite link will be stored separately in database
       let verificationDataToStore = task.verificationData || ''
 
       const verificationDataBytes = ethers.encodeBytes32String(
@@ -725,7 +782,7 @@ export const createCampaign = async (campaignData: any) => {
     toast({
       title: 'Success!',
       description:
-        'Your campaign has been created in Draft status. Open it from your dashboard.',
+        'Your campaign has been created successfully with your specified dates!',
     })
     return campaignId
   } catch (error: any) {
@@ -798,64 +855,102 @@ export const becomeHost = async () => {
   }
 }
 
-export const openCampaign = async (campaignId: string): Promise<string> => {
+export const openCampaign = async (
+  campaignId: string,
+  toast: any
+): Promise<string> => {
   if (!contract) throw new Error('Contract not initialized')
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
 
   try {
-    // Only try to open the existing campaign - don't create a new one
     console.log(`Opening campaign ${campaignId}...`)
 
-    // Get the current campaign data to check its status
+    // Get the current campaign data to check its status and times
     const campaignData = await contractWithSigner.getCampaign(campaignId)
 
-    // Check if the campaign is already active
+    // Check if the campaign is already open (status 1 = Open)
     if (Number(campaignData.status) === 1) {
-      // 1 is Active status
-      console.log(`Campaign ${campaignId} is already active.`)
+      console.log(`Campaign ${campaignId} is already open.`)
       toast({
-        title: 'Already Active',
-        description: `Campaign ${campaignId} is already active.`,
+        title: 'Already Open',
+        description: `Campaign ${campaignId} is already open.`,
       })
       return campaignId
     }
 
+    // Check if the campaign is in draft status (status 0 = Draft)
+    if (Number(campaignData.status) !== 0) {
+      toast({
+        title: 'Cannot Open Campaign',
+        description: 'Campaign must be in Draft status to be opened.',
+        variant: 'destructive',
+      })
+      throw new Error('Campaign is not in Draft status')
+    }
+
     try {
+      // Try to open the campaign
       const tx = await contractWithSigner.openCampaign(campaignId)
       await tx.wait()
 
       toast({
-        title: 'Campaign is now Active!',
+        title: 'Campaign is now Open!',
         description: `Campaign ${campaignId} has been successfully opened.`,
       })
 
       return campaignId
-    } catch (openError) {
+    } catch (openError: any) {
       console.error(`Failed to open campaign ${campaignId}:`, openError)
+
+      // Handle specific smart contract errors
+      let errorMessage = 'Could not open this campaign.'
+
+      if (openError.reason) {
+        if (
+          openError.reason.includes(
+            'Web3Campaigns__CampaignStartTimeNotYetStrated'
+          )
+        ) {
+          errorMessage = 'Campaign start time has not been reached yet.'
+        } else if (
+          openError.reason.includes('Web3Campaigns__CampaignAlreadyStarted')
+        ) {
+          errorMessage = 'Campaign has already been started.'
+        } else if (
+          openError.reason.includes('Web3Campaigns__CallerIsNotHost')
+        ) {
+          errorMessage = 'Only the campaign host can open this campaign.'
+        } else {
+          errorMessage = `Contract error: ${openError.reason}`
+        }
+      } else if (openError.code === 'CALL_EXCEPTION') {
+        errorMessage =
+          'Smart contract rejected the transaction. Please check the campaign status and your permissions.'
+      }
 
       toast({
         title: 'Failed to Open Campaign',
-        description: `Could not open this campaign. It may have dates set too far in the future. Please create a new campaign with appropriate dates.`,
+        description: errorMessage,
         variant: 'destructive',
       })
 
-      throw new Error(`Cannot open campaign: ${openError.message}`)
+      throw new Error(`Cannot open campaign: ${errorMessage}`)
     }
   } catch (error: any) {
     console.error(`Error opening campaign ${campaignId}:`, error)
-    let reason = 'An unknown error occurred.'
-    if (error.reason && error.reason.includes('start time not yet started')) {
-      reason =
-        "The campaign's start time has not been reached yet. Please create a new campaign with valid dates."
-    } else if (error.reason) {
-      reason = error.reason
+
+    // If it's already our custom error, re-throw it
+    if (error.message && error.message.includes('Cannot open campaign:')) {
+      throw error
     }
 
     toast({
       variant: 'destructive',
       title: 'Transaction Failed',
-      description: `Failed to open campaign. Reason: ${reason}`,
+      description: `Failed to open campaign. ${
+        error.message || 'An unknown error occurred.'
+      }`,
     })
     throw error
   }
@@ -891,19 +986,15 @@ export const completeTask = async (
 ) => {
   if (!contract) throw new Error('Contract not initialized')
 
-  // This function can now be called by the backend verifier.
-  // It needs a signer, which in a real app would be a secure backend wallet.
-  // For local development, it will still use the user's connected wallet.
+  // This function is called with the user's connected wallet.
+  // The smart contract automatically uses msg.sender as the participant.
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
 
   try {
-    // The address to complete the task for is now passed as an argument.
-    const tx = await contractWithSigner.completeTask(
-      campaignId,
-      taskIndex,
-      userAddress
-    )
+    // The smart contract completeTask function only takes campaignId and taskIndex
+    // It automatically uses msg.sender (the connected wallet) as the participant
+    const tx = await contractWithSigner.completeTask(campaignId, taskIndex)
     await tx.wait()
   } catch (error: any) {
     console.error(
@@ -919,7 +1010,6 @@ export const completeTask = async (
     } else if (error.reason) {
       description += ` Reason: ${error.reason}`
     }
-    toast({ variant: 'destructive', title: 'Transaction Failed', description })
     throw error
   }
 }

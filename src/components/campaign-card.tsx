@@ -16,6 +16,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { format } from 'date-fns'
 import { useWallet } from '@/context/wallet-provider'
+import { useToast } from '@/hooks/use-toast'
 import { Button } from './ui/button'
 import { openCampaign, endCampaign, isPaused } from '@/lib/web3-service'
 import {
@@ -36,6 +37,7 @@ interface CampaignCardProps {
 
 export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
   const { address } = useWallet()
+  const { toast } = useToast()
   const [isUpdating, setIsUpdating] = useState(false)
   const [isContractPaused, setIsContractPaused] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -60,18 +62,18 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
     setIsDialogOpen(false)
     try {
       if (actionToConfirm === 'open') {
-        // Check if campaign is already active
-        if (campaign.status === 'Active') {
+        // Check if campaign is already open
+        if (campaign.status === 'Open') {
           toast({
-            title: 'Already Active',
-            description: 'This campaign is already active.',
+            title: 'Already Open',
+            description: 'This campaign is already open.',
           })
           setIsUpdating(false)
           return
         }
 
         // Attempt to open or create new campaign
-        const resultCampaignId = await openCampaign(campaign.id)
+        const resultCampaignId = await openCampaign(campaign.id, toast)
 
         // Only redirect if a new campaign was created (ID is different)
         if (resultCampaignId !== campaign.id) {
@@ -97,7 +99,7 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
 
   const getBadgeVariant = () => {
     switch (campaign.status) {
-      case 'Active':
+      case 'Open':
         return 'default'
       case 'Draft':
         return 'secondary'
@@ -176,7 +178,7 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
                   )}
                 </Button>
               )}
-              {campaign.status === 'Active' && (
+              {campaign.status === 'Open' && (
                 <Button
                   size="sm"
                   variant="destructive"

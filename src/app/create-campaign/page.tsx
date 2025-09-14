@@ -59,7 +59,11 @@ import { useToast } from '@/hooks/use-toast'
 import { useWallet } from '@/context/wallet-provider'
 import React from 'react'
 import type { TaskType } from '@/lib/types'
-import { becomeHost, createCampaign } from '@/lib/web3-service'
+import {
+  becomeHost,
+  createCampaign,
+  createAndActivateCampaign,
+} from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
 
@@ -129,6 +133,7 @@ export default function CreateCampaignPage() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isBecomingHost, setIsBecomingHost] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
+  const [createMode, setCreateMode] = useState<'draft' | 'activate'>('activate')
   const router = useRouter()
   const { toast } = useToast()
   const { address, isConnected, role, checkRoles } = useWallet()
@@ -177,10 +182,19 @@ export default function CreateCampaignPage() {
     }
     setIsLoading(true)
     try {
-      const campaignId = await createCampaign(data)
+      const campaignId =
+        createMode === 'activate'
+          ? await createAndActivateCampaign(data)
+          : await createCampaign(data)
+
+      const successMessage =
+        createMode === 'activate'
+          ? `Your campaign (ID: ${campaignId}) has been created and activated!`
+          : `Your campaign (ID: ${campaignId}) has been created in Draft status.`
+
       toast({
         title: 'Success!',
-        description: `Your campaign (ID: ${campaignId}) has been created and is in Draft status.`,
+        description: successMessage,
       })
       router.push(`/campaign/${campaignId}`)
     } catch (e) {
@@ -721,6 +735,7 @@ export default function CreateCampaignPage() {
                                   <Input
                                     placeholder="e.g., 1024849645714206720"
                                     {...field}
+                                    value={field.value ?? ''}
                                   />
                                 </FormControl>
                                 <FormDescription>
@@ -741,6 +756,7 @@ export default function CreateCampaignPage() {
                                   <Input
                                     placeholder="e.g., https://discord.gg/yourcode or just 'yourcode'"
                                     {...field}
+                                    value={field.value ?? ''}
                                   />
                                 </FormControl>
                                 <FormDescription>
@@ -918,9 +934,52 @@ export default function CreateCampaignPage() {
                         ))}
                       </ul>
                     </div>
+
+                    {/* Campaign Mode Selection */}
+                    <div className="mt-6 p-4 border rounded-lg bg-muted/30">
+                      <h3 className="font-medium mb-3">Campaign Activation</h3>
+                      <div className="space-y-2">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="createMode"
+                            value="activate"
+                            checked={createMode === 'activate'}
+                            onChange={(e) => setCreateMode('activate')}
+                            className="text-primary focus:ring-primary"
+                          />
+                          <div>
+                            <span className="font-medium">
+                              Create & Activate
+                            </span>
+                            <p className="text-xs text-muted-foreground">
+                              Campaign becomes active immediately (recommended)
+                            </p>
+                          </div>
+                        </label>
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="createMode"
+                            value="draft"
+                            checked={createMode === 'draft'}
+                            onChange={(e) => setCreateMode('draft')}
+                            className="text-primary focus:ring-primary"
+                          />
+                          <div>
+                            <span className="font-medium">Create as Draft</span>
+                            <p className="text-xs text-muted-foreground">
+                              Campaign stays in draft mode until manually opened
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
                     <p className="text-xs pt-4 text-center text-muted-foreground">
-                      Clicking "Create Campaign" will prepare your campaign. You
-                      will need to open it for participants to join.
+                      {createMode === 'activate'
+                        ? 'Your campaign will be created and become active based on your selected dates.'
+                        : 'Your campaign will be created in draft mode. You will need to open it manually for participants to join.'}
                     </p>
                   </div>
                 </section>
