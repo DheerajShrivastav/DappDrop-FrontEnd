@@ -1132,8 +1132,11 @@ export const getUserTaskCompletionStatus = async (
 export const getCampaignParticipantAddresses = async (
   campaignId: string
 ): Promise<string[]> => {
-  console.log('getCampaignParticipantAddresses called with campaignId:', campaignId)
-  
+  console.log(
+    'getCampaignParticipantAddresses called with campaignId:',
+    campaignId
+  )
+
   const contractToUse = readOnlyContract
   if (!contractToUse) {
     console.log('No readOnlyContract available')
