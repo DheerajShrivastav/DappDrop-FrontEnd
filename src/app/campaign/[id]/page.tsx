@@ -19,8 +19,10 @@ import {
   getCampaignByIdWithMetadata,
   hasParticipated,
   getCampaignParticipants,
+  getCampaignParticipantAddresses,
   openCampaign,
   completeTask,
+  getUserTaskCompletionStatus,
 } from '@/lib/web3-service'
 
 import { Button } from '@/components/ui/button'
@@ -49,6 +51,7 @@ import {
   Share2,
   Award,
   Trophy,
+  RefreshCw,
 } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { CampaignAnalytics } from '@/components/campaign-analytics'
@@ -100,8 +103,10 @@ export default function CampaignDetailsPage() {
   const [isClaiming, setIsClaiming] = useState(false)
   const [isJoined, setIsJoined] = useState(false)
   const [participants, setParticipants] = useState<ParticipantData[]>([])
+  const [participantAddresses, setParticipantAddresses] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isActivating, setIsActivating] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Winner selection state
   const [numberOfWinners, setNumberOfWinners] = useState(1)
@@ -138,25 +143,47 @@ export default function CampaignDetailsPage() {
 
     if (fetchedCampaign) {
       setCampaign(fetchedCampaign)
-      setUserTasks(
-        fetchedCampaign.tasks.map((task) => ({
-          taskId: task.id,
-          completed: false,
-        }))
-      )
+
+      // Initialize tasks with default completion status
+      let initialUserTasks = fetchedCampaign.tasks.map((task) => ({
+        taskId: task.id,
+        completed: false,
+      }))
 
       if (address && isConnected) {
+        // Check actual task completion status for the connected wallet
+        const taskCompletionStatus = await getUserTaskCompletionStatus(
+          campaignId,
+          address,
+          fetchedCampaign.tasks
+        )
+
+        // Update task completion status based on blockchain data
+        initialUserTasks = fetchedCampaign.tasks.map((task) => ({
+          taskId: task.id,
+          completed: taskCompletionStatus[task.id] || false,
+        }))
+
         const hasJoined = await hasParticipated(campaignId, address)
         setIsJoined(hasJoined)
       }
+
+      setUserTasks(initialUserTasks)
 
       // Fetch analytics data if the current user is the host
       if (
         role === 'host' &&
         address?.toLowerCase() === fetchedCampaign.host.toLowerCase()
       ) {
+        console.log('Fetching analytics data for host...')
         const data = await getCampaignParticipants(fetchedCampaign)
         setParticipants(data)
+
+        // Also fetch basic participant addresses for immediate display
+        console.log('Fetching participant addresses for campaign:', campaignId)
+        const addresses = await getCampaignParticipantAddresses(campaignId)
+        console.log('Received participant addresses:', addresses)
+        setParticipantAddresses(addresses)
       }
     } else {
       toast({
@@ -346,20 +373,21 @@ export default function CampaignDetailsPage() {
       }
 
       // Backend verification successful - now complete the task on blockchain
-      await completeTask(campaignId, parseInt(taskId), address)
+      // Find the task index from the task ID
+      const taskIndex = campaign.tasks.findIndex((task) => task.id === taskId)
+      if (taskIndex === -1) {
+        throw new Error('Task not found in campaign')
+      }
+
+      await completeTask(campaignId, taskIndex)
 
       toast({
         title: 'Task Completed!',
         description: 'Great job, one step closer to your reward.',
       })
 
-      setUserTasks((prevTasks) =>
-        prevTasks.map((task) =>
-          task.taskId === taskId
-            ? { ...task, completed: true, isCompleting: false }
-            : task
-        )
-      )
+      // Refresh campaign data to update participant count and other blockchain data
+      await fetchAllCampaignData()
 
       // Store successful verification in localStorage for Discord tasks
       if (taskType === 'JOIN_DISCORD' && discordData) {
@@ -418,6 +446,26 @@ export default function CampaignDetailsPage() {
       console.error('Failed to activate campaign:', error)
     } finally {
       setIsActivating(false)
+    }
+  }
+
+  const handleRefreshData = async () => {
+    setIsRefreshing(true)
+    try {
+      await fetchAllCampaignData()
+      toast({
+        title: 'Data Refreshed!',
+        description: 'Campaign data has been updated from the blockchain.',
+      })
+    } catch (error) {
+      console.error('Failed to refresh data:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Refresh Failed',
+        description: 'Could not refresh campaign data.',
+      })
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
@@ -632,6 +680,7 @@ export default function CampaignDetailsPage() {
                 <CampaignAnalytics
                   campaign={campaign}
                   participants={participants}
+                  participantAddresses={participantAddresses}
                   isLoading={isLoading}
                 />
               </CardContent>
@@ -642,12 +691,24 @@ export default function CampaignDetailsPage() {
         <div className="lg:col-span-1 space-y-6">
           <Card className="bg-card border">
             <CardHeader>
-              <CardTitle>Campaign Info</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Campaign Info</CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshData}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                  />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <div className="flex items-center">
                 <Users className="h-4 w-4 mr-3 text-muted-foreground" />{' '}
-                <span>{participants.length} participants</span>
+                <span>{campaign.participants} participants</span>
               </div>
               <div className="flex items-center">
                 <Calendar className="h-4 w-4 mr-3 text-muted-foreground" />{' '}

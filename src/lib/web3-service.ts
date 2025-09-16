@@ -979,11 +979,7 @@ export const endCampaign = async (campaignId: string) => {
   }
 }
 
-export const completeTask = async (
-  campaignId: string,
-  taskIndex: number,
-  userAddress: string
-) => {
+export const completeTask = async (campaignId: string, taskIndex: number) => {
   if (!contract) throw new Error('Contract not initialized')
 
   // This function is called with the user's connected wallet.
@@ -992,25 +988,202 @@ export const completeTask = async (
   const contractWithSigner = contract.connect(signer) as Contract
 
   try {
+    console.log('Attempting to complete task:', {
+      campaignId,
+      taskIndex,
+      userAddress: await signer.getAddress(),
+    })
+
+    // First, let's check the campaign status and other details
+    const campaignData = await contractWithSigner.getCampaign(campaignId)
+    console.log('Campaign data before task completion:', {
+      id: campaignData.id.toString(),
+      status: campaignData.status.toString(),
+      tasksLength: campaignData.tasks.length,
+      requestedTaskIndex: taskIndex,
+    })
+
+    // Check if campaign is in Open status (should be 1)
+    if (Number(campaignData.status) !== 1) {
+      throw new Error(
+        `Campaign is not open. Current status: ${campaignData.status} (should be 1 for Open)`
+      )
+    }
+
+    // Check if task index is valid
+    if (taskIndex >= campaignData.tasks.length) {
+      throw new Error(
+        `Invalid task index ${taskIndex}. Campaign has ${campaignData.tasks.length} tasks.`
+      )
+    }
+
     // The smart contract completeTask function only takes campaignId and taskIndex
     // It automatically uses msg.sender (the connected wallet) as the participant
+    console.log('Calling smart contract completeTask...')
     const tx = await contractWithSigner.completeTask(campaignId, taskIndex)
+
+    console.log('Transaction sent:', tx.hash)
     await tx.wait()
+
+    console.log('Task completed successfully!')
   } catch (error: any) {
     console.error(
       `Error completing task ${taskIndex} for campaign ${campaignId}:`,
       error
     )
+
     let description = `Failed to complete task.`
-    if (
-      error.reason &&
-      error.reason.includes('Campaign not in active period')
-    ) {
-      description = `This campaign is not currently active.`
-    } else if (error.reason) {
-      description += ` Reason: ${error.reason}`
+
+    // Parse common smart contract errors
+    if (error.reason) {
+      if (error.reason.includes('CampaignNotOpen')) {
+        description = 'Campaign is not open for task completion.'
+      } else if (error.reason.includes('TaskAlreadyCompleted')) {
+        description = 'You have already completed this task.'
+      } else if (error.reason.includes('TaskNotFound')) {
+        description = 'Task not found in this campaign.'
+      } else if (error.reason.includes('Too many rapid actions')) {
+        description = 'Please wait 30 seconds between actions.'
+      } else if (
+        error.reason.includes('Account flagged for suspicious activity')
+      ) {
+        description = 'Account flagged for suspicious activity.'
+      } else if (error.reason.includes('Campaign not in active period')) {
+        description = 'This campaign is not currently active.'
+      } else {
+        description += ` Reason: ${error.reason}`
+      }
+    } else if (error.message) {
+      description += ` Error: ${error.message}`
     }
-    throw error
+
+    console.error('Parsed error description:', description)
+    throw new Error(description)
+  }
+}
+
+// Function to check if a user has completed specific tasks in a campaign
+export const getUserTaskCompletionStatus = async (
+  campaignId: string,
+  userAddress: string,
+  tasks: any[]
+): Promise<{ [taskId: string]: boolean }> => {
+  const contractToUse = readOnlyContract
+  if (!contractToUse || !userAddress) return {}
+
+  try {
+    const completionStatus: { [taskId: string]: boolean } = {}
+
+    // Check via events since direct mapping access might not be available
+    const provider = contractToUse.provider
+    if (!provider) return {}
+
+    const latestBlock = await provider.getBlockNumber()
+    const startBlock = Math.max(0, latestBlock - 49999) // Look back up to ~50k blocks
+
+    // Query ParticipantTaskCompleted events for this campaign and user
+    const filter = contractToUse.filters.ParticipantTaskCompleted(
+      campaignId,
+      userAddress
+    )
+
+    const events = await contractToUse.queryFilter(
+      filter,
+      startBlock,
+      latestBlock
+    )
+
+    // Initialize all tasks as not completed
+    tasks.forEach((task, index) => {
+      completionStatus[task.id] = false
+    })
+
+    // Mark tasks as completed based on events
+    events.forEach((event: any) => {
+      const taskIndex = event.args?.[2] // taskIndex is the 3rd argument
+      if (typeof taskIndex === 'number' && taskIndex < tasks.length) {
+        const task = tasks[taskIndex]
+        if (task) {
+          completionStatus[task.id] = true
+        }
+      }
+    })
+
+    console.log('Task completion status for user:', {
+      userAddress,
+      campaignId,
+      completionStatus,
+      eventsFound: events.length,
+    })
+
+    return completionStatus
+  } catch (error) {
+    console.error('Error checking user task completion status:', error)
+    // Return all tasks as not completed if there's an error
+    const completionStatus: { [taskId: string]: boolean } = {}
+    tasks.forEach((task) => {
+      completionStatus[task.id] = false
+    })
+    return completionStatus
+  }
+}
+
+// Function to get basic participant addresses for a campaign
+export const getCampaignParticipantAddresses = async (
+  campaignId: string
+): Promise<string[]> => {
+  console.log('getCampaignParticipantAddresses called with campaignId:', campaignId)
+  
+  const contractToUse = readOnlyContract
+  if (!contractToUse) {
+    console.log('No readOnlyContract available')
+    return []
+  }
+
+  try {
+    const provider = contractToUse.provider
+    if (!provider) {
+      console.log('No provider available')
+      return []
+    }
+
+    const latestBlock = await provider.getBlockNumber()
+    const startBlock = Math.max(0, latestBlock - 49999) // Look back up to ~50k blocks
+
+    console.log('Querying events from block', startBlock, 'to', latestBlock)
+
+    // Query ParticipantTaskCompleted events for this campaign
+    const filter = contractToUse.filters.ParticipantTaskCompleted(campaignId)
+    const events = await contractToUse.queryFilter(
+      filter,
+      startBlock,
+      latestBlock
+    )
+
+    console.log('Raw events found:', events.length, events)
+
+    // Extract unique participant addresses
+    const participantSet = new Set<string>()
+    events.forEach((event: any, index) => {
+      console.log(`Event ${index}:`, event.args)
+      const participant = event.args?.[1] // participant address is the 2nd argument
+      if (participant) {
+        console.log('Adding participant:', participant)
+        participantSet.add(participant.toLowerCase())
+      }
+    })
+
+    const participantAddresses = Array.from(participantSet)
+    console.log('Found participant addresses:', {
+      campaignId,
+      addresses: participantAddresses,
+      eventsCount: events.length,
+    })
+
+    return participantAddresses
+  } catch (error) {
+    console.error('Error fetching participant addresses:', error)
+    return []
   }
 }
 
