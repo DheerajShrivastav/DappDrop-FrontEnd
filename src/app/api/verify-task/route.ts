@@ -49,23 +49,48 @@ export async function POST(request: Request) {
       )
 
       if (isVerified) {
-        // Store verification proof in the database
-        await prisma.socialVerification.create({
-          data: {
+        // Check if verification already exists for this user, campaign, and task
+        const existingVerification = await prisma.socialVerification.findFirst({
+          where: {
             userAddress: userAddress,
-            taskId: `${campaignId}-${taskId}`, // Create a unique ID for the task instance
+            taskId: `${campaignId}-${taskId}`,
             platform: 'DISCORD',
-            proofData: {
-              username: discordUsername,
-              discordId: discordId || 'manual_verification_required',
-              serverId: discordServerId,
-              verificationMethod: discordId ? 'oauth' : 'manual',
-              verificationTime: new Date().toISOString(),
-            },
-            verifiedAt: new Date(),
             isValid: true,
           },
         })
+
+        // Only create new verification if none exists
+        if (!existingVerification) {
+          await prisma.socialVerification.create({
+            data: {
+              userAddress: userAddress,
+              taskId: `${campaignId}-${taskId}`, // Create a unique ID for the task instance
+              platform: 'DISCORD',
+              proofData: {
+                username: discordUsername,
+                discordId: discordId || 'manual_verification_required',
+                serverId: discordServerId,
+                verificationMethod: discordId ? 'oauth' : 'manual',
+                verificationTime: new Date().toISOString(),
+              },
+              verifiedAt: new Date(),
+              isValid: true,
+            },
+          })
+          console.log('Created new verification record for:', {
+            userAddress,
+            campaignId,
+            taskId,
+            discordUsername,
+          })
+        } else {
+          console.log('Verification already exists for:', {
+            userAddress,
+            campaignId,
+            taskId,
+            existingId: existingVerification.id,
+          })
+        }
       }
     } else {
       // For other task types that might need backend verification in the future

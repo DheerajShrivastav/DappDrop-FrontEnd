@@ -1068,15 +1068,33 @@ export const getUserTaskCompletionStatus = async (
   userAddress: string,
   tasks: any[]
 ): Promise<{ [taskId: string]: boolean }> => {
-  const contractToUse = readOnlyContract
+  // Try to use the wallet contract first, then fallback to read-only
+  let contractToUse = contract ?? readOnlyContract
+
+  if (!contractToUse) {
+    initializeReadOnlyProvider()
+    contractToUse = readOnlyContract
+  }
+
   if (!contractToUse || !userAddress) return {}
 
   try {
     const completionStatus: { [taskId: string]: boolean } = {}
 
-    // Check via events since direct mapping access might not be available
-    const provider = contractToUse.provider
-    if (!provider) return {}
+    // Check if we have a provider
+    let provider = contractToUse.provider
+
+    if (!provider) {
+      // Create a new provider if the contract doesn't have one
+      provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+
+      // Create a new contract instance with the provider
+      contractToUse = new ethers.Contract(
+        config.campaignFactoryAddress!,
+        Web3Campaigns.abi,
+        provider
+      )
+    }
 
     const latestBlock = await provider.getBlockNumber()
     const startBlock = Math.max(0, latestBlock - 49999) // Look back up to ~50k blocks
@@ -1137,18 +1155,40 @@ export const getCampaignParticipantAddresses = async (
     campaignId
   )
 
-  const contractToUse = readOnlyContract
+  // Try to use the wallet contract first, then fallback to read-only
+  let contractToUse = contract ?? readOnlyContract
+
   if (!contractToUse) {
-    console.log('No readOnlyContract available')
+    console.log(
+      'No contract available, trying to initialize read-only contract...'
+    )
+    initializeReadOnlyProvider()
+    contractToUse = readOnlyContract
+  }
+
+  if (!contractToUse) {
+    console.log('Still no contract available after initialization')
     return []
   }
 
   try {
-    const provider = contractToUse.provider
+    // Check if we have a provider
+    let provider = contractToUse.provider
+
     if (!provider) {
-      console.log('No provider available')
-      return []
+      console.log('No provider on contract, creating new JsonRpc provider...')
+      // Create a new provider if the contract doesn't have one
+      provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+
+      // Create a new contract instance with the provider
+      contractToUse = new ethers.Contract(
+        config.campaignFactoryAddress!,
+        Web3Campaigns.abi,
+        provider
+      )
     }
+
+    console.log('Using provider:', provider.constructor.name)
 
     const latestBlock = await provider.getBlockNumber()
     const startBlock = Math.max(0, latestBlock - 49999) // Look back up to ~50k blocks
@@ -1157,6 +1197,8 @@ export const getCampaignParticipantAddresses = async (
 
     // Query ParticipantTaskCompleted events for this campaign
     const filter = contractToUse.filters.ParticipantTaskCompleted(campaignId)
+    console.log('Filter created:', filter)
+
     const events = await contractToUse.queryFilter(
       filter,
       startBlock,
@@ -1193,11 +1235,32 @@ export const getCampaignParticipantAddresses = async (
 export const getCampaignParticipants = async (
   campaign: Campaign
 ): Promise<ParticipantData[]> => {
-  const contractToUse = readOnlyContract
+  // Try to use the wallet contract first, then fallback to read-only
+  let contractToUse = contract ?? readOnlyContract
+
+  if (!contractToUse) {
+    initializeReadOnlyProvider()
+    contractToUse = readOnlyContract
+  }
+
   if (!contractToUse) return []
+
   try {
-    const provider = contractToUse.provider
-    if (!provider) return []
+    // Check if we have a provider
+    let provider = contractToUse.provider
+
+    if (!provider) {
+      // Create a new provider if the contract doesn't have one
+      provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+
+      // Create a new contract instance with the provider
+      contractToUse = new ethers.Contract(
+        config.campaignFactoryAddress!,
+        Web3Campaigns.abi,
+        provider
+      )
+    }
+
     const latestBlock = await provider.getBlockNumber()
 
     const maxRange = 50000
