@@ -18,7 +18,11 @@ import {
   Info,
   Sparkles,
   UserPlus,
+  ExternalLink,
+  Bot,
 } from 'lucide-react'
+
+import config from '@/app/config'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -659,6 +663,25 @@ export default function CreateCampaignPage() {
                   <h2 className="text-xl font-semibold border-b pb-2">
                     {steps[1].name}
                   </h2>
+
+                  {/* Discord Bot Warning - Show if Discord tasks exist but bot URL is not configured */}
+                  {tasks.some((task) => task.type === 'JOIN_DISCORD') &&
+                    !config.discordBotInviteUrl && (
+                      <Alert
+                        variant="destructive"
+                        className="border-red-200 bg-red-50"
+                      >
+                        <Bot className="h-4 w-4" />
+                        <AlertTitle>Discord Bot Not Configured</AlertTitle>
+                        <AlertDescription>
+                          You have Discord join tasks but the bot invite URL is
+                          not configured. Discord verification will not work
+                          until the bot is properly set up. Please contact
+                          support to configure the Discord bot.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                   {fields.map((field, index) => (
                     <div
                       key={field.id}
@@ -740,8 +763,21 @@ export default function CreateCampaignPage() {
                                 </FormControl>
                                 <FormDescription>
                                   The Discord server ID used for verification
-                                  purposes
+                                  purposes.
                                 </FormDescription>
+                                <details className="mt-2">
+                                  <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                                    How to get your Discord Server ID
+                                  </summary>
+                                  <div className="mt-2 text-xs space-y-1 text-muted-foreground">
+                                    <p>
+                                      1. Enable Developer Mode in Discord
+                                      Settings → Advanced → Developer Mode
+                                    </p>
+                                    <p>2. Right-click your server name</p>
+                                    <p>3. Click "Copy Server ID"</p>
+                                  </div>
+                                </details>
                                 <FormMessage />
                               </FormItem>
                             )}
@@ -767,6 +803,54 @@ export default function CreateCampaignPage() {
                               </FormItem>
                             )}
                           />
+
+                          {/* Discord Bot Setup Instructions */}
+                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-blue-800">
+                              <Bot className="h-5 w-5" />
+                              <h4 className="font-semibold">
+                                Required: Add DappDrop Bot to Your Server
+                              </h4>
+                            </div>
+                            <p className="text-sm text-blue-700">
+                              To enable automatic verification of Discord join
+                              tasks, you must add our bot to your Discord
+                              server.
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              {config.discordBotInviteUrl ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-fit bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
+                                  onClick={() =>
+                                    window.open(
+                                      config.discordBotInviteUrl!,
+                                      '_blank'
+                                    )
+                                  }
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  Add DappDrop Bot to Server
+                                </Button>
+                              ) : (
+                                <p className="text-sm text-blue-600 font-medium">
+                                  Discord bot invite URL not configured. Please
+                                  contact support.
+                                </p>
+                              )}
+                              <div className="text-xs text-blue-600 space-y-1">
+                                <p>
+                                  <strong>Required Permissions:</strong>
+                                </p>
+                                <ul className="list-disc list-inside ml-2 space-y-0.5">
+                                  <li>View Server Members</li>
+                                  <li>Read Message History</li>
+                                </ul>
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
