@@ -1081,6 +1081,18 @@ export const getUserTaskCompletionStatus = async (
   try {
     const completionStatus: { [taskId: string]: boolean } = {}
 
+    // Initialize all tasks as not completed first
+    tasks.forEach((task) => {
+      completionStatus[task.id] = false
+    })
+
+    console.log('Checking task completion for:', {
+      campaignId,
+      userAddress,
+      taskCount: tasks.length,
+      taskIds: tasks.map((t) => t.id),
+    })
+
     // Check if we have a provider
     let provider = contractToUse.provider
 
@@ -1099,6 +1111,8 @@ export const getUserTaskCompletionStatus = async (
     const latestBlock = await provider.getBlockNumber()
     const startBlock = Math.max(0, latestBlock - 49999) // Look back up to ~50k blocks
 
+    console.log(`Querying events from block ${startBlock} to ${latestBlock}`)
+
     // Query ParticipantTaskCompleted events for this campaign and user
     const filter = contractToUse.filters.ParticipantTaskCompleted(
       campaignId,
@@ -1111,19 +1125,31 @@ export const getUserTaskCompletionStatus = async (
       latestBlock
     )
 
-    // Initialize all tasks as not completed
-    tasks.forEach((task, index) => {
-      completionStatus[task.id] = false
-    })
+    console.log(
+      `Found ${events.length} ParticipantTaskCompleted events for user ${userAddress} in campaign ${campaignId}`
+    )
 
     // Mark tasks as completed based on events
     events.forEach((event: any) => {
-      const taskIndex = event.args?.[2] // taskIndex is the 3rd argument
-      if (typeof taskIndex === 'number' && taskIndex < tasks.length) {
-        const task = tasks[taskIndex]
+      const taskIndex = event.args?.[2] // taskIndex is the 3rd argument (BigInt)
+      const taskIndexNumber = Number(taskIndex) // Convert BigInt to number
+
+      if (
+        typeof taskIndexNumber === 'number' &&
+        taskIndexNumber < tasks.length
+      ) {
+        const task = tasks[taskIndexNumber]
         if (task) {
+          // task.id is the index as string, so we need to match correctly
           completionStatus[task.id] = true
+          console.log(
+            `Marked task ${task.id} (index ${taskIndexNumber}) as completed for user ${userAddress}`
+          )
         }
+      } else {
+        console.warn(
+          `Invalid task index ${taskIndexNumber} for campaign ${campaignId}`
+        )
       }
     })
 
@@ -1132,11 +1158,25 @@ export const getUserTaskCompletionStatus = async (
       campaignId,
       completionStatus,
       eventsFound: events.length,
+      taskIds: tasks.map((t) => t.id),
+      eventDetails: events.map((e) => ({
+        taskIndex: Number(e.args?.[2]),
+        blockNumber: e.blockNumber,
+        transactionHash: e.transactionHash,
+      })),
     })
 
     return completionStatus
   } catch (error) {
     console.error('Error checking user task completion status:', error)
+    console.error('Error details:', {
+      campaignId,
+      userAddress,
+      taskCount: tasks.length,
+      contractAddress: config.campaignFactoryAddress,
+      error: error instanceof Error ? error.message : String(error),
+    })
+
     // Return all tasks as not completed if there's an error
     const completionStatus: { [taskId: string]: boolean } = {}
     tasks.forEach((task) => {

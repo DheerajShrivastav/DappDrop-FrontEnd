@@ -199,6 +199,39 @@ export default function CampaignDetailsPage() {
     fetchAllCampaignData()
   }, [fetchAllCampaignData])
 
+  // Additional effect to refresh task completion status when wallet connection changes
+  useEffect(() => {
+    if (campaignId && address && isConnected && campaign) {
+      const refreshTaskCompletionStatus = async () => {
+        console.log(
+          'Refreshing task completion status after wallet connection change'
+        )
+        try {
+          const taskCompletionStatus = await getUserTaskCompletionStatus(
+            campaignId,
+            address,
+            campaign.tasks
+          )
+
+          // Update task completion status based on blockchain data
+          const updatedUserTasks = campaign.tasks.map((task) => ({
+            taskId: task.id,
+            completed: taskCompletionStatus[task.id] || false,
+          }))
+
+          setUserTasks(updatedUserTasks)
+          console.log('Updated task completion status:', updatedUserTasks)
+        } catch (error) {
+          console.error('Failed to refresh task completion status:', error)
+        }
+      }
+
+      // Small delay to ensure wallet is fully connected
+      const timeoutId = setTimeout(refreshTaskCompletionStatus, 1000)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [address, isConnected, campaign, campaignId])
+
   // Load any previously stored Discord verifications on component mount
   useEffect(() => {
     if (
