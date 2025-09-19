@@ -127,73 +127,95 @@ export default function CampaignDetailsPage() {
 
   const campaignId = id as string
 
-  const fetchAllCampaignData = useCallback(async () => {
-    if (!campaignId) return
+  const fetchAllCampaignData = useCallback(
+    async (forceRefresh: boolean = false) => {
+      if (!campaignId) return
 
-    setIsLoading(true)
-    const fetchedCampaign = await getCampaignByIdWithMetadata(campaignId)
-    console.log('Fetched campaign data:', {
-      id: campaignId,
-      status: fetchedCampaign?.status,
-      startDate: fetchedCampaign?.startDate,
-      endDate: fetchedCampaign?.endDate,
-      isConnected,
-      address,
-    })
+      setIsLoading(true)
+      console.log('=== FETCHING CAMPAIGN DATA ===')
+      console.log('Campaign ID:', campaignId)
+      console.log('Force refresh:', forceRefresh)
+      console.log('User address:', address)
+      console.log('Is connected:', isConnected)
+      console.log('User role:', role)
+      console.log('Timestamp:', new Date().toISOString())
 
-    if (fetchedCampaign) {
-      setCampaign(fetchedCampaign)
+      const fetchedCampaign = await getCampaignByIdWithMetadata(
+        campaignId,
+        forceRefresh
+      )
+      console.log('=== CAMPAIGN DATA RECEIVED ===')
+      console.log('Campaign status:', fetchedCampaign?.status)
+      console.log('Campaign title:', fetchedCampaign?.title)
+      console.log('Campaign host:', fetchedCampaign?.host)
+      console.log('Campaign participants:', fetchedCampaign?.participants)
+      console.log('Start date:', fetchedCampaign?.startDate)
+      console.log('End date:', fetchedCampaign?.endDate)
 
-      // Initialize tasks with default completion status
-      let initialUserTasks = fetchedCampaign.tasks.map((task) => ({
-        taskId: task.id,
-        completed: false,
-      }))
+      if (fetchedCampaign) {
+        setCampaign(fetchedCampaign)
+        console.log('Campaign state updated in React')
 
-      if (address && isConnected) {
-        // Check actual task completion status for the connected wallet
-        const taskCompletionStatus = await getUserTaskCompletionStatus(
-          campaignId,
-          address,
-          fetchedCampaign.tasks
-        )
-
-        // Update task completion status based on blockchain data
-        initialUserTasks = fetchedCampaign.tasks.map((task) => ({
+        // Initialize tasks with default completion status
+        let initialUserTasks = fetchedCampaign.tasks.map((task) => ({
           taskId: task.id,
-          completed: taskCompletionStatus[task.id] || false,
+          completed: false,
         }))
 
-        const hasJoined = await hasParticipated(campaignId, address)
-        setIsJoined(hasJoined)
+        if (address && isConnected) {
+          console.log('Checking task completion status for user...')
+          // Check actual task completion status for the connected wallet
+          const taskCompletionStatus = await getUserTaskCompletionStatus(
+            campaignId,
+            address,
+            fetchedCampaign.tasks
+          )
+
+          // Update task completion status based on blockchain data
+          initialUserTasks = fetchedCampaign.tasks.map((task) => ({
+            taskId: task.id,
+            completed: taskCompletionStatus[task.id] || false,
+          }))
+
+          const hasJoined = await hasParticipated(campaignId, address)
+          setIsJoined(hasJoined)
+          console.log('User has joined campaign:', hasJoined)
+        }
+
+        setUserTasks(initialUserTasks)
+        console.log('User tasks updated:', initialUserTasks)
+
+        // Fetch analytics data if the current user is the host
+        if (
+          role === 'host' &&
+          address?.toLowerCase() === fetchedCampaign.host.toLowerCase()
+        ) {
+          console.log('Fetching analytics data for host...')
+          const data = await getCampaignParticipants(fetchedCampaign)
+          setParticipants(data)
+
+          // Also fetch basic participant addresses for immediate display
+          console.log(
+            'Fetching participant addresses for campaign:',
+            campaignId
+          )
+          const addresses = await getCampaignParticipantAddresses(campaignId)
+          console.log('Received participant addresses:', addresses)
+          setParticipantAddresses(addresses)
+        }
+      } else {
+        console.error('Failed to fetch campaign data')
+        toast({
+          variant: 'destructive',
+          title: 'Campaign Not Found',
+          description: 'Could not load data for this campaign.',
+        })
       }
-
-      setUserTasks(initialUserTasks)
-
-      // Fetch analytics data if the current user is the host
-      if (
-        role === 'host' &&
-        address?.toLowerCase() === fetchedCampaign.host.toLowerCase()
-      ) {
-        console.log('Fetching analytics data for host...')
-        const data = await getCampaignParticipants(fetchedCampaign)
-        setParticipants(data)
-
-        // Also fetch basic participant addresses for immediate display
-        console.log('Fetching participant addresses for campaign:', campaignId)
-        const addresses = await getCampaignParticipantAddresses(campaignId)
-        console.log('Received participant addresses:', addresses)
-        setParticipantAddresses(addresses)
-      }
-    } else {
-      toast({
-        variant: 'destructive',
-        title: 'Campaign Not Found',
-        description: 'Could not load data for this campaign.',
-      })
-    }
-    setIsLoading(false)
-  }, [campaignId, address, isConnected, role, toast])
+      setIsLoading(false)
+      console.log('=== CAMPAIGN DATA FETCH COMPLETE ===')
+    },
+    [campaignId, address, isConnected, role, toast]
+  )
 
   useEffect(() => {
     fetchAllCampaignData()
@@ -473,8 +495,51 @@ export default function CampaignDetailsPage() {
     setIsActivating(true)
     try {
       await openCampaign(campaign.id, toast)
-      // Refresh campaign data after activation
-      await fetchAllCampaignData()
+
+      // Add a small delay to ensure blockchain state is updated
+      console.log('Waiting for blockchain state to update...')
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+
+      // Refresh campaign data multiple times to ensure we get the updated status
+      console.log('Refreshing campaign data after activation...')
+      let attempts = 0
+      const maxAttempts = 5
+
+      while (attempts < maxAttempts) {
+        await fetchAllCampaignData()
+
+        const updatedCampaign = await getCampaignByIdWithMetadata(campaign.id)
+        console.log(`Refresh attempt ${attempts + 1}:`, {
+          campaignStatus: updatedCampaign?.status,
+          timestamp: new Date().toISOString(),
+        })
+
+        if (updatedCampaign && updatedCampaign.status === 'Open') {
+          console.log('Campaign status successfully updated to Open!')
+          setCampaign(updatedCampaign)
+          break
+        }
+
+        attempts++
+        if (attempts < maxAttempts) {
+          console.log(
+            `Status not yet updated, waiting and retrying... (${attempts}/${maxAttempts})`
+          )
+          await new Promise((resolve) => setTimeout(resolve, 2000))
+        }
+      }
+
+      if (attempts === maxAttempts) {
+        console.warn(
+          'Campaign status may not have updated properly after maximum attempts'
+        )
+        toast({
+          title: 'Status Update Delayed',
+          description:
+            'Campaign is activated but status may take a moment to reflect. Try refreshing manually.',
+          variant: 'default',
+        })
+      }
     } catch (error) {
       console.error('Failed to activate campaign:', error)
     } finally {
@@ -485,7 +550,20 @@ export default function CampaignDetailsPage() {
   const handleRefreshData = async () => {
     setIsRefreshing(true)
     try {
+      console.log('Manual refresh triggered')
       await fetchAllCampaignData()
+
+      // Force refresh campaign data from blockchain
+      const freshCampaign = await getCampaignByIdWithMetadata(campaignId)
+      if (freshCampaign) {
+        console.log('Fresh campaign data after manual refresh:', {
+          status: freshCampaign.status,
+          id: freshCampaign.id,
+          timestamp: new Date().toISOString(),
+        })
+        setCampaign(freshCampaign)
+      }
+
       toast({
         title: 'Data Refreshed!',
         description: 'Campaign data has been updated from the blockchain.',
@@ -564,6 +642,15 @@ export default function CampaignDetailsPage() {
                   userTask?.completed ||
                   userTask?.isCompleting ||
                   campaign.status !== 'Open'
+
+                // Debug logging for task verification status
+                console.log(`Task ${task.id} verification status:`, {
+                  campaignStatus: campaign.status,
+                  isTaskDisabled,
+                  userTaskCompleted: userTask?.completed,
+                  userTaskIsCompleting: userTask?.isCompleting,
+                  campaignIsOpen: campaign.status === 'Open',
+                })
 
                 return (
                   <div
@@ -731,10 +818,12 @@ export default function CampaignDetailsPage() {
                   size="sm"
                   onClick={handleRefreshData}
                   disabled={isRefreshing}
+                  title="Refresh campaign status and data from blockchain"
                 >
                   <RefreshCw
                     className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
                   />
+                  {isRefreshing ? '' : ' Refresh'}
                 </Button>
               </div>
             </CardHeader>

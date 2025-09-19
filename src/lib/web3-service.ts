@@ -445,40 +445,68 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
   const campaignId = parseInt(id, 10)
   if (isNaN(campaignId)) return null
 
-  const contractToUse = contract ?? readOnlyContract
+  let contractToUse = contract ?? readOnlyContract
+
+  // If no contract is available, try to initialize read-only provider
+  if (!contractToUse) {
+    console.warn('No contract available, initializing read-only provider...')
+    initializeReadOnlyProvider()
+    contractToUse = readOnlyContract
+  }
+
   if (!contractToUse) {
     console.warn('Neither wallet contract nor read-only contract is available.')
-    toast({
-      variant: 'destructive',
-      title: 'Error',
-      description: 'Could not connect to blockchain.',
-    })
     return null
   }
+
   try {
+    console.log(`Fetching campaign ${id} from blockchain...`)
     const campaignData = await contractToUse.getCampaign(id)
+    console.log(`Raw campaign data for ${id}:`, {
+      id: campaignData.id.toString(),
+      status: campaignData.status.toString(),
+      statusNumber: Number(campaignData.status),
+      name: campaignData.name,
+      host: campaignData.host,
+      startTime: Number(campaignData.startTime),
+      endTime: Number(campaignData.endTime),
+      totalParticipants: Number(campaignData.totalParticipants),
+    })
 
     const campaign = mapContractDataToCampaign(campaignData, parseInt(id))
+    console.log(`Mapped campaign data for ${id}:`, {
+      id: campaign.id,
+      status: campaign.status,
+      title: campaign.title,
+      host: campaign.host,
+      participants: campaign.participants,
+    })
 
     return campaign
   } catch (error) {
     console.error(`Error fetching campaign ${id}:`, error)
-    toast({
-      variant: 'destructive',
-      title: 'Error',
-      description: 'Could not fetch campaign data.',
-    })
     return null
   }
 }
 
 // Enhanced function to get campaign by ID with Discord invite links for client-side use
 export const getCampaignByIdWithMetadata = async (
-  id: string
+  id: string,
+  forceRefresh: boolean = false
 ): Promise<Campaign | null> => {
+  console.log(
+    `getCampaignByIdWithMetadata called for campaign ${id}, forceRefresh: ${forceRefresh}`
+  )
+
   // First get the basic campaign data
   const campaign = await getCampaignById(id)
   if (!campaign) return null
+
+  console.log(`Base campaign data fetched for ${id}:`, {
+    status: campaign.status,
+    title: campaign.title,
+    participants: campaign.participants,
+  })
 
   // Then enhance it with task metadata (only on client-side)
   if (typeof window !== 'undefined') {
@@ -503,6 +531,12 @@ export const getCampaignByIdWithMetadata = async (
       console.warn('Failed to enhance campaign with task metadata:', e)
     }
   }
+
+  console.log(`Final enhanced campaign data for ${id}:`, {
+    status: campaign.status,
+    tasksCount: campaign.tasks.length,
+    hasDiscordTasks: campaign.tasks.some((t) => t.type === 'JOIN_DISCORD'),
+  })
 
   return campaign
 }
