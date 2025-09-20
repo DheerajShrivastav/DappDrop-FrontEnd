@@ -1,13 +1,16 @@
-
-
-export type TaskType = 'SOCIAL_FOLLOW' | 'JOIN_DISCORD' | 'RETWEET' | 'ONCHAIN_TX';
+export type TaskType =
+  | 'SOCIAL_FOLLOW'
+  | 'JOIN_DISCORD'
+  | 'RETWEET'
+  | 'ONCHAIN_TX'
 
 export type Task = {
-  id: string;
-  type: TaskType;
-  description: string;
-  verificationData?: string;
-};
+  id: string
+  type: TaskType
+  description: string
+  verificationData?: string
+  discordInviteLink?: string // For JOIN_DISCORD tasks: the actual invite link for participants to join
+}
 
 export type UserTask = {
   taskId: string
@@ -29,7 +32,7 @@ export type Campaign = {
   longDescription: string
   startDate: Date
   endDate: Date
-  status: 'Draft' | 'Active' | 'Ended' | 'Closed'
+  status: 'Draft' | 'Open' | 'Ended' | 'Closed'
   participants: number
   host: string
   tasks: Task[]
