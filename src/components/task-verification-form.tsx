@@ -19,6 +19,7 @@ import {
   DialogClose,
 } from '@/components/ui/dialog'
 import { DiscordAuthButton } from '@/components/discord-auth-button'
+import { TelegramVerificationForm } from '@/components/telegram/telegram-verification-form'
 import { MessageSquare, Loader2 } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { TaskType } from '@/lib/types'
@@ -240,6 +241,39 @@ export function TaskVerificationForm({
                 )}
                 Confirm & Verify
               </Button>
+            </DialogFooter>
+          </>
+        )
+
+      case 'JOIN_TELEGRAM':
+        return (
+          <>
+            <DialogHeader>
+              <DialogTitle>Verify Telegram Task</DialogTitle>
+              <DialogDescription>
+                Please provide your Telegram information to verify that you've
+                joined the channel or group.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col items-center py-6">
+              <TelegramVerificationForm
+                campaignId={campaignId}
+                taskId={taskId || ''}
+                onVerificationComplete={(success, message) => {
+                  if (success) {
+                    // Call the parent's onVerify function
+                    handleVerification()
+                  } else {
+                    setConnectionError(message || 'Verification failed')
+                  }
+                }}
+                isLoading={isVerifying}
+              />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
             </DialogFooter>
           </>
         )

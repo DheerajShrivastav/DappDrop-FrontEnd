@@ -84,6 +84,7 @@ const mapContractDataToCampaign = (
   const taskTypeMap: TaskType[] = [
     'SOCIAL_FOLLOW',
     'JOIN_DISCORD',
+    'JOIN_TELEGRAM',
     'RETWEET',
     'ONCHAIN_TX',
   ]
@@ -561,8 +562,9 @@ export const createAndActivateCampaign = async (campaignData: any) => {
   const taskTypeMap: Record<TaskType, number> = {
     SOCIAL_FOLLOW: 0,
     JOIN_DISCORD: 1,
-    RETWEET: 2,
-    ONCHAIN_TX: 3,
+    JOIN_TELEGRAM: 2,
+    RETWEET: 3,
+    ONCHAIN_TX: 4,
   }
 
   try {
@@ -711,8 +713,9 @@ export const createCampaign = async (campaignData: any) => {
   const taskTypeMap: Record<TaskType, number> = {
     SOCIAL_FOLLOW: 0,
     JOIN_DISCORD: 1,
-    RETWEET: 2,
-    ONCHAIN_TX: 3,
+    JOIN_TELEGRAM: 2,
+    RETWEET: 3,
+    ONCHAIN_TX: 4,
   }
 
   try {

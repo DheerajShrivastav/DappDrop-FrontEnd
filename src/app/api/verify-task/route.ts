@@ -1,13 +1,24 @@
 // src/app/api/verify-task/route.ts
 import { NextResponse } from 'next/server'
 import { getCampaignById } from '@/lib/web3-service'
-import { verifyDiscordJoin } from '@/lib/verification-service'
+import {
+  verifyDiscordJoin,
+  verifyTelegramJoin,
+} from '@/lib/verification-service'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { campaignId, taskId, userAddress, discordUsername, discordId } = body
+    const {
+      campaignId,
+      taskId,
+      userAddress,
+      discordUsername,
+      discordId,
+      telegramUsername,
+      telegramUserId,
+    } = body
 
     if (!campaignId || !taskId || !userAddress) {
       return NextResponse.json(
@@ -85,6 +96,81 @@ export async function POST(request: Request) {
           })
         } else {
           console.log('Verification already exists for:', {
+            userAddress,
+            campaignId,
+            taskId,
+            existingId: existingVerification.id,
+          })
+        }
+      }
+    } else if (task.type === 'JOIN_TELEGRAM') {
+      // Get Telegram metadata from database
+      const taskMetadata = await prisma.campaignTaskMetadata.findFirst({
+        where: {
+          campaignId,
+          taskIndex,
+        },
+      })
+
+      if (!taskMetadata?.telegramChatId) {
+        return NextResponse.json(
+          { error: 'Telegram Chat ID not configured for this task.' },
+          { status: 500 }
+        )
+      }
+
+      if (!telegramUsername && !telegramUserId) {
+        return NextResponse.json(
+          {
+            error: 'Telegram username or user ID is required for verification.',
+          },
+          { status: 400 }
+        )
+      }
+
+      isVerified = await verifyTelegramJoin(
+        telegramUsername || telegramUserId,
+        taskMetadata.telegramChatId
+      )
+
+      if (isVerified) {
+        // Check if verification already exists for this user, campaign, and task
+        const existingVerification = await prisma.socialVerification.findFirst({
+          where: {
+            userAddress: userAddress,
+            taskId: `${campaignId}-${taskId}`,
+            platform: 'TELEGRAM',
+            isValid: true,
+          },
+        })
+
+        // Only create new verification if none exists
+        if (!existingVerification) {
+          await prisma.socialVerification.create({
+            data: {
+              userAddress: userAddress,
+              taskId: `${campaignId}-${taskId}`,
+              platform: 'TELEGRAM',
+              proofData: {
+                username: telegramUsername,
+                userId: telegramUserId || 'username_verification',
+                chatId: taskMetadata.telegramChatId,
+                verificationMethod: telegramUserId ? 'user_id' : 'username',
+                verificationTime: new Date().toISOString(),
+              },
+              verifiedAt: new Date(),
+              isValid: true,
+            },
+          })
+          console.log('Created new Telegram verification record for:', {
+            userAddress,
+            campaignId,
+            taskId,
+            telegramUsername,
+            telegramUserId,
+          })
+        } else {
+          console.log('Telegram verification already exists for:', {
             userAddress,
             campaignId,
             taskId,

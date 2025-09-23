@@ -109,3 +109,131 @@ export const verifyDiscordJoin = async (
     return false
   }
 }
+
+/**
+ * Verifies if a Telegram user has joined a specific Telegram channel/group using our Telegram Bot.
+ *
+ * This function performs real Telegram Bot API verification by:
+ * 1. Using our configured Telegram Bot with the necessary permissions
+ * 2. Querying Telegram's Bot API to check channel/group membership
+ * 3. Supporting both username and user ID-based verification
+ * 4. Providing accurate membership verification for campaign tasks
+ *
+ * @param telegramUsername - The Telegram username of the participant (without @)
+ * @param telegramChatId - The Telegram channel/group chat ID (e.g., @channelname or -100123456789)
+ * @param telegramUserId - Optional Telegram user ID (more accurate when available)
+ * @returns Promise<boolean> - true if user is verified as a channel/group member, false otherwise
+ * @throws Error if Telegram bot token is not configured
+ */
+export const verifyTelegramJoin = async (
+  telegramUsername: string,
+  telegramChatId: string,
+  telegramUserId?: string
+): Promise<boolean> => {
+  console.log(
+    `Verifying if user "${telegramUsername}" (ID: ${
+      telegramUserId || 'unknown'
+    }) joined Telegram channel/group ${telegramChatId}`
+  )
+
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    console.error('Telegram bot token is not configured')
+    throw new Error(
+      'Telegram bot token is missing. Please check your environment variables.'
+    )
+  }
+
+  // Primary verification method: Use Telegram user ID (most accurate)
+  if (telegramUserId) {
+    console.log('Using Telegram user ID for verification')
+    try {
+      const response = await fetch(
+        `https://api.telegram.org/bot${
+          process.env.TELEGRAM_BOT_TOKEN
+        }/getChatMember?chat_id=${encodeURIComponent(
+          telegramChatId
+        )}&user_id=${telegramUserId}`,
+        {
+          method: 'GET',
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.ok && data.result) {
+          const memberStatus = data.result.status
+          const isActive = ['creator', 'administrator', 'member'].includes(
+            memberStatus
+          )
+
+          console.log(
+            `User with ID ${telegramUserId} membership status in ${telegramChatId}: ${memberStatus}`
+          )
+          return isActive
+        }
+      }
+
+      if (response.status === 400) {
+        console.log(
+          `User with ID ${telegramUserId} is NOT a member of ${telegramChatId}`
+        )
+        return false
+      }
+
+      console.error('Telegram API error:', response.status, response.statusText)
+      return false
+    } catch (error) {
+      console.error('Error verifying Telegram membership with ID:', error)
+      return false
+    }
+  }
+
+  // Fallback verification method: Search by username (less reliable)
+  console.log('Using username-based verification as fallback')
+  try {
+    // For username-based verification, we need to get chat administrators and members
+    // Note: This is limited and may not work for large groups due to Telegram API restrictions
+    const response = await fetch(
+      `https://api.telegram.org/bot${
+        process.env.TELEGRAM_BOT_TOKEN
+      }/getChatAdministrators?chat_id=${encodeURIComponent(telegramChatId)}`,
+      {
+        method: 'GET',
+      }
+    )
+
+    if (!response.ok) {
+      console.error('Telegram API error:', response.status, response.statusText)
+      return false
+    }
+
+    const data = await response.json()
+    if (!data.ok || !Array.isArray(data.result)) {
+      console.log(
+        `Could not verify membership for username "${telegramUsername}"`
+      )
+      return false
+    }
+
+    // Check if user is among administrators (this is what we can reliably check)
+    const usernameMatch = data.result.some((member: any) => {
+      const memberUsername = member.user?.username
+      return memberUsername === telegramUsername
+    })
+
+    console.log(
+      `Username verification result: ${
+        usernameMatch
+          ? 'User found as admin'
+          : 'User not found as admin (may still be a member)'
+      }`
+    )
+
+    // Note: This method only checks administrators, not all members
+    // For better verification, users should connect their Telegram account
+    return usernameMatch
+  } catch (error) {
+    console.error('Error verifying Telegram membership with username:', error)
+    return false
+  }
+}

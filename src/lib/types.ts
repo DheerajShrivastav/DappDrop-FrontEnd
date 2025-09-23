@@ -1,6 +1,7 @@
 export type TaskType =
   | 'SOCIAL_FOLLOW'
   | 'JOIN_DISCORD'
+  | 'JOIN_TELEGRAM'
   | 'RETWEET'
   | 'ONCHAIN_TX'
 
@@ -10,6 +11,7 @@ export type Task = {
   description: string
   verificationData?: string
   discordInviteLink?: string // For JOIN_DISCORD tasks: the actual invite link for participants to join
+  telegramInviteLink?: string // For JOIN_TELEGRAM tasks: the actual invite link for participants to join
 }
 
 export type UserTask = {

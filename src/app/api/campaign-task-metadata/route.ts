@@ -5,8 +5,15 @@ import { prisma } from '@/lib/prisma'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { campaignId, taskIndex, taskType, discordInviteLink, metadata } =
-      body
+    const {
+      campaignId,
+      taskIndex,
+      taskType,
+      discordInviteLink,
+      telegramInviteLink,
+      telegramChatId,
+      metadata,
+    } = body
 
     if (!campaignId || taskIndex === undefined || !taskType) {
       return NextResponse.json(
@@ -16,28 +23,32 @@ export async function POST(request: Request) {
     }
 
     // Upsert (create or update) the task metadata
-    const taskMetadata = await prisma.campaignTaskMetadata.upsert({
+    const data = await prisma.campaignTaskMetadata.upsert({
       where: {
         campaignId_taskIndex: {
-          campaignId: campaignId.toString(),
-          taskIndex: parseInt(taskIndex, 10),
+          campaignId,
+          taskIndex,
         },
       },
       update: {
         taskType,
-        discordInviteLink: discordInviteLink || null,
-        metadata: metadata || null,
+        discordInviteLink,
+        telegramInviteLink,
+        telegramChatId,
+        metadata,
       },
       create: {
-        campaignId: campaignId.toString(),
-        taskIndex: parseInt(taskIndex, 10),
+        campaignId,
+        taskIndex,
         taskType,
-        discordInviteLink: discordInviteLink || null,
-        metadata: metadata || null,
+        discordInviteLink,
+        telegramInviteLink,
+        telegramChatId,
+        metadata,
       },
     })
 
-    return NextResponse.json({ success: true, data: taskMetadata })
+    return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('Error managing task metadata:', error)
     return NextResponse.json(
