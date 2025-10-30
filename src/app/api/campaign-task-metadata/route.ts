@@ -15,6 +15,15 @@ export async function POST(request: Request) {
       metadata,
     } = body
 
+    console.log('📝 Storing task metadata:', {
+      campaignId,
+      taskIndex,
+      taskType,
+      discordInviteLink,
+      telegramInviteLink,
+      telegramChatId,
+    })
+
     if (!campaignId || taskIndex === undefined || !taskType) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
@@ -26,8 +35,8 @@ export async function POST(request: Request) {
     const data = await prisma.campaignTaskMetadata.upsert({
       where: {
         campaignId_taskIndex: {
-          campaignId,
-          taskIndex,
+          campaignId: campaignId.toString(),
+          taskIndex: parseInt(taskIndex.toString()),
         },
       },
       update: {
@@ -38,8 +47,8 @@ export async function POST(request: Request) {
         metadata,
       },
       create: {
-        campaignId,
-        taskIndex,
+        campaignId: campaignId.toString(),
+        taskIndex: parseInt(taskIndex.toString()),
         taskType,
         discordInviteLink,
         telegramInviteLink,
@@ -48,11 +57,15 @@ export async function POST(request: Request) {
       },
     })
 
+    console.log('✅ Successfully stored task metadata:', data.id)
     return NextResponse.json({ success: true, data })
-  } catch (error) {
-    console.error('Error managing task metadata:', error)
+  } catch (error: any) {
+    console.error('❌ Error managing task metadata:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        details: error.message || 'Unknown error',
+      },
       { status: 500 }
     )
   }

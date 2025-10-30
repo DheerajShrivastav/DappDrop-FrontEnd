@@ -104,17 +104,28 @@ export async function POST(request: Request) {
         }
       }
     } else if (task.type === 'JOIN_TELEGRAM') {
+      console.log('🔍 Looking for Telegram metadata:', {
+        campaignId,
+        taskIndex,
+      })
+
       // Get Telegram metadata from database
       const taskMetadata = await prisma.campaignTaskMetadata.findFirst({
         where: {
-          campaignId,
-          taskIndex,
+          campaignId: campaignId.toString(),
+          taskIndex: taskIndex,
         },
       })
 
-      if (!taskMetadata?.telegramChatId) {
+      console.log('📦 Found Telegram metadata:', taskMetadata)
+
+      if (!taskMetadata?.telegramChatId && !taskMetadata?.telegramInviteLink) {
+        console.log('❌ No Telegram Chat ID or invite link found')
         return NextResponse.json(
-          { error: 'Telegram Chat ID not configured for this task.' },
+          {
+            error:
+              'Telegram Chat ID or invite link not configured for this task.',
+          },
           { status: 500 }
         )
       }
@@ -130,7 +141,7 @@ export async function POST(request: Request) {
 
       isVerified = await verifyTelegramJoin(
         telegramUsername || telegramUserId,
-        taskMetadata.telegramChatId
+        taskMetadata.telegramChatId || taskMetadata.telegramInviteLink || ''
       )
 
       if (isVerified) {

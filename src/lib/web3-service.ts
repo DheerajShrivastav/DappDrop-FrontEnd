@@ -4,6 +4,7 @@ import type { Campaign, ParticipantData, TaskType } from './types'
 import config from '@/app/config'
 import Web3Campaigns from './abi/Web3Campaigns.json'
 import { addDays, endOfDay, differenceInSeconds } from 'date-fns'
+import { storeCampaignTaskMetadata } from './campaign-metadata'
 
 // Extend the Window interface to include ethereum
 declare global {
@@ -815,6 +816,11 @@ export const createCampaign = async (campaignData: any) => {
       )
       await rewardTx.wait()
     }
+
+    // Store all task metadata after successful campaign creation
+    console.log('🔄 About to store task metadata for campaign:', campaignId)
+    console.log('📋 Tasks to store:', campaignData.tasks)
+    await storeCampaignTaskMetadata(campaignId, campaignData.tasks)
 
     toast({
       title: 'Success!',
