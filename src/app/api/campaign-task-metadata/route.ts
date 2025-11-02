@@ -3,8 +3,12 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: Request) {
+  console.log('🌐 === CAMPAIGN TASK METADATA API CALLED ===')
+  
   try {
     const body = await request.json()
+    console.log('📥 Received request body:', JSON.stringify(body, null, 2))
+    
     const {
       campaignId,
       taskIndex,
@@ -15,13 +19,14 @@ export async function POST(request: Request) {
       metadata,
     } = body
 
-    console.log('📝 Storing task metadata:', {
+    console.log('📝 Extracted fields:', {
       campaignId,
       taskIndex,
       taskType,
       discordInviteLink,
       telegramInviteLink,
       telegramChatId,
+      metadata,
     })
 
     if (!campaignId || taskIndex === undefined || !taskType) {

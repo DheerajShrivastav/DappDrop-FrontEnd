@@ -30,7 +30,8 @@ The campaign should include:
 1.  A catchy and concise title.
 2.  A short, one-sentence description suitable for a campaign preview card.
 3.  A more detailed and engaging description for the main campaign page.
-4.  A list of 2-3 relevant and actionable tasks for participants to complete. Task types can be 'SOCIAL_FOLLOW', 'JOIN_DISCORD', 'RETWEET', or 'ONCHAIN_TX'.
+4.  A list of 2-3 relevant and actionable tasks for participants to complete. Task types can be 'SOCIAL_FOLLOW', 'JOIN_DISCORD', 'JOIN_TELEGRAM', 'RETWEET', or 'ONCHAIN_TX' and should align with the project's goals.
+5.  A reward structure detailing the type of reward (ERC20, ERC721, or None), token address, amount (if applicable), and a name for the reward as described in the project details.
 
 Project Description:
 {{{input}}}

@@ -83,6 +83,8 @@ const TaskIcon = ({ type }: { type: TaskType['type'] }) => {
       return <Twitter className="h-5 w-5 text-sky-500" />
     case 'JOIN_DISCORD':
       return <MessageSquare className="h-5 w-5 text-indigo-500" />
+    case 'JOIN_TELEGRAM':
+      return <Bot className="h-5 w-5 text-blue-500" />
     case 'RETWEET':
       return <Twitter className="h-5 w-5 text-sky-400" />
     case 'ONCHAIN_TX':
@@ -254,14 +256,14 @@ export default function CampaignDetailsPage() {
     }
   }, [address, isConnected, campaign, campaignId])
 
-  // Load any previously stored Discord verifications on component mount
+  // Load any previously stored Discord and Telegram verifications on component mount
   useEffect(() => {
     if (
       typeof window !== 'undefined' &&
       campaign?.id &&
       campaign.tasks?.length > 0
     ) {
-      // Check local storage for previous Discord verifications
+      // Check local storage for previous Discord and Telegram verifications
       campaign.tasks.forEach((task, index) => {
         if (task.type === 'JOIN_DISCORD') {
           const storedVerification = localStorage.getItem(
@@ -279,7 +281,26 @@ export default function CampaignDetailsPage() {
                 )
               }
             } catch (e) {
-              console.error('Error parsing stored verification:', e)
+              console.error('Error parsing stored Discord verification:', e)
+            }
+          }
+        } else if (task.type === 'JOIN_TELEGRAM') {
+          const storedVerification = localStorage.getItem(
+            `telegram_verification_${campaign.id}_${task.id}`
+          )
+          if (storedVerification) {
+            try {
+              const verificationData = JSON.parse(storedVerification)
+              // Update completed tasks if we have a stored verification
+              if (verificationData.verified) {
+                setUserTasks((prevTasks) =>
+                  prevTasks.map((t) =>
+                    t.taskId === task.id ? { ...t, completed: true } : t
+                  )
+                )
+              }
+            } catch (e) {
+              console.error('Error parsing stored Telegram verification:', e)
             }
           }
         }
@@ -369,7 +390,8 @@ export default function CampaignDetailsPage() {
   const handleCompleteTask = async (
     taskId: string,
     taskType: TaskType['type'],
-    discordData?: any
+    discordData?: any,
+    telegramData?: any
   ) => {
     if (!isConnected || !address) {
       toast({
@@ -402,6 +424,24 @@ export default function CampaignDetailsPage() {
         }
       }
 
+      // For Telegram tasks, check if we have stored verification data if no telegramData is provided
+      if (taskType === 'JOIN_TELEGRAM' && !telegramData) {
+        const storedVerification = localStorage.getItem(
+          `telegram_verification_${campaignId}_${taskId}`
+        )
+        if (storedVerification) {
+          try {
+            telegramData = JSON.parse(storedVerification)
+            console.log(
+              'Using stored Telegram verification data:',
+              telegramData
+            )
+          } catch (e) {
+            console.error('Error parsing stored verification:', e)
+          }
+        }
+      }
+
       // Format discord username with discriminator if available
       const discordUsername =
         discordData?.username && discordData?.discriminator
@@ -418,6 +458,8 @@ export default function CampaignDetailsPage() {
           userAddress: address,
           discordUsername,
           discordId: discordData?.id || null,
+          telegramUsername: telegramData?.username || null,
+          telegramUserId: telegramData?.userId || null,
         }),
       })
 
@@ -451,6 +493,19 @@ export default function CampaignDetailsPage() {
           JSON.stringify({
             username: discordData.username,
             id: discordData.id,
+            verified: true,
+            timestamp: new Date().toISOString(),
+          })
+        )
+      }
+
+      // Store successful verification in localStorage for Telegram tasks
+      if (taskType === 'JOIN_TELEGRAM' && telegramData) {
+        localStorage.setItem(
+          `telegram_verification_${campaignId}_${taskId}`,
+          JSON.stringify({
+            username: telegramData.username,
+            userId: telegramData.userId,
             verified: true,
             timestamp: new Date().toISOString(),
           })
@@ -690,6 +745,42 @@ export default function CampaignDetailsPage() {
                                       ? task.discordInviteLink
                                       : `https://discord.gg/${task.discordInviteLink}`
                                     : `https://discord.gg/${
+                                        task.verificationData || 'placeholder'
+                                      }`
+                                }
+                                target="_blank"
+                              >
+                                Join
+                              </Link>
+                            </Button>
+                            <Button
+                              id={`task-${task.id}`}
+                              size="sm"
+                              variant="outline"
+                              disabled={isTaskDisabled}
+                              onClick={() => {
+                                setVerifyingTaskId(task.id)
+                                setIsVerifyDialogOpen(true)
+                              }}
+                            >
+                              {userTask?.isCompleting ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <ShieldCheck className="mr-2 h-4 w-4" />
+                              )}
+                              Verify
+                            </Button>
+                          </>
+                        ) : task.type === 'JOIN_TELEGRAM' ? (
+                          <>
+                            <Button size="sm" asChild variant="outline">
+                              <Link
+                                href={
+                                  task.telegramInviteLink
+                                    ? task.telegramInviteLink.startsWith('http')
+                                      ? task.telegramInviteLink
+                                      : `https://t.me/${task.telegramInviteLink}`
+                                    : `https://t.me/${
                                         task.verificationData || 'placeholder'
                                       }`
                                 }
@@ -960,7 +1051,12 @@ export default function CampaignDetailsPage() {
         isOpen={isVerifyDialogOpen}
         onOpenChange={setIsVerifyDialogOpen}
         taskId={verifyingTaskId}
-        taskType="JOIN_DISCORD"
+        taskType={
+          verifyingTaskId
+            ? campaign.tasks.find((task) => task.id === verifyingTaskId)
+                ?.type || 'JOIN_DISCORD'
+            : 'JOIN_DISCORD'
+        }
         campaignId={campaignId}
         onVerify={handleCompleteTask}
       />

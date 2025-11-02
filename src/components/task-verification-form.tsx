@@ -33,7 +33,8 @@ interface TaskVerificationFormProps {
   onVerify: (
     taskId: string,
     taskType: TaskType,
-    socialData?: any
+    discordData?: any,
+    telegramData?: any
   ) => Promise<void>
 }
 
@@ -46,6 +47,7 @@ export function TaskVerificationForm({
   onVerify,
 }: TaskVerificationFormProps) {
   const [discordUserData, setDiscordUserData] = useState<any>(null)
+  const [telegramUserData, setTelegramUserData] = useState<any>(null)
   const [isVerifying, setIsVerifying] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
@@ -54,7 +56,7 @@ export function TaskVerificationForm({
   // Load any previously stored verification data and reset state when dialog opens/closes
   useEffect(() => {
     if (typeof window !== 'undefined' && taskId && campaignId && isOpen) {
-      // When dialog opens, check for stored verification
+      // When dialog opens, check for stored Discord verification
       const storedData = localStorage.getItem(
         `discord_verification_${campaignId}_${taskId}`
       )
@@ -63,7 +65,25 @@ export function TaskVerificationForm({
           const parsedData = JSON.parse(storedData)
           setStoredVerification(parsedData)
         } catch (e) {
-          console.error('Error parsing stored verification:', e)
+          console.error('Error parsing stored Discord verification:', e)
+        }
+      }
+
+      // When dialog opens, check for stored Telegram verification
+      const storedTelegramData = localStorage.getItem(
+        `telegram_verification_${campaignId}_${taskId}`
+      )
+      if (storedTelegramData) {
+        try {
+          const parsedTelegramData = JSON.parse(storedTelegramData)
+          if (parsedTelegramData.verified) {
+            setTelegramUserData({
+              username: parsedTelegramData.username,
+              userId: parsedTelegramData.userId,
+            })
+          }
+        } catch (e) {
+          console.error('Error parsing stored Telegram verification:', e)
         }
       }
     }
@@ -72,7 +92,7 @@ export function TaskVerificationForm({
     if (!isOpen) {
       setIsConnecting(false)
       setConnectionError(null)
-      // Keep discordUserData and storedVerification as they may be needed when reopening
+      // Keep discordUserData, telegramUserData and storedVerification as they may be needed when reopening
     }
   }, [taskId, campaignId, isOpen])
 
@@ -81,7 +101,7 @@ export function TaskVerificationForm({
 
     setIsVerifying(true)
     try {
-      await onVerify(taskId, taskType, discordUserData)
+      await onVerify(taskId, taskType, discordUserData, telegramUserData)
 
       // Store verification data for future reference
       if (discordUserData && taskType === 'JOIN_DISCORD') {
@@ -90,6 +110,18 @@ export function TaskVerificationForm({
           JSON.stringify({
             username: discordUserData.username,
             id: discordUserData.id,
+            verified: true,
+            timestamp: new Date().toISOString(),
+          })
+        )
+      }
+
+      if (telegramUserData && taskType === 'JOIN_TELEGRAM') {
+        localStorage.setItem(
+          `telegram_verification_${campaignId}_${taskId}`,
+          JSON.stringify({
+            username: telegramUserData.username,
+            userId: telegramUserData.userId,
             verified: true,
             timestamp: new Date().toISOString(),
           })
@@ -256,19 +288,67 @@ export function TaskVerificationForm({
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col items-center py-6">
-              <TelegramVerificationForm
-                campaignId={campaignId}
-                taskId={taskId || ''}
-                onVerificationComplete={(success, message) => {
-                  if (success) {
-                    // Call the parent's onVerify function
-                    handleVerification()
-                  } else {
-                    setConnectionError(message || 'Verification failed')
-                  }
-                }}
-                isLoading={isVerifying}
-              />
+              {/* Show error message if there was an error */}
+              {connectionError && (
+                <Alert variant="destructive" className="w-full mb-2">
+                  <AlertTitle>Verification Error</AlertTitle>
+                  <AlertDescription>{connectionError}</AlertDescription>
+                </Alert>
+              )}
+
+              {telegramUserData && (
+                <Alert className="bg-green-500/10 border-green-500 w-full mb-4">
+                  <AlertTitle className="text-green-600">
+                    Previously Verified
+                  </AlertTitle>
+                  <AlertDescription className="text-sm space-y-1">
+                    <p>You've already verified this task with:</p>
+                    <p>
+                      <strong>Username:</strong> {telegramUserData.username}
+                    </p>
+                    {telegramUserData.userId && (
+                      <p>
+                        <strong>User ID:</strong> {telegramUserData.userId}
+                      </p>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={handleVerification}
+                      disabled={isVerifying}
+                    >
+                      Use Previous Verification
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 ml-2"
+                      onClick={() => setTelegramUserData(null)}
+                    >
+                      Verify Again
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {!telegramUserData && (
+                <TelegramVerificationForm
+                  campaignId={campaignId}
+                  taskId={taskId || ''}
+                  onVerificationComplete={(success, message, telegramData) => {
+                    if (success && telegramData) {
+                      // Store the telegram data and trigger verification
+                      setTelegramUserData(telegramData)
+                      // Call the parent's onVerify function
+                      handleVerification()
+                    } else {
+                      setConnectionError(message || 'Verification failed')
+                    }
+                  }}
+                  isLoading={isVerifying}
+                />
+              )}
             </div>
             <DialogFooter>
               <DialogClose asChild>

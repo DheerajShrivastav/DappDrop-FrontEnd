@@ -12,7 +12,11 @@ import { useWallet } from '@/context/wallet-provider'
 interface TelegramVerificationFormProps {
   campaignId: string
   taskId: string
-  onVerificationComplete: (success: boolean, message?: string) => void
+  onVerificationComplete: (
+    success: boolean,
+    message?: string,
+    telegramData?: any
+  ) => void
   isLoading?: boolean
 }
 
@@ -60,9 +64,16 @@ export function TelegramVerificationForm({
       const result = await response.json()
 
       if (result.success && result.verified) {
+        // Pass the telegram data back to the parent
+        const telegramData = {
+          username: telegramUsername,
+          userId: telegramUserId,
+        }
+
         onVerificationComplete(
           true,
-          'Telegram membership verified successfully!'
+          'Telegram membership verified successfully!',
+          telegramData
         )
       } else {
         onVerificationComplete(false, result.error || 'Verification failed')
@@ -88,35 +99,41 @@ export function TelegramVerificationForm({
           <Info className="h-4 w-4" />
           <AlertDescription>
             You need to be a member of the Telegram channel/group to complete
-            this task. Provide either your username or user ID for verification.
+            this task. For better verification accuracy, we recommend providing
+            your Telegram User ID.
           </AlertDescription>
         </Alert>
 
         <div className="space-y-3">
           <div>
-            <Label htmlFor="telegram-username">
-              Telegram Username (Optional)
-            </Label>
+            <Label htmlFor="telegram-username">Telegram Username</Label>
             <Input
               id="telegram-username"
               type="text"
-              placeholder="@username (without @)"
+              placeholder="username (without @)"
               value={telegramUsername}
               onChange={(e) =>
                 setTelegramUsername(e.target.value.replace('@', ''))
               }
               disabled={isLoading || isVerifying}
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Enter your Telegram username without the @ symbol
+            </p>
           </div>
 
-          <div className="text-center text-sm text-muted-foreground">OR</div>
+          <div className="text-center text-sm text-muted-foreground">
+            <span className="bg-background px-2">OR for better accuracy</span>
+          </div>
 
           <div>
-            <Label htmlFor="telegram-userid">Telegram User ID (Optional)</Label>
+            <Label htmlFor="telegram-userid">
+              Telegram User ID (Recommended)
+            </Label>
             <Input
               id="telegram-userid"
               type="text"
-              placeholder="Your Telegram user ID"
+              placeholder="Your Telegram user ID (e.g., 123456789)"
               value={telegramUserId}
               onChange={(e) => setTelegramUserId(e.target.value)}
               disabled={isLoading || isVerifying}

@@ -3,8 +3,15 @@ export async function storeCampaignTaskMetadata(
   campaignId: string,
   tasks: any[]
 ) {
-  console.log('🏁 Starting to store metadata for campaign:', campaignId)
-  console.log('📋 All tasks received:', JSON.stringify(tasks, null, 2))
+  console.log('🚀 === STARTING METADATA STORAGE ===')
+  console.log('🏁 Campaign ID:', campaignId)
+  console.log('📋 Number of tasks:', tasks.length)
+  console.log('📋 Full tasks array:', JSON.stringify(tasks, null, 2))
+
+  if (!tasks || tasks.length === 0) {
+    console.warn('⚠️ No tasks provided to store')
+    return
+  }
 
   for (const [index, task] of tasks.entries()) {
     console.log(`🔄 Processing task ${index}:`, task)

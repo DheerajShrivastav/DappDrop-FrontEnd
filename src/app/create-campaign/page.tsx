@@ -185,6 +185,11 @@ export default function CreateCampaignPage() {
   const tasks = form.watch('tasks')
 
   const onSubmit = async (data: CampaignFormValues) => {
+    console.log('🚀 === FORM SUBMISSION STARTED ===')
+    console.log('📋 Form data received:', JSON.stringify(data, null, 2))
+    console.log('📋 Tasks in form data:', data.tasks)
+    console.log('📋 Create mode:', createMode)
+
     if (!isConnected || !address) {
       toast({
         variant: 'destructive',
@@ -195,10 +200,13 @@ export default function CreateCampaignPage() {
     }
     setIsLoading(true)
     try {
+      console.log('🔄 About to call campaign creation function...')
       const campaignId =
         createMode === 'activate'
           ? await createAndActivateCampaign(data)
           : await createCampaign(data)
+
+      console.log('✅ Campaign created successfully with ID:', campaignId)
 
       const successMessage =
         createMode === 'activate'
