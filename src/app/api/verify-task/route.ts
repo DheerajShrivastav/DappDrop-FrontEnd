@@ -140,8 +140,9 @@ export async function POST(request: Request) {
       }
 
       isVerified = await verifyTelegramJoin(
-        telegramUsername || telegramUserId,
-        taskMetadata.telegramChatId || taskMetadata.telegramInviteLink || ''
+        telegramUsername || '',
+        taskMetadata.telegramChatId || '',
+        telegramUserId
       )
 
       if (isVerified) {

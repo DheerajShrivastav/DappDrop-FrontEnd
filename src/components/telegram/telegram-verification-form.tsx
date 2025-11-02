@@ -38,8 +38,14 @@ export function TelegramVerificationForm({
       return
     }
 
-    if (!telegramUsername && !telegramUserId) {
-      setError('Please provide either your Telegram username or user ID')
+    if (!telegramUserId) {
+      setError('Telegram User ID is required for accurate verification')
+      return
+    }
+
+    // Validate user ID format (should be numeric)
+    if (!/^\d+$/.test(telegramUserId)) {
+      setError('Telegram User ID must be a numeric value')
       return
     }
 
@@ -57,7 +63,7 @@ export function TelegramVerificationForm({
           taskId,
           userAddress: address,
           telegramUsername: telegramUsername || undefined,
-          telegramUserId: telegramUserId || undefined,
+          telegramUserId: telegramUserId,
         }),
       })
 
@@ -66,7 +72,7 @@ export function TelegramVerificationForm({
       if (result.success && result.verified) {
         // Pass the telegram data back to the parent
         const telegramData = {
-          username: telegramUsername,
+          username: telegramUsername || undefined,
           userId: telegramUserId,
         }
 
@@ -76,11 +82,36 @@ export function TelegramVerificationForm({
           telegramData
         )
       } else {
-        onVerificationComplete(false, result.error || 'Verification failed')
+        // Handle specific error cases with helpful messages
+        let errorMessage = result.error || 'Verification failed'
+
+        if (errorMessage.includes('Network timeout')) {
+          errorMessage =
+            'Network timeout: Please check your internet connection and try again.'
+        } else if (errorMessage.includes('NOT a member')) {
+          errorMessage = `You are not a member of the required Telegram channel. Please join first and try again.`
+        } else if (errorMessage.includes('User ID is required')) {
+          errorMessage =
+            'Telegram User ID is required. Please get your ID from @userinfobot and try again.'
+        }
+
+        onVerificationComplete(false, errorMessage)
       }
     } catch (error) {
       console.error('Verification error:', error)
-      onVerificationComplete(false, 'Failed to verify Telegram membership')
+
+      // Handle network errors specifically
+      let errorMessage = 'Failed to verify Telegram membership'
+      if (error instanceof Error) {
+        if (error.message.includes('fetch') || error.name === 'TypeError') {
+          errorMessage =
+            'Network error: Please check your internet connection and try again.'
+        } else {
+          errorMessage = error.message
+        }
+      }
+
+      onVerificationComplete(false, errorMessage)
     } finally {
       setIsVerifying(false)
     }
@@ -99,14 +130,36 @@ export function TelegramVerificationForm({
           <Info className="h-4 w-4" />
           <AlertDescription>
             You need to be a member of the Telegram channel/group to complete
-            this task. For better verification accuracy, we recommend providing
-            your Telegram User ID.
+            this task. <strong>Telegram User ID is required</strong> for
+            accurate verification due to Telegram Bot API limitations.
           </AlertDescription>
         </Alert>
 
         <div className="space-y-3">
           <div>
-            <Label htmlFor="telegram-username">Telegram Username</Label>
+            <Label htmlFor="telegram-userid">
+              Telegram User ID (Required){' '}
+              <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="telegram-userid"
+              type="text"
+              placeholder="Your Telegram user ID (e.g., 123456789)"
+              value={telegramUserId}
+              onChange={(e) =>
+                setTelegramUserId(e.target.value.replace(/\D/g, ''))
+              }
+              disabled={isLoading || isVerifying}
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Numeric user ID is required for verification
+            </p>
+          </div>
+
+          <div>
+            <Label htmlFor="telegram-username">
+              Telegram Username (Optional)
+            </Label>
             <Input
               id="telegram-username"
               type="text"
@@ -118,26 +171,8 @@ export function TelegramVerificationForm({
               disabled={isLoading || isVerifying}
             />
             <p className="text-xs text-muted-foreground mt-1">
-              Enter your Telegram username without the @ symbol
+              Optional: Your username for additional verification
             </p>
-          </div>
-
-          <div className="text-center text-sm text-muted-foreground">
-            <span className="bg-background px-2">OR for better accuracy</span>
-          </div>
-
-          <div>
-            <Label htmlFor="telegram-userid">
-              Telegram User ID (Recommended)
-            </Label>
-            <Input
-              id="telegram-userid"
-              type="text"
-              placeholder="Your Telegram user ID (e.g., 123456789)"
-              value={telegramUserId}
-              onChange={(e) => setTelegramUserId(e.target.value)}
-              disabled={isLoading || isVerifying}
-            />
           </div>
         </div>
 
@@ -149,28 +184,49 @@ export function TelegramVerificationForm({
 
         <Button
           onClick={handleVerification}
-          disabled={
-            isLoading || isVerifying || (!telegramUsername && !telegramUserId)
-          }
+          disabled={isLoading || isVerifying || !telegramUserId}
           className="w-full"
         >
           {isVerifying ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Verifying...
+              Verifying membership...
             </>
           ) : (
             'Verify Telegram Membership'
           )}
         </Button>
 
-        <div className="text-xs text-muted-foreground space-y-1">
+        {isVerifying && (
+          <div className="text-xs text-muted-foreground text-center border rounded p-2 bg-blue-50">
+            <p>Checking your membership via Telegram API...</p>
+            <p>This may take a few moments due to network conditions.</p>
+            <p className="text-orange-600">
+              If it takes too long, we'll retry automatically.
+            </p>
+          </div>
+        )}
+
+        <div className="text-xs text-muted-foreground space-y-2 border-t pt-3">
           <p>
             <strong>How to find your Telegram User ID:</strong>
           </p>
-          <p>1. Message @userinfobot on Telegram</p>
-          <p>2. Send any message to get your user ID</p>
-          <p>3. Copy the ID number and paste it above</p>
+          <div className="bg-muted p-2 rounded text-xs space-y-1">
+            <p>
+              <strong>Method 1:</strong> Message @userinfobot on Telegram
+            </p>
+            <p>
+              <strong>Method 2:</strong> Message @getmyid_bot on Telegram
+            </p>
+            <p>
+              <strong>Method 3:</strong> Forward any message to @userinfobot
+            </p>
+          </div>
+          <p className="text-orange-600">
+            ⚠️ Username-only verification is not reliable due to Telegram API
+            limitations. User ID is required for accurate membership
+            verification.
+          </p>
         </div>
       </CardContent>
     </Card>
