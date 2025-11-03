@@ -159,17 +159,11 @@ export const verifyTelegramJoin = async (
         const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
         const response = await fetch(
-          `https://api.telegram.org/bot${
-            process.env.TELEGRAM_BOT_TOKEN
-          }/getChatMember?chat_id=${encodeURIComponent(
-            telegramChatId
-          )}&user_id=${telegramUserId}`,
+          `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getChatMember?chat_id=${telegramChatId}&user_id=${telegramUserId}`,
           {
             method: 'GET',
             signal: controller.signal,
-            headers: {
-              'User-Agent': 'DappDrop-Bot/1.0',
-            },
+            
           }
         )
 
