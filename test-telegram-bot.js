@@ -2,8 +2,7 @@
 
 async function testTelegramBot() {
   const TELEGRAM_BOT_TOKEN =
-    process.env.TELEGRAM_BOT_TOKEN ||
-    '7950005519:AAE81VpT9ktFdwky-y_E1jVgpZdQA741HTE'
+    process.env.TELEGRAM_BOT_TOKEN 
 
   console.log('🤖 Testing Telegram Bot...')
 
