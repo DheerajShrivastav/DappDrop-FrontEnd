@@ -13,6 +13,10 @@ const config = {
   // Discord bot invite URL for hosts to add the bot to their servers
   // This enables automatic verification of Discord join tasks
   discordBotInviteUrl: process.env.NEXT_PUBLIC_DISCORD_BOT_INVITE_URL,
+
+  // Telegram bot configuration for Telegram verification tasks
+  // Bot username is used to generate invite links for channels
+  telegramBotUsername: process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME,
 }
 
 export default config

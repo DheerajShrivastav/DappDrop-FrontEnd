@@ -72,12 +72,19 @@ import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
 
 const taskSchema = z.object({
-  type: z.enum(['SOCIAL_FOLLOW', 'JOIN_DISCORD', 'RETWEET', 'ONCHAIN_TX']),
+  type: z.enum([
+    'SOCIAL_FOLLOW',
+    'JOIN_DISCORD',
+    'JOIN_TELEGRAM',
+    'RETWEET',
+    'ONCHAIN_TX',
+  ]),
   description: z
     .string()
     .min(3, 'Task description must be at least 3 characters long.'),
   verificationData: z.string().optional(),
   discordInviteLink: z.string().optional(),
+  telegramInviteLink: z.string().optional(),
 })
 
 const campaignSchema = z.object({
@@ -126,7 +133,8 @@ type CampaignFormValues = z.infer<typeof campaignSchema>
 
 const TASK_TYPE_OPTIONS: { value: TaskType; label: string }[] = [
   { value: 'SOCIAL_FOLLOW', label: 'Social Follow' },
-  { value: 'JOIN_DISCORD', label: 'Join Discord/Telegram' },
+  { value: 'JOIN_DISCORD', label: 'Join Discord' },
+  { value: 'JOIN_TELEGRAM', label: 'Join Telegram' },
   { value: 'RETWEET', label: 'Retweet Post' },
   { value: 'ONCHAIN_TX', label: 'On-chain Action' },
 ]
@@ -159,6 +167,7 @@ export default function CreateCampaignPage() {
           description: '',
           verificationData: '',
           discordInviteLink: '',
+          telegramInviteLink: '',
         },
       ],
       reward: { type: 'ERC20', tokenAddress: '', amount: '', name: '' },
@@ -176,6 +185,11 @@ export default function CreateCampaignPage() {
   const tasks = form.watch('tasks')
 
   const onSubmit = async (data: CampaignFormValues) => {
+    console.log('🚀 === FORM SUBMISSION STARTED ===')
+    console.log('📋 Form data received:', JSON.stringify(data, null, 2))
+    console.log('📋 Tasks in form data:', data.tasks)
+    console.log('📋 Create mode:', createMode)
+
     if (!isConnected || !address) {
       toast({
         variant: 'destructive',
@@ -186,10 +200,13 @@ export default function CreateCampaignPage() {
     }
     setIsLoading(true)
     try {
+      console.log('🔄 About to call campaign creation function...')
       const campaignId =
         createMode === 'activate'
           ? await createAndActivateCampaign(data)
           : await createCampaign(data)
+
+      console.log('✅ Campaign created successfully with ID:', campaignId)
 
       const successMessage =
         createMode === 'activate'
@@ -682,6 +699,24 @@ export default function CreateCampaignPage() {
                       </Alert>
                     )}
 
+                  {/* Telegram Bot Warning - Show if Telegram tasks exist but bot username is not configured */}
+                  {tasks.some((task) => task.type === 'JOIN_TELEGRAM') &&
+                    !config.telegramBotUsername && (
+                      <Alert
+                        variant="destructive"
+                        className="border-orange-200 bg-orange-50"
+                      >
+                        <Bot className="h-4 w-4" />
+                        <AlertTitle>Telegram Bot Not Configured</AlertTitle>
+                        <AlertDescription>
+                          You have Telegram join tasks but the bot username is
+                          not configured. Telegram verification will not work
+                          until the bot is properly set up. Please contact
+                          support to configure the Telegram bot.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
                   {fields.map((field, index) => (
                     <div
                       key={field.id}
@@ -853,6 +888,130 @@ export default function CreateCampaignPage() {
                           </div>
                         </div>
                       )}
+
+                      {tasks[index].type === 'JOIN_TELEGRAM' && (
+                        <div className="space-y-4">
+                          <FormField
+                            control={form.control}
+                            name={`tasks.${index}.verificationData`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel>Telegram Channel/Group ID</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="e.g., @yourchannel or -100123456789"
+                                    {...field}
+                                    value={field.value ?? ''}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  The Telegram channel/group ID or username
+                                  (with @) used for verification
+                                </FormDescription>
+                                <details className="mt-2">
+                                  <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                                    How to get your Telegram Channel/Group ID
+                                  </summary>
+                                  <div className="mt-2 text-xs space-y-1 text-muted-foreground">
+                                    <p>
+                                      <strong>
+                                        For Channels with username:
+                                      </strong>{' '}
+                                      Use @channelname
+                                    </p>
+                                    <p>
+                                      <strong>
+                                        For Groups/Channels without username:
+                                      </strong>
+                                    </p>
+                                    <p>
+                                      1. Add @userinfobot to your group/channel
+                                    </p>
+                                    <p>2. The bot will show the chat ID</p>
+                                    <p>3. Use the ID (starts with -100)</p>
+                                  </div>
+                                </details>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`tasks.${index}.telegramInviteLink`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel>Telegram Invite Link</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="e.g., https://t.me/yourchannel or https://t.me/+invitecode"
+                                    {...field}
+                                    value={field.value ?? ''}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  The invite link participants will use to join
+                                  your Telegram channel/group
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          {/* Telegram Bot Setup Instructions */}
+                          <div className="p-4 bg-sky-50 border border-sky-200 rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-sky-800">
+                              <Bot className="h-5 w-5" />
+                              <h4 className="font-semibold">
+                                Required: Add DappDrop Bot to Your Channel/Group
+                              </h4>
+                            </div>
+                            <p className="text-sm text-sky-700">
+                              To enable automatic verification of Telegram join
+                              tasks, you must add our bot to your Telegram
+                              channel/group.
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              {config.telegramBotUsername ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-fit bg-white border-sky-300 text-sky-700 hover:bg-sky-50"
+                                  onClick={() =>
+                                    window.open(
+                                      `https://t.me/${config.telegramBotUsername}`,
+                                      '_blank'
+                                    )
+                                  }
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  Add @{config.telegramBotUsername} to
+                                  Channel/Group
+                                </Button>
+                              ) : (
+                                <p className="text-sm text-sky-600 font-medium">
+                                  Telegram bot username not configured. Please
+                                  contact support.
+                                </p>
+                              )}
+                              <div className="text-xs text-sky-600 space-y-1">
+                                <p>
+                                  <strong>Required Permissions:</strong>
+                                </p>
+                                <ul className="list-disc list-inside ml-2 space-y-0.5">
+                                  <li>Read Messages</li>
+                                  <li>See Members List (for groups)</li>
+                                </ul>
+                                <p className="mt-2">
+                                  <strong>Note:</strong> For channels, make sure
+                                  the bot is added as an admin. For groups, it
+                                  can be a regular member.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                   <Button
@@ -865,6 +1024,7 @@ export default function CreateCampaignPage() {
                         description: '',
                         verificationData: '',
                         discordInviteLink: '',
+                        telegramInviteLink: '',
                       })
                     }
                   >

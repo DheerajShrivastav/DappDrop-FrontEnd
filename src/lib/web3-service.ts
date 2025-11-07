@@ -84,6 +84,7 @@ const mapContractDataToCampaign = (
   const taskTypeMap: TaskType[] = [
     'SOCIAL_FOLLOW',
     'JOIN_DISCORD',
+    'JOIN_TELEGRAM',
     'RETWEET',
     'ONCHAIN_TX',
   ]
@@ -542,6 +543,12 @@ export const getCampaignByIdWithMetadata = async (
 }
 
 export const createAndActivateCampaign = async (campaignData: any) => {
+  console.log('🚀 === createAndActivateCampaign FUNCTION CALLED ===')
+  console.log(
+    '📋 Campaign data received:',
+    JSON.stringify(campaignData, null, 2)
+  )
+
   if (!contract) throw new Error('Contract not initialized')
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
@@ -561,8 +568,9 @@ export const createAndActivateCampaign = async (campaignData: any) => {
   const taskTypeMap: Record<TaskType, number> = {
     SOCIAL_FOLLOW: 0,
     JOIN_DISCORD: 1,
-    RETWEET: 2,
-    ONCHAIN_TX: 3,
+    JOIN_TELEGRAM: 2,
+    RETWEET: 3,
+    ONCHAIN_TX: 4,
   }
 
   try {
@@ -577,7 +585,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     const event = receipt.logs
       .map((log: any) => {
         try {
-          return contract.interface.parseLog(log)
+          return contract?.interface.parseLog(log) || null
         } catch (e) {
           return null
         }
@@ -588,7 +596,18 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     const campaignId = event.args.campaignId.toString()
 
     // 2. Add Tasks
+    console.log(
+      '🔄 Processing tasks in createAndActivateCampaign:',
+      campaignData.tasks.length
+    )
     for (const task of campaignData.tasks) {
+      console.log('🔧 Processing task in createAndActivateCampaign:', {
+        type: task.type,
+        verificationData: task.verificationData,
+        telegramInviteLink: task.telegramInviteLink,
+        discordInviteLink: task.discordInviteLink,
+      })
+
       const taskType = taskTypeMap[task.type as TaskType]
 
       // For blockchain storage, we only store the server ID (needed for verification)
@@ -612,6 +631,10 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
         try {
           const taskIndex = campaignData.tasks.indexOf(task)
+          console.log(
+            '🎮 Storing Discord metadata for task in createAndActivateCampaign',
+            taskIndex
+          )
           await fetch('/api/campaign-task-metadata', {
             method: 'POST',
             headers: {
@@ -624,9 +647,56 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               discordInviteLink: task.discordInviteLink,
             }),
           })
+          console.log(
+            '✅ Discord metadata stored successfully in createAndActivateCampaign'
+          )
         } catch (e) {
           console.warn('Failed to store Discord invite link in database:', e)
         }
+      }
+
+      if (
+        task.type === 'JOIN_TELEGRAM' &&
+        (task.verificationData || task.telegramInviteLink)
+      ) {
+        try {
+          const taskIndex = campaignData.tasks.indexOf(task)
+          console.log(
+            '📱 Storing Telegram metadata for task in createAndActivateCampaign',
+            taskIndex
+          )
+
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              campaignId: campaignId,
+              taskIndex: taskIndex,
+              taskType: task.type,
+              telegramChatId: task.verificationData, // Form stores chat ID in verificationData
+              telegramInviteLink: task.telegramInviteLink,
+            }),
+          })
+
+          console.log(
+            '📤 Sending Telegram metadata request in createAndActivateCampaign:'
+          )
+        } catch (e) {
+          console.warn(
+            '❌ Failed to store Telegram metadata in database in createAndActivateCampaign:',
+            e
+          )
+        }
+      } else if (task.type === 'JOIN_TELEGRAM') {
+        console.log(
+          '⚠️ Telegram task found but missing data in createAndActivateCampaign:',
+          {
+            verificationData: task.verificationData,
+            telegramInviteLink: task.telegramInviteLink,
+          }
+        )
       }
     }
 
@@ -697,6 +767,12 @@ export const createAndActivateCampaign = async (campaignData: any) => {
 }
 
 export const createCampaign = async (campaignData: any) => {
+  console.log('🚀 === createCampaign FUNCTION CALLED ===')
+  console.log(
+    '📋 Campaign data received:',
+    JSON.stringify(campaignData, null, 2)
+  )
+
   if (!contract) throw new Error('Contract not initialized')
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
@@ -711,8 +787,9 @@ export const createCampaign = async (campaignData: any) => {
   const taskTypeMap: Record<TaskType, number> = {
     SOCIAL_FOLLOW: 0,
     JOIN_DISCORD: 1,
-    RETWEET: 2,
-    ONCHAIN_TX: 3,
+    JOIN_TELEGRAM: 2,
+    RETWEET: 3,
+    ONCHAIN_TX: 4,
   }
 
   try {
@@ -738,7 +815,15 @@ export const createCampaign = async (campaignData: any) => {
     const campaignId = event.args.campaignId.toString()
 
     // 2. Add Tasks
+    console.log('🔄 Processing tasks:', campaignData.tasks.length)
     for (const task of campaignData.tasks) {
+      console.log('🔧 Processing task:', {
+        type: task.type,
+        verificationData: task.verificationData,
+        telegramInviteLink: task.telegramInviteLink,
+        discordInviteLink: task.discordInviteLink,
+      })
+
       const taskType = taskTypeMap[task.type as TaskType]
 
       // For blockchain storage, we only store the server ID (needed for verification)
@@ -762,6 +847,7 @@ export const createCampaign = async (campaignData: any) => {
       if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
         try {
           const taskIndex = campaignData.tasks.indexOf(task)
+          console.log('🎮 Storing Discord metadata for task', taskIndex)
           await fetch('/api/campaign-task-metadata', {
             method: 'POST',
             headers: {
@@ -774,9 +860,103 @@ export const createCampaign = async (campaignData: any) => {
               discordInviteLink: task.discordInviteLink,
             }),
           })
+          console.log('✅ Discord metadata stored successfully')
         } catch (e) {
           console.warn('Failed to store Discord invite link in database:', e)
         }
+      }
+
+      // Store Telegram metadata in database for this campaign
+      console.log(
+        '🔍 Checking Telegram task conditions for task type:',
+        task.type
+      )
+      console.log(
+        '🔍 Task type strict equality check:',
+        task.type === 'JOIN_TELEGRAM'
+      )
+      console.log('🔍 Verification data exists:', !!task.verificationData)
+      console.log('🔍 Telegram invite link exists:', !!task.telegramInviteLink)
+      console.log(
+        '🔍 Combined condition result:',
+        task.type === 'JOIN_TELEGRAM' &&
+          (task.verificationData || task.telegramInviteLink)
+      )
+
+      if (
+        task.type === 'JOIN_TELEGRAM' &&
+        (task.verificationData || task.telegramInviteLink)
+      ) {
+        try {
+          const taskIndex = campaignData.tasks.indexOf(task)
+          console.log('📱 Storing Telegram metadata for task', taskIndex, {
+            verificationData: task.verificationData,
+            telegramInviteLink: task.telegramInviteLink,
+          })
+
+          const requestBody = {
+            campaignId: campaignId,
+            taskIndex: taskIndex,
+            taskType: task.type,
+            telegramChatId: task.verificationData, // Form stores chat ID in verificationData
+            telegramInviteLink: task.telegramInviteLink,
+          }
+
+          console.log('📤 Sending Telegram metadata request:', requestBody)
+          console.log(
+            '🌐 Current environment:',
+            typeof window !== 'undefined' ? 'browser' : 'server'
+          )
+          console.log(
+            '🌐 Base URL will be:',
+            typeof window !== 'undefined' ? window.location.origin : 'relative'
+          )
+
+          const apiUrl =
+            typeof window !== 'undefined'
+              ? `${window.location.origin}/api/campaign-task-metadata`
+              : '/api/campaign-task-metadata'
+
+          console.log('🌐 Using API URL:', apiUrl)
+
+          let response
+          try {
+            response = await fetch(apiUrl, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(requestBody),
+            })
+            console.log('📡 Fetch completed, status:', response.status)
+          } catch (fetchError) {
+            console.error('❌ Fetch failed in createCampaign:', fetchError)
+            throw fetchError
+          }
+
+          console.log(
+            '📥 Telegram metadata API response status:',
+            response.status
+          )
+          const responseData = await response.json()
+          console.log('📥 Telegram metadata API response data:', responseData)
+
+          if (response.ok) {
+            console.log('✅ Stored Telegram metadata for task', taskIndex)
+          } else {
+            console.error(
+              '❌ Failed to store Telegram metadata - API error:',
+              responseData
+            )
+          }
+        } catch (e) {
+          console.warn('❌ Failed to store Telegram metadata in database:', e)
+        }
+      } else if (task.type === 'JOIN_TELEGRAM') {
+        console.log('⚠️ Telegram task found but missing data:', {
+          verificationData: task.verificationData,
+          telegramInviteLink: task.telegramInviteLink,
+        })
       }
     }
 
@@ -812,6 +992,8 @@ export const createCampaign = async (campaignData: any) => {
       )
       await rewardTx.wait()
     }
+
+    console.log('🎯 Campaign creation successful! Campaign ID:', campaignId)
 
     toast({
       title: 'Success!',
@@ -1128,21 +1310,28 @@ export const getUserTaskCompletionStatus = async (
     })
 
     // Check if we have a provider
-    let provider = contractToUse.provider
+    let providerInstance: ethers.Provider | null = null
 
-    if (!provider) {
+    if (
+      contractToUse.provider &&
+      typeof (contractToUse.provider as any).getBlockNumber === 'function'
+    ) {
+      providerInstance = contractToUse.provider as unknown as ethers.Provider
+    }
+
+    if (!providerInstance) {
       // Create a new provider if the contract doesn't have one
-      provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+      providerInstance = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
 
       // Create a new contract instance with the provider
       contractToUse = new ethers.Contract(
         config.campaignFactoryAddress!,
         Web3Campaigns.abi,
-        provider
+        providerInstance
       )
     }
 
-    const latestBlock = await provider.getBlockNumber()
+    const latestBlock = await providerInstance.getBlockNumber()
     const startBlock = Math.max(0, latestBlock - 49999) // Look back up to ~50k blocks
 
     console.log(`Querying events from block ${startBlock} to ${latestBlock}`)
@@ -1194,7 +1383,7 @@ export const getUserTaskCompletionStatus = async (
       eventsFound: events.length,
       taskIds: tasks.map((t) => t.id),
       eventDetails: events.map((e) => ({
-        taskIndex: Number(e.args?.[2]),
+        taskIndex: Number((e as any).args?.[2]),
         blockNumber: e.blockNumber,
         transactionHash: e.transactionHash,
       })),
@@ -1247,24 +1436,31 @@ export const getCampaignParticipantAddresses = async (
 
   try {
     // Check if we have a provider
-    let provider = contractToUse.provider
+    let providerInstance: ethers.Provider | null = null
 
-    if (!provider) {
+    if (
+      contractToUse.provider &&
+      typeof (contractToUse.provider as any).getBlockNumber === 'function'
+    ) {
+      providerInstance = contractToUse.provider as unknown as ethers.Provider
+    }
+
+    if (!providerInstance) {
       console.log('No provider on contract, creating new JsonRpc provider...')
       // Create a new provider if the contract doesn't have one
-      provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+      providerInstance = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
 
       // Create a new contract instance with the provider
       contractToUse = new ethers.Contract(
         config.campaignFactoryAddress!,
         Web3Campaigns.abi,
-        provider
+        providerInstance
       )
     }
 
-    console.log('Using provider:', provider.constructor.name)
+    console.log('Using provider:', providerInstance.constructor.name)
 
-    const latestBlock = await provider.getBlockNumber()
+    const latestBlock = await providerInstance.getBlockNumber()
     const startBlock = Math.max(0, latestBlock - 49999) // Look back up to ~50k blocks
 
     console.log('Querying events from block', startBlock, 'to', latestBlock)
@@ -1321,21 +1517,28 @@ export const getCampaignParticipants = async (
 
   try {
     // Check if we have a provider
-    let provider = contractToUse.provider
+    let providerInstance: ethers.Provider | null = null
 
-    if (!provider) {
+    if (
+      contractToUse.provider &&
+      typeof (contractToUse.provider as any).getBlockNumber === 'function'
+    ) {
+      providerInstance = contractToUse.provider as unknown as ethers.Provider
+    }
+
+    if (!providerInstance) {
       // Create a new provider if the contract doesn't have one
-      provider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+      providerInstance = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
 
       // Create a new contract instance with the provider
       contractToUse = new ethers.Contract(
         config.campaignFactoryAddress!,
         Web3Campaigns.abi,
-        provider
+        providerInstance
       )
     }
 
-    const latestBlock = await provider.getBlockNumber()
+    const latestBlock = await providerInstance.getBlockNumber()
 
     const maxRange = 50000
     const startBlock = Math.max(0, latestBlock - 49999)
@@ -1369,7 +1572,7 @@ export const getCampaignParticipants = async (
     const participantAddresses = Array.from(participantTaskCompletion.keys())
     const participantData = await Promise.all(
       participantAddresses.map(async (address) => {
-        const hasClaimed = await contractToUse.hasClaimedReward(
+        const hasClaimed = await contractToUse!.hasClaimedReward(
           campaign.id,
           address
         )

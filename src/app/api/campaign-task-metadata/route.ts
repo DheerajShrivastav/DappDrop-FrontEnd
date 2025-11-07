@@ -3,10 +3,31 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 export async function POST(request: Request) {
+  console.log('🌐 === CAMPAIGN TASK METADATA API CALLED ===')
+  
   try {
     const body = await request.json()
-    const { campaignId, taskIndex, taskType, discordInviteLink, metadata } =
-      body
+    console.log('📥 Received request body:', JSON.stringify(body, null, 2))
+    
+    const {
+      campaignId,
+      taskIndex,
+      taskType,
+      discordInviteLink,
+      telegramInviteLink,
+      telegramChatId,
+      metadata,
+    } = body
+
+    console.log('📝 Extracted fields:', {
+      campaignId,
+      taskIndex,
+      taskType,
+      discordInviteLink,
+      telegramInviteLink,
+      telegramChatId,
+      metadata,
+    })
 
     if (!campaignId || taskIndex === undefined || !taskType) {
       return NextResponse.json(
@@ -16,32 +37,40 @@ export async function POST(request: Request) {
     }
 
     // Upsert (create or update) the task metadata
-    const taskMetadata = await prisma.campaignTaskMetadata.upsert({
+    const data = await prisma.campaignTaskMetadata.upsert({
       where: {
         campaignId_taskIndex: {
           campaignId: campaignId.toString(),
-          taskIndex: parseInt(taskIndex, 10),
+          taskIndex: parseInt(taskIndex.toString()),
         },
       },
       update: {
         taskType,
-        discordInviteLink: discordInviteLink || null,
-        metadata: metadata || null,
+        discordInviteLink,
+        telegramInviteLink,
+        telegramChatId,
+        metadata,
       },
       create: {
         campaignId: campaignId.toString(),
-        taskIndex: parseInt(taskIndex, 10),
+        taskIndex: parseInt(taskIndex.toString()),
         taskType,
-        discordInviteLink: discordInviteLink || null,
-        metadata: metadata || null,
+        discordInviteLink,
+        telegramInviteLink,
+        telegramChatId,
+        metadata,
       },
     })
 
-    return NextResponse.json({ success: true, data: taskMetadata })
-  } catch (error) {
-    console.error('Error managing task metadata:', error)
+    console.log('✅ Successfully stored task metadata:', data.id)
+    return NextResponse.json({ success: true, data })
+  } catch (error: any) {
+    console.error('❌ Error managing task metadata:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        details: error.message || 'Unknown error',
+      },
       { status: 500 }
     )
   }
