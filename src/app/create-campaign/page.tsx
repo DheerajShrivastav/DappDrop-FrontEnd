@@ -58,6 +58,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useWallet } from '@/context/wallet-provider'
@@ -85,6 +86,7 @@ const taskSchema = z.object({
   verificationData: z.string().optional(),
   discordInviteLink: z.string().optional(),
   telegramInviteLink: z.string().optional(),
+  requiresHumanityVerification: z.boolean().optional(),
 })
 
 const campaignSchema = z.object({
@@ -168,6 +170,7 @@ export default function CreateCampaignPage() {
           verificationData: '',
           discordInviteLink: '',
           telegramInviteLink: '',
+          requiresHumanityVerification: false,
         },
       ],
       reward: { type: 'ERC20', tokenAddress: '', amount: '', name: '' },
@@ -781,6 +784,32 @@ export default function CreateCampaignPage() {
                           <span className="sr-only">Remove Task</span>
                         </Button>
                       </div>
+                      
+                      {/* Humanity Protocol Verification Toggle */}
+                      <FormField
+                        control={form.control}
+                        name={`tasks.${index}.requiresHumanityVerification`}
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 bg-purple-50 border-purple-200">
+                            <div className="space-y-0.5">
+                              <FormLabel className="text-base flex items-center gap-2">
+                                <ShieldCheck className="h-4 w-4 text-purple-600" />
+                                Require Humanity Protocol Verification
+                              </FormLabel>
+                              <FormDescription>
+                                Only verified human users can complete this task. Prevents Sybil attacks through biometric verification.
+                              </FormDescription>
+                            </div>
+                            <FormControl>
+                              <Switch
+                                checked={field.value}
+                                onCheckedChange={field.onChange}
+                              />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      
                       {tasks[index].type === 'JOIN_DISCORD' && (
                         <div className="space-y-4">
                           <FormField
@@ -1025,6 +1054,7 @@ export default function CreateCampaignPage() {
                         verificationData: '',
                         discordInviteLink: '',
                         telegramInviteLink: '',
+                        requiresHumanityVerification: false,
                       })
                     }
                   >

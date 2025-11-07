@@ -12,6 +12,7 @@ export type Task = {
   verificationData?: string
   discordInviteLink?: string // For JOIN_DISCORD tasks: the actual invite link for participants to join
   telegramInviteLink?: string // For JOIN_TELEGRAM tasks: the actual invite link for participants to join
+  requiresHumanityVerification?: boolean // Whether this task requires Humanity Protocol verification
 }
 
 export type UserTask = {
@@ -59,6 +60,8 @@ export interface User {
   email?: string | null
   notificationSettings?: any
   preferences?: any
+  humanityVerified?: boolean
+  lastHumanityCheck?: Date | null
   createdAt: Date
 }
 
@@ -120,4 +123,23 @@ export interface TaskVerificationRequest {
 
 export interface CampaignSyncRequest {
   campaignId?: string
+}
+
+// Humanity Protocol types
+export interface HumanityVerificationRequest {
+  walletAddress: string
+}
+
+export interface HumanityVerificationResponse {
+  is_human: boolean
+  wallet_address: string
+  verified_at?: string
+  error?: string
+}
+
+export interface HumanityCachedVerification {
+  walletAddress: string
+  isHuman: boolean
+  verifiedAt: Date
+  expiresAt: Date
 }

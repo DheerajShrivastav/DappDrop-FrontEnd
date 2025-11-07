@@ -30,6 +30,7 @@ export async function storeCampaignTaskMetadata(
             taskIndex: index,
             taskType: task.type,
             discordInviteLink: task.discordInviteLink,
+            requiresHumanityVerification: task.requiresHumanityVerification || false,
           }),
         })
 
@@ -58,6 +59,7 @@ export async function storeCampaignTaskMetadata(
             taskType: task.type,
             telegramInviteLink: task.telegramInviteLink,
             telegramChatId: task.verificationData, // The form stores chat ID in verificationData
+            requiresHumanityVerification: task.requiresHumanityVerification || false,
           }
 
           console.log('📤 Request body:', JSON.stringify(requestBody, null, 2))
@@ -82,6 +84,30 @@ export async function storeCampaignTaskMetadata(
           console.warn(
             '⚠️ Telegram task found but no invite link or chat ID provided'
           )
+        }
+      }
+      
+      // Store Humanity verification requirement for all task types
+      if (task.requiresHumanityVerification) {
+        console.log('🛡️ Task requires Humanity verification, storing metadata...')
+        const response = await fetch('/api/campaign-task-metadata', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            campaignId: campaignId,
+            taskIndex: index,
+            taskType: task.type,
+            requiresHumanityVerification: true,
+          }),
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          console.error('❌ API Error for Humanity metadata:', errorData)
+        } else {
+          console.log('✅ Stored Humanity verification requirement for task', index)
         }
       }
     } catch (error) {
