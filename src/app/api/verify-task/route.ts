@@ -5,7 +5,6 @@ import {
   verifyTelegramJoin,
 } from '@/lib/verification-service'
 import { prisma } from '@/lib/prisma'
-import { isUserVerified } from '@/lib/humanity-service'
 
 export async function POST(request: Request) {
   try {
@@ -23,7 +22,7 @@ export async function POST(request: Request) {
     const taskIndex = parseInt(taskId, 10)
     let isVerified = false
 
-    // Check if task requires Humanity Protocol verification
+    // Get task metadata for Discord/Telegram
     const taskMetadata = await prisma.campaignTaskMetadata.findUnique({
       where: {
         campaignId_taskIndex: {
@@ -32,23 +31,6 @@ export async function POST(request: Request) {
         },
       },
     })
-
-    // If task requires Humanity verification, check it first
-    if (taskMetadata?.requiresHumanityVerification && userAddress) {
-      console.log('Task requires Humanity verification for:', userAddress)
-      const isHuman = await isUserVerified(userAddress)
-      
-      if (!isHuman) {
-        return NextResponse.json({
-          success: false,
-          verified: false,
-          requiresHumanityVerification: true,
-          message: 'This task requires Humanity Protocol verification. Please verify your identity at https://testnet.humanity.org',
-        }, { status: 403 })
-      }
-      
-      console.log('User is verified as human:', userAddress)
-    }
 
     // Simple task type detection without heavy validation
     const isDiscordTask = discordUsername || discordId

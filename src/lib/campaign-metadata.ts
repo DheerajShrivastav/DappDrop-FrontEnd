@@ -22,7 +22,6 @@ export async function storeCampaignTaskMetadata(
         campaignId: campaignId,
         taskIndex: index,
         taskType: task.type,
-        requiresHumanityVerification: task.requiresHumanityVerification || false,
       }
 
       // Add Discord-specific metadata
@@ -49,8 +48,7 @@ export async function storeCampaignTaskMetadata(
       if (
         task.discordInviteLink ||
         task.telegramInviteLink ||
-        task.verificationData ||
-        task.requiresHumanityVerification
+        task.verificationData
       ) {
         console.log('📤 Storing task metadata:', metadata)
         

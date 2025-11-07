@@ -57,7 +57,6 @@ import { Progress } from '@/components/ui/progress'
 import { CampaignAnalytics } from '@/components/campaign-analytics'
 import { DiscordAuthButton } from '@/components/discord-auth-button'
 import { TaskVerificationForm } from '@/components/task-verification-form'
-import { HumanityBadge } from '@/components/humanity-badge'
 import { HumanityVerificationModal } from '@/components/humanity-verification-modal'
 import {
   Dialog,
@@ -91,6 +90,8 @@ const TaskIcon = ({ type }: { type: TaskType['type'] }) => {
       return <Twitter className="h-5 w-5 text-sky-400" />
     case 'ONCHAIN_TX':
       return <ShieldCheck className="h-5 w-5 text-green-500" />
+    case 'HUMANITY_VERIFICATION':
+      return <ShieldCheck className="h-5 w-5 text-purple-600" />
     default:
       return <Bot className="h-5 w-5 text-muted-foreground" />
   }
@@ -456,6 +457,41 @@ export default function CampaignDetailsPage() {
         }
       }
 
+      // Handle HUMANITY_VERIFICATION task type specially
+      if (taskType === 'HUMANITY_VERIFICATION') {
+        // Check if user is verified
+        const humanityResponse = await fetch(`/api/verify-humanity?walletAddress=${address}`)
+        const humanityData = await humanityResponse.json()
+        
+        if (!humanityData.success || !humanityData.isHuman) {
+          // User is not verified, show modal
+          setIsHumanityModalOpen(true)
+          throw new Error('Please complete Humanity Protocol verification first')
+        }
+        
+        // User is verified, mark task as complete
+        const taskIndex = campaign.tasks.findIndex((task) => task.id === taskId)
+        if (taskIndex === -1) {
+          throw new Error('Task not found in campaign')
+        }
+
+        await completeTask(campaignId, taskIndex)
+
+        toast({
+          title: 'Humanity Verification Confirmed!',
+          description: 'Your identity has been verified successfully.',
+        })
+
+        // Refresh campaign data
+        await fetchAllCampaignData()
+
+        if (!isJoined) {
+          setIsJoined(true)
+        }
+        
+        return
+      }
+
       // Format discord username with discriminator if available
       const discordUsername =
         discordData?.username && discordData?.discriminator
@@ -480,11 +516,6 @@ export default function CampaignDetailsPage() {
       const result = await response.json()
 
       if (!response.ok || !result.success || !result.verified) {
-        // Check if it's a Humanity verification error
-        if (result.requiresHumanityVerification) {
-          setIsHumanityModalOpen(true)
-          throw new Error('Humanity Protocol verification required')
-        }
         throw new Error(result.error || 'Verification failed.')
       }
 
@@ -798,17 +829,12 @@ export default function CampaignDetailsPage() {
                         <div className="p-2 bg-background rounded-full">
                           <TaskIcon type={task.type} />
                         </div>
-                        <div className="flex flex-col gap-1">
-                          <label
-                            htmlFor={`task-${task.id}`}
-                            className="text-sm font-medium leading-none"
-                          >
-                            {task.description}
-                          </label>
-                          {task.requiresHumanityVerification && (
-                            <HumanityBadge size="sm" />
-                          )}
-                        </div>
+                        <label
+                          htmlFor={`task-${task.id}`}
+                          className="text-sm font-medium leading-none"
+                        >
+                          {task.description}
+                        </label>
                       </div>
                       {role === 'participant' && (
                         <div className="flex items-center gap-2">
@@ -821,6 +847,28 @@ export default function CampaignDetailsPage() {
                           >
                             <CheckCircle className="mr-2 h-4 w-4 text-green-500" />{' '}
                             Completed
+                          </Button>
+                        ) : task.type === 'HUMANITY_VERIFICATION' ? (
+                          <Button
+                            id={`task-${task.id}`}
+                            size="sm"
+                            variant="outline"
+                            disabled={isTaskDisabled}
+                            onClick={() => {
+                              // Check if user is verified, if not show modal
+                              if (!userHumanityStatus) {
+                                setIsHumanityModalOpen(true)
+                              } else {
+                                handleCompleteTask(task.id, task.type)
+                              }
+                            }}
+                          >
+                            {userTask?.isCompleting ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <ShieldCheck className="mr-2 h-4 w-4" />
+                            )}
+                            {userHumanityStatus ? 'Verify Task' : 'Get Verified'}
                           </Button>
                         ) : task.type === 'JOIN_DISCORD' ? (
                           <>

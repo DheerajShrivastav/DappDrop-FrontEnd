@@ -4,6 +4,7 @@ export type TaskType =
   | 'JOIN_TELEGRAM'
   | 'RETWEET'
   | 'ONCHAIN_TX'
+  | 'HUMANITY_VERIFICATION'
 
 export type Task = {
   id: string
@@ -12,7 +13,6 @@ export type Task = {
   verificationData?: string
   discordInviteLink?: string // For JOIN_DISCORD tasks: the actual invite link for participants to join
   telegramInviteLink?: string // For JOIN_TELEGRAM tasks: the actual invite link for participants to join
-  requiresHumanityVerification?: boolean // Whether this task requires Humanity Protocol verification
 }
 
 export type UserTask = {
