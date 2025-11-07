@@ -68,7 +68,15 @@ export async function POST(request: Request) {
       }
     } else if (isTelegramTask) {
       // Basic Telegram verification
-      const telegramChatId = '@defaultchannel' // Default or from env
+      const telegramChatId = await prisma.campaignTaskMetadata.findUnique({
+        where: {
+          campaignId_taskIndex: {
+            campaignId: campaignId.toString(),
+            taskIndex: taskIndex,
+          },
+        },
+      }).then((data) => data?.telegramChatId ||'')
+
 
       isVerified = await verifyTelegramJoin(
         telegramUsername || '',
