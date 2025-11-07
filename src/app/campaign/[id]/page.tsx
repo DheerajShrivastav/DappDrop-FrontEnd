@@ -57,6 +57,8 @@ import { Progress } from '@/components/ui/progress'
 import { CampaignAnalytics } from '@/components/campaign-analytics'
 import { DiscordAuthButton } from '@/components/discord-auth-button'
 import { TaskVerificationForm } from '@/components/task-verification-form'
+import { HumanityBadge } from '@/components/humanity-badge'
+import { HumanityVerificationModal } from '@/components/humanity-verification-modal'
 import {
   Dialog,
   DialogContent,
@@ -126,6 +128,11 @@ export default function CampaignDetailsPage() {
     discriminator?: string
   } | null>(null)
   const [verifyingTaskId, setVerifyingTaskId] = useState<string | null>(null)
+
+  // Humanity Protocol Verification State
+  const [isHumanityModalOpen, setIsHumanityModalOpen] = useState(false)
+  const [isCheckingHumanity, setIsCheckingHumanity] = useState(false)
+  const [userHumanityStatus, setUserHumanityStatus] = useState<boolean | null>(null)
 
   const campaignId = id as string
 
@@ -308,6 +315,13 @@ export default function CampaignDetailsPage() {
     }
   }, [campaign?.id, campaign?.tasks])
 
+  // Check Humanity verification status when wallet connects
+  useEffect(() => {
+    if (address && isConnected) {
+      checkHumanityStatus()
+    }
+  }, [address, isConnected])
+
   const handleShare = () => {
     const url = window.location.href
     navigator.clipboard
@@ -466,6 +480,11 @@ export default function CampaignDetailsPage() {
       const result = await response.json()
 
       if (!response.ok || !result.success || !result.verified) {
+        // Check if it's a Humanity verification error
+        if (result.requiresHumanityVerification) {
+          setIsHumanityModalOpen(true)
+          throw new Error('Humanity Protocol verification required')
+        }
         throw new Error(result.error || 'Verification failed.')
       }
 
@@ -529,6 +548,68 @@ export default function CampaignDetailsPage() {
       setIsVerifyDialogOpen(false)
       setVerifyingTaskId(null)
       setDiscordUserData(null)
+    }
+  }
+
+  // Check user's Humanity verification status
+  const checkHumanityStatus = async () => {
+    if (!address) return
+
+    setIsCheckingHumanity(true)
+    try {
+      const response = await fetch(`/api/verify-humanity?walletAddress=${address}`)
+      const data = await response.json()
+      
+      if (data.success) {
+        setUserHumanityStatus(data.isHuman)
+      }
+    } catch (error) {
+      console.error('Error checking Humanity status:', error)
+    } finally {
+      setIsCheckingHumanity(false)
+    }
+  }
+
+  // Verify user with Humanity Protocol
+  const handleVerifyHumanity = async () => {
+    if (!address) return
+
+    setIsCheckingHumanity(true)
+    try {
+      const response = await fetch('/api/verify-humanity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: address }),
+      })
+
+      const data = await response.json()
+      
+      if (data.success) {
+        setUserHumanityStatus(data.isHuman)
+        
+        if (data.isHuman) {
+          toast({
+            title: 'Verification Successful!',
+            description: 'You are verified as human. You can now complete this task.',
+          })
+          setIsHumanityModalOpen(false)
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Not Verified',
+            description: 'Please complete verification on Humanity Protocol first.',
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error verifying Humanity:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Verification Failed',
+        description: 'Could not verify Humanity status. Please try again.',
+      })
+    } finally {
+      setIsCheckingHumanity(false)
     }
   }
 
@@ -710,21 +791,27 @@ export default function CampaignDetailsPage() {
                 return (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between p-4 rounded-md bg-secondary/50"
+                    className="flex flex-col p-4 rounded-md bg-secondary/50 gap-3"
                   >
-                    <div className="flex items-center space-x-4">
-                      <div className="p-2 bg-background rounded-full">
-                        <TaskIcon type={task.type} />
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="p-2 bg-background rounded-full">
+                          <TaskIcon type={task.type} />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <label
+                            htmlFor={`task-${task.id}`}
+                            className="text-sm font-medium leading-none"
+                          >
+                            {task.description}
+                          </label>
+                          {task.requiresHumanityVerification && (
+                            <HumanityBadge size="sm" />
+                          )}
+                        </div>
                       </div>
-                      <label
-                        htmlFor={`task-${task.id}`}
-                        className="text-sm font-medium leading-none"
-                      >
-                        {task.description}
-                      </label>
-                    </div>
-                    {role === 'participant' && (
-                      <div className="flex items-center gap-2">
+                      {role === 'participant' && (
+                        <div className="flex items-center gap-2">
                         {userTask?.completed ? (
                           <Button
                             id={`task-${task.id}`}
@@ -825,6 +912,7 @@ export default function CampaignDetailsPage() {
                         )}
                       </div>
                     )}
+                    </div>
                   </div>
                 )
               })}
@@ -1005,9 +1093,26 @@ export default function CampaignDetailsPage() {
                     </p>
                   )}
                 {address && isConnected && (
-                  <p className="text-xs text-center text-muted-foreground pt-2 break-all">
-                    Connected as: {address}
-                  </p>
+                  <>
+                    <p className="text-xs text-center text-muted-foreground pt-2 break-all">
+                      Connected as: {address}
+                    </p>
+                    {userHumanityStatus !== null && (
+                      <div className="flex justify-center pt-2">
+                        {userHumanityStatus ? (
+                          <Badge className="bg-green-100 text-green-700 border-green-300 text-xs">
+                            <ShieldCheck className="h-3 w-3 mr-1" />
+                            Human Verified
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">
+                            <ShieldCheck className="h-3 w-3 mr-1" />
+                            Not Verified
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1059,6 +1164,14 @@ export default function CampaignDetailsPage() {
         }
         campaignId={campaignId}
         onVerify={handleCompleteTask}
+      />
+
+      {/* Humanity Protocol Verification Modal */}
+      <HumanityVerificationModal
+        isOpen={isHumanityModalOpen}
+        onOpenChange={setIsHumanityModalOpen}
+        onVerify={handleVerifyHumanity}
+        isVerifying={isCheckingHumanity}
       />
     </div>
   )
