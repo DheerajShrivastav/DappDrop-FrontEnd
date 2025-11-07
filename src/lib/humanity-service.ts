@@ -102,9 +102,6 @@ export async function verifyHumanity(
     const data: HumanityVerificationResponse = await response.json()
     console.log('Humanity Protocol response:', data)
 
-    // Cache the result
-    await cacheVerification(walletAddress, data.is_human)
-
     // Update user record in database
     await updateUserVerificationStatus(walletAddress, data.is_human)
 
@@ -153,34 +150,7 @@ async function getCachedVerification(
 }
 
 /**
- * Cache verification result in database
- */
-async function cacheVerification(
-  walletAddress: string,
-  isHuman: boolean
-): Promise<void> {
-  try {
-    await prisma.user.upsert({
-      where: { walletAddress: walletAddress.toLowerCase() },
-      update: {
-        humanityVerified: isHuman,
-        lastHumanityCheck: new Date(),
-      },
-      create: {
-        walletAddress: walletAddress.toLowerCase(),
-        humanityVerified: isHuman,
-        lastHumanityCheck: new Date(),
-      },
-    })
-    console.log('Cached verification for:', walletAddress, 'isHuman:', isHuman)
-  } catch (error) {
-    console.error('Error caching verification:', error)
-    // Don't throw - caching failure shouldn't break verification
-  }
-}
-
-/**
- * Update user verification status
+ * Update user verification status in database
  */
 async function updateUserVerificationStatus(
   walletAddress: string,
@@ -199,8 +169,10 @@ async function updateUserVerificationStatus(
         lastHumanityCheck: new Date(),
       },
     })
+    console.log('Updated verification for:', walletAddress, 'isHuman:', isHuman)
   } catch (error) {
     console.error('Error updating user verification status:', error)
+    // Don't throw - database failure shouldn't break verification
   }
 }
 

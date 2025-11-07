@@ -27,8 +27,14 @@ export function HumanityVerificationModal({
   onVerify,
   isVerifying = false,
 }: HumanityVerificationModalProps) {
+  // Use environment variable or default to testnet
+  const humanityPortalUrl = 
+    typeof window !== 'undefined' && (window as any).ENV?.HUMANITY_PORTAL_URL
+      ? (window as any).ENV.HUMANITY_PORTAL_URL
+      : process.env.NEXT_PUBLIC_HUMANITY_PORTAL_URL || 'https://testnet.humanity.org'
+      
   const handleOpenHumanityProtocol = () => {
-    window.open('https://testnet.humanity.org', '_blank')
+    window.open(humanityPortalUrl, '_blank')
   }
 
   return (

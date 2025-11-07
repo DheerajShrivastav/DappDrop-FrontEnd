@@ -17,98 +17,59 @@ export async function storeCampaignTaskMetadata(
     console.log(`🔄 Processing task ${index}:`, task)
 
     try {
-      // Store Discord metadata
-      if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
-        console.log('💙 Storing Discord metadata...')
-        const response = await fetch('/api/campaign-task-metadata', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            campaignId: campaignId,
-            taskIndex: index,
-            taskType: task.type,
-            discordInviteLink: task.discordInviteLink,
-            requiresHumanityVerification: task.requiresHumanityVerification || false,
-          }),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          console.error('❌ API Error for Discord metadata:', errorData)
-        } else {
-          console.log('✅ Stored Discord metadata for task', index)
-        }
+      // Prepare metadata object
+      const metadata: any = {
+        campaignId: campaignId,
+        taskIndex: index,
+        taskType: task.type,
+        requiresHumanityVerification: task.requiresHumanityVerification || false,
       }
 
-      // Store Telegram metadata
+      // Add Discord-specific metadata
+      if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
+        console.log('💙 Including Discord metadata...')
+        metadata.discordInviteLink = task.discordInviteLink
+      }
+
+      // Add Telegram-specific metadata
       if (task.type === 'JOIN_TELEGRAM') {
         console.log('📱 Found Telegram task, checking metadata...')
-        console.log('📱 Telegram fields:', {
-          verificationData: task.verificationData, // This is the chat ID
-          telegramInviteLink: task.telegramInviteLink,
-        })
-
         if (task.telegramInviteLink || task.verificationData) {
-          console.log('📤 Sending Telegram metadata to API...')
-
-          const requestBody = {
-            campaignId: campaignId,
-            taskIndex: index,
-            taskType: task.type,
-            telegramInviteLink: task.telegramInviteLink,
-            telegramChatId: task.verificationData, // The form stores chat ID in verificationData
-            requiresHumanityVerification: task.requiresHumanityVerification || false,
-          }
-
-          console.log('📤 Request body:', JSON.stringify(requestBody, null, 2))
-
-          const response = await fetch('/api/campaign-task-metadata', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestBody),
-          })
-
-          if (!response.ok) {
-            const errorData = await response.json()
-            console.error('❌ API Error for Telegram metadata:', errorData)
-            throw new Error(`API Error: ${errorData.error}`)
-          }
-
-          const result = await response.json()
-          console.log('✅ Stored Telegram metadata for task', index, result)
+          console.log('📱 Including Telegram metadata...')
+          metadata.telegramInviteLink = task.telegramInviteLink
+          metadata.telegramChatId = task.verificationData // The form stores chat ID in verificationData
         } else {
           console.warn(
             '⚠️ Telegram task found but no invite link or chat ID provided'
           )
         }
       }
-      
-      // Store Humanity verification requirement for all task types
-      if (task.requiresHumanityVerification) {
-        console.log('🛡️ Task requires Humanity verification, storing metadata...')
+
+      // Store metadata if there's anything to store
+      if (
+        task.discordInviteLink ||
+        task.telegramInviteLink ||
+        task.verificationData ||
+        task.requiresHumanityVerification
+      ) {
+        console.log('📤 Storing task metadata:', metadata)
+        
         const response = await fetch('/api/campaign-task-metadata', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            campaignId: campaignId,
-            taskIndex: index,
-            taskType: task.type,
-            requiresHumanityVerification: true,
-          }),
+          body: JSON.stringify(metadata),
         })
 
         if (!response.ok) {
           const errorData = await response.json()
-          console.error('❌ API Error for Humanity metadata:', errorData)
-        } else {
-          console.log('✅ Stored Humanity verification requirement for task', index)
+          console.error('❌ API Error for task metadata:', errorData)
+          throw new Error(`API Error: ${errorData.error}`)
         }
+
+        const result = await response.json()
+        console.log('✅ Stored metadata for task', index, result)
       }
     } catch (error) {
       console.error(`❌ Failed to store metadata for task ${index}:`, error)

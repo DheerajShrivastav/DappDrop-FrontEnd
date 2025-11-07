@@ -1,6 +1,7 @@
 // src/app/api/verify-humanity/route.ts
 import { NextResponse } from 'next/server'
 import { verifyHumanity, isUserVerified } from '@/lib/humanity-service'
+import { validateWalletAddress } from '@/lib/validation-utils'
 
 /**
  * POST /api/verify-humanity
@@ -11,23 +12,11 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { walletAddress } = body
 
-    if (!walletAddress) {
-      return NextResponse.json(
-        { error: 'Wallet address is required' },
-        { status: 400 }
-      )
-    }
+    // Validate and sanitize wallet address
+    const validAddress = validateWalletAddress(walletAddress)
 
-    // Validate wallet address format
-    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-      return NextResponse.json(
-        { error: 'Invalid wallet address format' },
-        { status: 400 }
-      )
-    }
-
-    console.log('Verifying humanity for wallet:', walletAddress)
-    const result = await verifyHumanity(walletAddress)
+    console.log('Verifying humanity for wallet:', validAddress)
+    const result = await verifyHumanity(validAddress)
 
     return NextResponse.json({
       success: true,
@@ -37,6 +26,14 @@ export async function POST(request: Request) {
     })
   } catch (error: any) {
     console.error('Humanity verification API error:', error)
+    
+    // Handle validation errors
+    if (error.message?.includes('required') || error.message?.includes('Invalid')) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 }
+      )
+    }
     
     // Handle rate limiting
     if (error.message?.includes('Rate limit')) {
@@ -65,30 +62,27 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const walletAddress = searchParams.get('walletAddress')
 
-    if (!walletAddress) {
-      return NextResponse.json(
-        { error: 'Wallet address is required' },
-        { status: 400 }
-      )
-    }
+    // Validate and sanitize wallet address
+    const validAddress = validateWalletAddress(walletAddress || '')
 
-    // Validate wallet address format
-    if (!/^0x[a-fA-F0-9]{40}$/.test(walletAddress)) {
-      return NextResponse.json(
-        { error: 'Invalid wallet address format' },
-        { status: 400 }
-      )
-    }
-
-    const isVerified = await isUserVerified(walletAddress)
+    const isVerified = await isUserVerified(validAddress)
 
     return NextResponse.json({
       success: true,
       isHuman: isVerified,
-      walletAddress,
+      walletAddress: validAddress,
     })
   } catch (error: any) {
     console.error('Humanity verification check error:', error)
+    
+    // Handle validation errors
+    if (error.message?.includes('required') || error.message?.includes('Invalid')) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: 400 }
+      )
+    }
+    
     return NextResponse.json(
       {
         error: error.message || 'Failed to check verification status',
