@@ -78,6 +78,7 @@ const taskSchema = z.object({
     'JOIN_TELEGRAM',
     'RETWEET',
     'ONCHAIN_TX',
+    'HUMANITY_VERIFICATION',
   ]),
   description: z
     .string()
@@ -137,6 +138,7 @@ const TASK_TYPE_OPTIONS: { value: TaskType; label: string }[] = [
   { value: 'JOIN_TELEGRAM', label: 'Join Telegram' },
   { value: 'RETWEET', label: 'Retweet Post' },
   { value: 'ONCHAIN_TX', label: 'On-chain Action' },
+  { value: 'HUMANITY_VERIFICATION', label: 'Humanity Protocol Verification' },
 ]
 
 export default function CreateCampaignPage() {
@@ -781,6 +783,7 @@ export default function CreateCampaignPage() {
                           <span className="sr-only">Remove Task</span>
                         </Button>
                       </div>
+                      
                       {tasks[index].type === 'JOIN_DISCORD' && (
                         <div className="space-y-4">
                           <FormField

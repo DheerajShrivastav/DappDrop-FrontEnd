@@ -4,6 +4,7 @@ export type TaskType =
   | 'JOIN_TELEGRAM'
   | 'RETWEET'
   | 'ONCHAIN_TX'
+  | 'HUMANITY_VERIFICATION'
 
 export type Task = {
   id: string
@@ -59,6 +60,8 @@ export interface User {
   email?: string | null
   notificationSettings?: any
   preferences?: any
+  humanityVerified?: boolean
+  lastHumanityCheck?: Date | null
   createdAt: Date
 }
 
@@ -120,4 +123,23 @@ export interface TaskVerificationRequest {
 
 export interface CampaignSyncRequest {
   campaignId?: string
+}
+
+// Humanity Protocol types
+export interface HumanityVerificationRequest {
+  walletAddress: string
+}
+
+export interface HumanityVerificationResponse {
+  is_human: boolean
+  wallet_address: string
+  verified_at?: string
+  error?: string
+}
+
+export interface HumanityCachedVerification {
+  walletAddress: string
+  isHuman: boolean
+  verifiedAt: Date
+  expiresAt: Date
 }

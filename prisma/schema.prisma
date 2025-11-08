@@ -31,6 +31,10 @@ model User {
   image           String?
   discordId       String?  @unique  // Store Discord user ID
   
+  // Humanity Protocol verification
+  humanityVerified    Boolean  @default(false)
+  lastHumanityCheck   DateTime?
+  
   // NextAuth relations
   accounts        Account[]
   sessions        Session[]
@@ -106,6 +110,9 @@ model CampaignTaskMetadata {
   // Telegram-specific metadata
   telegramInviteLink String?
   telegramChatId     String?
+  
+  // Humanity Protocol verification requirement
+  requiresHumanityVerification Boolean @default(false)
   
   // Other task metadata can be added here in the future
   metadata        Json?

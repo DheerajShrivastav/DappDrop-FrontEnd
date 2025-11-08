@@ -22,6 +22,16 @@ export async function POST(request: Request) {
     const taskIndex = parseInt(taskId, 10)
     let isVerified = false
 
+    // Get task metadata for Discord/Telegram
+    const taskMetadata = await prisma.campaignTaskMetadata.findUnique({
+      where: {
+        campaignId_taskIndex: {
+          campaignId: campaignId.toString(),
+          taskIndex: taskIndex,
+        },
+      },
+    })
+
     // Simple task type detection without heavy validation
     const isDiscordTask = discordUsername || discordId
     const isTelegramTask = telegramUsername || telegramUserId
@@ -68,15 +78,7 @@ export async function POST(request: Request) {
       }
     } else if (isTelegramTask) {
       // Basic Telegram verification
-      const telegramChatId = await prisma.campaignTaskMetadata.findUnique({
-        where: {
-          campaignId_taskIndex: {
-            campaignId: campaignId.toString(),
-            taskIndex: taskIndex,
-          },
-        },
-      }).then((data) => data?.telegramChatId ||'')
-
+      const telegramChatId = taskMetadata?.telegramChatId || ''
 
       isVerified = await verifyTelegramJoin(
         telegramUsername || '',
