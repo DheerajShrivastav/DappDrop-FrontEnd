@@ -4,6 +4,7 @@ export type TaskType =
   | 'JOIN_TELEGRAM'
   | 'RETWEET'
   | 'ONCHAIN_TX'
+  | 'HUMANITY_VERIFICATION'
 
 export type Task = {
   id: string
