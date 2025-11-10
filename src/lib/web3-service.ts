@@ -571,6 +571,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     JOIN_TELEGRAM: 2,
     RETWEET: 3,
     ONCHAIN_TX: 4,
+    HUMANITY_VERIFICATION: 4,
   }
 
   try {
@@ -790,6 +791,7 @@ export const createCampaign = async (campaignData: any) => {
     JOIN_TELEGRAM: 2,
     RETWEET: 3,
     ONCHAIN_TX: 4,
+    HUMANITY_VERIFICATION: 4,
   }
 
   try {
