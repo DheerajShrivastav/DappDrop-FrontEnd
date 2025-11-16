@@ -1,7 +1,9 @@
 
+
 'use client'
 
 import { CheckCircle, Gift, PlusCircle, Rocket, Users, Zap, ShieldCheck, ShieldOff, Bot } from 'lucide-react'
+import Navbar from '@/components/landing/Navbar'
 
 const hostMilestones = [
   {
@@ -92,6 +94,7 @@ const pillars = [
 export default function AboutPage() {
   return (
     <div className="bg-[#f6f2eb] text-slate-900">
+      <Navbar />
       <section className="relative overflow-hidden px-6 pb-24 pt-28">
         <div className="absolute inset-x-24 top-12 h-48 rounded-full bg-gradient-to-r from-sky-200/60 via-blue-100/50 to-indigo-200/60 blur-3xl" />
         <div className="mx-auto max-w-5xl text-center">

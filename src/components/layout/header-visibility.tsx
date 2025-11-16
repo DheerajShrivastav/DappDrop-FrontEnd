@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation'
 import Header from '@/components/header'
 
-const HIDDEN_PATHS = ['/', '/landing']
+const HIDDEN_PATHS = ['/', '/landing', '/about', '/changelog']
 
 export default function HeaderVisibility() {
   const pathname = usePathname()
