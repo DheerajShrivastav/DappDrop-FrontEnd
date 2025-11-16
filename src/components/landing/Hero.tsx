@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowUpRight, Check } from 'lucide-react'
+import { primaryCtaClasses, secondaryCtaClasses } from './button-variants'
 
 const proofPoints = [
   'Wallet-gated tasks keep sybils out',
@@ -57,14 +58,14 @@ export default function Hero() {
           <div className="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
             <Link
               href="/#campaigns"
-              className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-slate-900 via-blue-900 to-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_45px_rgba(15,23,42,0.35)] transition duration-300 hover:translate-y-[-2px] hover:shadow-[0_22px_55px_rgba(15,23,42,0.45)]"
+              className={primaryCtaClasses}
             >
               Start a campaign
               <ArrowUpRight className="ml-2 h-4 w-4" />
             </Link>
             <Link
               href="/#campaigns"
-              className="inline-flex items-center justify-center rounded-full border border-slate-200/70 bg-white/60 px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm transition duration-300 hover:border-slate-300 hover:text-slate-900 hover:shadow-[0_12px_36px_rgba(148,163,184,0.25)]"
+              className={secondaryCtaClasses}
             >
               Browse live examples
             </Link>

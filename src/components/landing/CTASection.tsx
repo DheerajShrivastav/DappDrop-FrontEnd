@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { ArrowUpRight } from 'lucide-react'
+import { primaryCtaClasses, secondaryCtaClasses } from './button-variants'
 
 export default function CTASection() {
   return (
@@ -31,14 +32,14 @@ export default function CTASection() {
           <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
             <Link
               href="/#campaigns"
-              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
+              className={primaryCtaClasses}
             >
               Book a build session
               <ArrowUpRight className="ml-2 h-4 w-4" />
             </Link>
             <Link
               href="/dashboard"
-              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900"
+              className={secondaryCtaClasses}
             >
               View the product
             </Link>
