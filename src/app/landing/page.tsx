@@ -4,39 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, useScroll, useTransform, useSpring, useInView, useMotionValue } from 'framer-motion'
 import Link from 'next/link'
 
-// ============================================================================
-// DESIGN ENGINEER'S RATIONALE: "ETHEREAL GRADIENT"
-// ============================================================================
-// 
-// Philosophy: "Luminous Glassmorphism"
-// 
-// This landing page embodies the ethereal gradient aesthetic:
-// 
-// 1. GRADIENT FOUNDATION:
-//    - Radial gradient (pink to blue) creates an otherworldly, immersive base
-//    - Fallback #EEAECA ensures graceful degradation
-//    - The gradient feels alive, futuristic, and web3-native
-// 
-// 2. PURE WHITE TYPOGRAPHY:
-//    - All text is #FFFFFF for maximum contrast and legibility
-//    - Creates a "light emanating from within" aesthetic
-//    - Satoshi font adds premium, friendly geometry
-// 
-// 3. GLASSMORPHISM AS ACCENT:
-//    - No traditional color accents (orange is gone)
-//    - backdrop-filter: blur() creates frosted glass effects
-//    - rgba(255,255,255,0.1) backgrounds with white borders
-//    - White box-shadow for hover "glow" states
-// 
-// 4. ORGANIC, PHYSICS-BASED MOTION:
-//    - Spring physics throughout (useSpring)
-//    - Mouse-reactive constellation with magnetic fields
-//    - Scroll-driven SVG path drawing for timeline
-//    - Every animation serves the immersive narrative
-//
-// ============================================================================
 
-// Navbar Component - Glassmorphism, Sticky, Blurred
 function Navbar() {
   const [scrolled, setScrolled] = useState(false)
 

@@ -63,7 +63,7 @@ export default function Navbar() {
               Explore live
             </Link>
             <Link
-              href="/create-campaign"
+              href="/#campaigns"
               className="inline-flex items-center rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-slate-700"
             >
               Launch a campaign

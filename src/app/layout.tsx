@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { WalletProvider } from '@/context/wallet-provider';
-import Header from '@/components/header';
+import HeaderVisibility from '@/components/layout/header-visibility';
 import { Toaster } from '@/components/ui/toaster';
 import { Inter } from 'next/font/google'
 import Script from 'next/script'
@@ -29,7 +29,7 @@ export default function RootLayout({
       </head>
       <body className="font-satoshi antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
         <WalletProvider>
-          <Header />
+          <HeaderVisibility />
           <main className="flex-grow">{children}</main>
           <Toaster />
         </WalletProvider>

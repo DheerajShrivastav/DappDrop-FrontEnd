@@ -42,7 +42,7 @@ export default function Hero() {
 
           <div className="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
             <Link
-              href="/create-campaign"
+              href="/#campaigns"
               className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
             >
               Start a campaign
