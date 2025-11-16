@@ -35,6 +35,15 @@
     animation-delay: 4s;
   }
 
+  @keyframes orbit-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
   :root {
     --background: 220 17% 95%;
     --foreground: 224 71% 4%;

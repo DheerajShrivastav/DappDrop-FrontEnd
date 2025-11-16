@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useMemo } from 'react'
 import { OrbitingCircles } from '@/registry/magicui/orbiting-circles'
 import { primaryCtaClasses, secondaryCtaClasses } from './button-variants'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +34,32 @@ const orbitIcons = [
 ]
 
 export default function OrbitingShowcase() {
+  const outerOrbitNodes = useMemo(
+    () =>
+      orbitIcons.map(({ icon: Icon, tone }, index) => (
+        <span
+          key={`outer-${tone}-${index}`}
+          className={`flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br ${tone} text-white shadow-[0_12px_30px_rgba(59,130,246,0.25)]`}
+        >
+          <Icon className="h-6 w-6" />
+        </span>
+      )),
+    [orbitIcons]
+  )
+
+  const innerOrbitNodes = useMemo(
+    () =>
+      orbitIcons.slice(0, 4).map(({ icon: Icon, tone }, index) => (
+        <span
+          key={`inner-${tone}-${index}`}
+          className="flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-white/80 text-slate-600 shadow-[0_10px_28px_rgba(148,163,184,0.28)]"
+        >
+          <Icon className="h-5 w-5" />
+        </span>
+      )),
+    [orbitIcons]
+  )
+
   return (
     <section className="relative px-6 py-28">
       <div className="pointer-events-none absolute inset-0 -z-10">
@@ -98,24 +125,10 @@ export default function OrbitingShowcase() {
               <div className="absolute h-40 w-40 rounded-full border border-dashed border-slate-200/60" />
               <div className="absolute h-60 w-60 rounded-full border border-slate-200/50" />
               <OrbitingCircles iconSize={54} radius={140}>
-                {orbitIcons.map(({ icon: Icon, tone }) => (
-                  <span
-                    key={`${tone}-${Icon.name}`}
-                    className={`flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br ${tone} text-white shadow-[0_12px_30px_rgba(59,130,246,0.25)]`}
-                  >
-                    <Icon className="h-6 w-6" />
-                  </span>
-                ))}
+                {outerOrbitNodes}
               </OrbitingCircles>
               <OrbitingCircles iconSize={44} radius={90} reverse speed={1.6}>
-                {orbitIcons.slice(0, 4).map(({ icon: Icon, tone }, index) => (
-                  <span
-                    key={`${tone}-${index}`}
-                    className={`flex h-11 w-11 items-center justify-center rounded-full border border-white/70 bg-white/80 text-slate-600 shadow-[0_10px_28px_rgba(148,163,184,0.28)]`}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </span>
-                ))}
+                {innerOrbitNodes}
               </OrbitingCircles>
             </div>
             <div className="relative z-10 mt-10 grid w-full gap-3 text-left text-sm text-slate-600">
