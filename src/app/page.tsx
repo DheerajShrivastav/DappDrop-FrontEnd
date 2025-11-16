@@ -13,6 +13,15 @@ export default function Home() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#f6f2eb] text-slate-900">
       <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-0 opacity-40 mix-blend-soft-light [background-image:radial-gradient(circle_at_18%_20%,rgba(56,189,248,0.38),transparent_55%),radial-gradient(circle_at_82%_18%,rgba(129,140,248,0.28),transparent_50%),radial-gradient(circle_at_50%_82%,rgba(244,114,182,0.22),transparent_60%)]" />
+        <div
+          className="absolute inset-0 opacity-[0.15]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(15,23,42,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.08) 1px, transparent 1px)',
+            backgroundSize: '140px 140px',
+          }}
+        />
         <div className="absolute inset-x-0 top-0 h-[520px] bg-gradient-to-b from-sky-200/60 via-slate-100/60 to-transparent" />
         <div className="absolute -left-32 top-64 h-72 w-72 rounded-full bg-sky-200/40 blur-3xl" />
         <div className="absolute -right-24 top-96 h-80 w-80 rounded-full bg-indigo-200/35 blur-3xl" />

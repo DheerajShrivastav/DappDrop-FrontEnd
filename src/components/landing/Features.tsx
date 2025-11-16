@@ -33,7 +33,18 @@ const featureGroups = [
 export default function Features() {
   return (
     <section id="features" className="relative px-6 py-24">
-      <div className="absolute inset-x-0 top-16 h-24 bg-gradient-to-r from-transparent via-white/70 to-transparent"></div>
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute inset-0 opacity-30 mix-blend-screen [background-image:radial-gradient(circle_at_12%_25%,rgba(56,189,248,0.28),transparent_55%),radial-gradient(circle_at_88%_20%,rgba(129,140,248,0.24),transparent_50%),radial-gradient(circle_at_50%_82%,rgba(244,114,182,0.18),transparent_60%)]" />
+        <div
+          className="absolute inset-0 opacity-[0.12]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(59,130,246,0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(79,70,229,0.12) 1px, transparent 1px)',
+            backgroundSize: '160px 160px',
+          }}
+        />
+        <div className="absolute inset-x-0 top-16 h-24 bg-gradient-to-r from-transparent via-white/60 to-transparent"></div>
+      </div>
 
       <div className="relative mx-auto flex max-w-6xl flex-col gap-16">
         <div className="max-w-2xl">
@@ -67,25 +78,34 @@ export default function Features() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: '0px 0px -120px 0px' }}
                 transition={{ duration: 0.5, delay: index * 0.05 }}
-                className="rounded-3xl border border-slate-200 bg-white/90 p-8 shadow-sm backdrop-blur"
+                className="group relative overflow-hidden rounded-3xl border border-slate-200/70 bg-white/75 p-8 shadow-[0_26px_60px_rgba(15,23,42,0.08)] backdrop-blur-xl transition duration-300 hover:border-slate-200/90 hover:shadow-[0_36px_80px_rgba(15,23,42,0.12)]"
               >
-                <div className="flex items-center gap-4">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
-                    <Icon className="h-5 w-5 text-slate-700" />
-                  </span>
-                  <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-[0.3] transition duration-300 group-hover:opacity-[0.45]"
+                  style={{
+                    backgroundImage:
+                      'radial-gradient(circle at top right, rgba(129,140,248,0.28), transparent 60%), radial-gradient(circle at bottom left, rgba(56,189,248,0.26), transparent 55%)',
+                  }}
+                />
+                <div className="relative">
+                  <div className="flex items-center gap-4">
+                    <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200/70 bg-gradient-to-br from-white/85 via-slate-50/60 to-white/70 shadow-inner shadow-white/40">
+                      <Icon className="h-5 w-5 text-slate-700" />
+                    </span>
+                    <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
+                  </div>
+                  <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
+                    {feature.description}
+                  </p>
+                  <ul className="mt-6 space-y-3 text-sm text-slate-600">
+                    {feature.bullets.map((bullet) => (
+                      <li key={bullet} className="flex gap-3">
+                        <span className="mt-[6px] inline-block h-2 w-2 rounded-full bg-gradient-to-r from-sky-400 to-indigo-400"></span>
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
-                  {feature.description}
-                </p>
-                <ul className="mt-6 space-y-3 text-sm text-slate-600">
-                  {feature.bullets.map((bullet) => (
-                    <li key={bullet} className="flex gap-3">
-                      <span className="mt-1 inline-block h-2 w-2 rounded-full bg-slate-400"></span>
-                      <span>{bullet}</span>
-                    </li>
-                  ))}
-                </ul>
               </motion.article>
             )
           })}

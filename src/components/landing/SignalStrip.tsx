@@ -18,7 +18,7 @@ export default function SignalStrip() {
             key={signal}
             className="inline-flex items-center gap-3 rounded-full border border-slate-300/70 bg-white/80 px-5 py-2 shadow-sm backdrop-blur"
           >
-            <span className="size-2 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500" />
+            <span className="h-2 w-2 rounded-full bg-gradient-to-r from-sky-500 to-indigo-500" />
             {signal}
           </span>
         ))}
