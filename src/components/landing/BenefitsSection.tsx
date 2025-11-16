@@ -1,101 +1,110 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { CheckCircle2 } from 'lucide-react'
+import { Check } from 'lucide-react'
 
 const benefits = [
   {
-    title: 'Verifiable On-Chain Actions',
-    description: 'Every task completion is recorded on-chain, ensuring transparency and trust.'
+    title: 'Proof lives on-chain',
+    description: 'Campaign tasks resolve to verifiable transactions and signatures so nobody questions how rewards were earned.',
   },
   {
-    title: 'Automated & Trustless',
-    description: 'Smart contracts handle validation and rewards automatically, no middlemen needed.'
+    title: 'Ops burden disappears',
+    description: 'Reviews, approvals, and fulfillment run through one workflow. No more juggling bots, forms, and wallet screenshots.',
   },
   {
-    title: 'Sybil Resistant',
-    description: 'Advanced verification filters out bots, ensuring only genuine users participate.'
-  }
+    title: 'Communities stay human',
+    description: 'Identity checks, rate limits, and device signals filter out farms before they ever touch your incentives.',
+  },
 ]
 
 export default function BenefitsSection() {
   return (
-    <section className="py-24 px-6 bg-gradient-to-b from-gray-50 to-white">
-      <div className="max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
-          {/* Left Content */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-          >
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-              Ditch the Bots.
-              <br />
-              <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                Find Your Tribe.
-              </span>
-            </h2>
-            
-            <p className="text-xl text-gray-600 mb-10">
-              Build a community of real, engaged users who genuinely care about your project.
-            </p>
+    <section id="benefits" className="px-6 py-24">
+      <div className="mx-auto grid max-w-6xl gap-14 lg:grid-cols-[1.1fr,0.9fr] lg:items-center">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6 }}
+        >
+          <h2 className="text-balance text-4xl font-semibold tracking-tight text-slate-900 sm:text-[2.8rem]">
+            Proof that the growth you report is the growth you earned.
+          </h2>
+          <p className="mt-6 max-w-xl text-lg text-slate-600">
+            Projects use DAppDrop when they need every member of the room—marketing, product, investors—to see the impact without caveats.
+          </p>
 
-            <div className="space-y-6">
-              {benefits.map((benefit, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  viewport={{ once: true }}
-                  className="flex gap-4"
-                >
-                  <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-600 to-blue-600 rounded-full flex items-center justify-center">
-                    <CheckCircle2 className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h4 className="text-lg font-bold text-gray-900 mb-1">
-                      {benefit.title}
-                    </h4>
-                    <p className="text-gray-600">
-                      {benefit.description}
-                    </p>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-
-          {/* Right Visual */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-            className="relative"
-          >
-            <div className="relative aspect-square bg-gradient-to-br from-purple-100 to-blue-100 rounded-3xl p-12">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-3xl"></div>
-              
-              {/* Central Card */}
-              <div className="relative z-10 h-full bg-white rounded-2xl shadow-2xl p-8 flex flex-col items-center justify-center">
-                <div className="text-7xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent mb-4">
-                  100%
+          <ul className="mt-10 space-y-5">
+            {benefits.map((benefit) => (
+              <li key={benefit.title} className="flex gap-4">
+                <span className="mt-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700">
+                  <Check className="h-3.5 w-3.5" />
+                </span>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 sm:text-lg">
+                    {benefit.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600 sm:text-base">
+                    {benefit.description}
+                  </p>
                 </div>
-                <div className="text-2xl font-semibold text-gray-900 mb-2">Real Users</div>
-                <div className="text-gray-600 text-center">
-                  Verified & Engaged Community
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 28 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.6, delay: 0.1 }}
+          className="relative"
+        >
+          <div className="absolute -top-10 -left-8 hidden h-24 w-24 rounded-3xl border border-dashed border-slate-300/70 lg:block"></div>
+          <div className="absolute -bottom-10 -right-8 hidden h-28 w-28 rotate-12 rounded-full border border-slate-200 bg-white/60 lg:block"></div>
+
+          <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+            <div className="border-b border-slate-200 bg-slate-50 px-8 py-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">
+                Case note · Solstice Labs
+              </p>
+              <p className="mt-2 text-base text-slate-600">
+                Season launch converted lurkers into verified contributors in twelve days.
+              </p>
+            </div>
+
+            <div className="grid gap-6 px-8 py-8">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Net new wallets</p>
+                <p className="mt-3 text-4xl font-semibold text-slate-900">1,482</p>
+                <p className="mt-2 text-sm text-slate-500">All verified through on-chain quests—zero manual reviews.</p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Completion funnel</p>
+                <div className="mt-4 space-y-3 text-sm text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <span>Intent captured</span>
+                    <span className="font-semibold text-slate-900">2,305</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Passed verification</span>
+                    <span className="font-semibold text-slate-900">1,587</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Rewards triggered</span>
+                    <span className="font-semibold text-slate-900">1,482</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Decorative elements */}
-              <div className="absolute -top-4 -right-4 w-24 h-24 bg-purple-500 rounded-full opacity-20 blur-2xl"></div>
-              <div className="absolute -bottom-4 -left-4 w-32 h-32 bg-blue-500 rounded-full opacity-20 blur-2xl"></div>
+              <blockquote className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-5 text-sm text-slate-600">
+                “We walked into our community call with screenshots straight from the dashboard. No spreadsheets, no disclaimers—just proof that the campaign worked.”
+              </blockquote>
             </div>
-          </motion.div>
-        </div>
+          </div>
+        </motion.div>
       </div>
     </section>
   )

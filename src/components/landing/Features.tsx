@@ -1,82 +1,94 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Zap, Users, Shield, Award, TrendingUp, Lock } from 'lucide-react'
+import { Compass, Gauge, ShieldCheck, Sparkles } from 'lucide-react'
 
-const features = [
+const featureGroups = [
   {
-    icon: <Zap className="w-6 h-6" />,
-    title: 'Lightning Fast',
-    description: 'Deploy campaigns in minutes with our intuitive interface and automated workflows.'
+    title: 'Campaign orchestration',
+    icon: Compass,
+    description: 'Template your journey, stack tasks, and launch in minutes without touching spreadsheets.',
+    bullets: ['Template library tuned for quests, allowlists, and loyalty pilots', 'Conditional logic keeps participants on the right path'],
   },
   {
-    icon: <Users className="w-6 h-6" />,
-    title: 'Real Community',
-    description: 'Connect with genuine users through verified on-chain interactions and tasks.'
+    title: 'Verification guardrails',
+    icon: ShieldCheck,
+    description: 'Wallet checks, social proof, and device signals flag the bad actors before rewards go out.',
+    bullets: ['Built-in Sybil heuristics with manual overrides when you need them', 'Ledger of verified actions stored on-chain for auditability'],
   },
   {
-    icon: <Shield className="w-6 h-6" />,
-    title: 'Sybil Resistant',
-    description: 'Advanced bot detection ensures only real users join your community.'
+    title: 'Reward logistics',
+    icon: Sparkles,
+    description: 'Issue tokens, credentials, or merch claims automatically once an action clears review.',
+    bullets: ['Escrow wallets and signing workflows handled for the team', 'Track redemptions and mark depleted inventory at a glance'],
   },
   {
-    icon: <Award className="w-6 h-6" />,
-    title: 'Fair Rewards',
-    description: 'Distribute NFTs, tokens, and rewards transparently through smart contracts.'
+    title: 'Growth telemetry',
+    icon: Gauge,
+    description: 'Understand which channels produce believers versus tourists with cohort-ready analytics.',
+    bullets: ['Journey analytics stitched to wallet activity and socials', 'Exports that drop straight into your investor updates'],
   },
-  {
-    icon: <TrendingUp className="w-6 h-6" />,
-    title: 'Growth Analytics',
-    description: 'Track engagement, monitor growth, and optimize your campaigns in real-time.'
-  },
-  {
-    icon: <Lock className="w-6 h-6" />,
-    title: 'Secure & Trustless',
-    description: 'Built on blockchain technology for complete transparency and security.'
-  }
 ]
 
 export default function Features() {
   return (
-    <section id="features" className="py-24 px-6 bg-gradient-to-b from-white to-gray-50">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <motion.div
+    <section id="features" className="relative px-6 py-24">
+      <div className="absolute inset-x-0 top-16 h-24 bg-gradient-to-r from-transparent via-white/70 to-transparent"></div>
+
+      <div className="relative mx-auto flex max-w-6xl flex-col gap-16">
+        <div className="max-w-2xl">
+          <motion.span
+            initial={{ opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="text-sm font-semibold uppercase tracking-[0.3em] text-slate-500"
+          >
+            What teams ship with
+          </motion.span>
+          <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
             viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: 0.05 }}
+            className="mt-6 text-balance text-4xl font-semibold tracking-tight text-slate-900 sm:text-[2.7rem]"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              Why Choose DAppDrop
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Everything you need to build and grow an authentic community
-            </p>
-          </motion.div>
+            Everything you need to guide real people from discovery to conviction.
+          </motion.h2>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {features.map((feature, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: index * 0.1 }}
-              viewport={{ once: true }}
-              className="group p-8 bg-white rounded-2xl border border-gray-200 hover:border-purple-300 hover:shadow-xl transition-all duration-300"
-            >
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-blue-100 rounded-xl flex items-center justify-center text-purple-600 mb-5 group-hover:scale-110 transition-transform">
-                {feature.icon}
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">
-                {feature.title}
-              </h3>
-              <p className="text-gray-600 leading-relaxed">
-                {feature.description}
-              </p>
-            </motion.div>
-          ))}
+        <div className="grid gap-8 lg:grid-cols-2">
+          {featureGroups.map((feature, index) => {
+            const Icon = feature.icon
+            return (
+              <motion.article
+                key={feature.title}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '0px 0px -120px 0px' }}
+                transition={{ duration: 0.5, delay: index * 0.05 }}
+                className="rounded-3xl border border-slate-200 bg-white/90 p-8 shadow-sm backdrop-blur"
+              >
+                <div className="flex items-center gap-4">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50">
+                    <Icon className="h-5 w-5 text-slate-700" />
+                  </span>
+                  <h3 className="text-xl font-semibold text-slate-900">{feature.title}</h3>
+                </div>
+                <p className="mt-4 text-sm leading-relaxed text-slate-600 sm:text-base">
+                  {feature.description}
+                </p>
+                <ul className="mt-6 space-y-3 text-sm text-slate-600">
+                  {feature.bullets.map((bullet) => (
+                    <li key={bullet} className="flex gap-3">
+                      <span className="mt-1 inline-block h-2 w-2 rounded-full bg-slate-400"></span>
+                      <span>{bullet}</span>
+                    </li>
+                  ))}
+                </ul>
+              </motion.article>
+            )
+          })}
         </div>
       </div>
     </section>

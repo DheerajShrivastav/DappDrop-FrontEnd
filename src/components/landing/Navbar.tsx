@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 const primaryLinks = [
   { label: 'Product', href: '/#features' },
   { label: 'Playbook', href: '/#how-it-works' },
-  { label: 'Stories', href: '/#stories' },
+  { label: 'Benefits', href: '/#benefits' },
 ]
 
 export default function Navbar() {

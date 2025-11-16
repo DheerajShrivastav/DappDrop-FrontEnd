@@ -1,82 +1,80 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Rocket, Target, TrendingUp } from 'lucide-react'
 
 const steps = [
   {
-    number: '01',
-    icon: <Rocket className="w-8 h-8" />,
-    title: 'Launch Your Campaign',
-    description: 'Create and customize campaigns with tasks, rewards, and requirements tailored to your project goals.'
+    label: '01',
+    title: 'Shape the path',
+    description:
+      'Pick a template, plug in the outcomes you want, and stitch together the on-chain and social actions that matter.',
+    detail: 'Tasks can be gated by role, assets held, or previous completions so the right people see the right next step.',
   },
   {
-    number: '02',
-    icon: <Target className="w-8 h-8" />,
-    title: 'Engage Real Users',
-    description: 'Participants discover your project, complete meaningful tasks, and verify their participation on-chain.'
+    label: '02',
+    title: 'Run the drop',
+    description:
+      'Publish to your audience and watch progress in real time. Verification runs silently in the background.',
+    detail: 'Flagged submissions sit in review while clean entries flow right through to the reward queue.',
   },
   {
-    number: '03',
-    icon: <TrendingUp className="w-8 h-8" />,
-    title: 'Grow Your Community',
-    description: 'Reward genuine participants and transform them into loyal community members who believe in your vision.'
-  }
+    label: '03',
+    title: 'Report the proof',
+    description:
+      'Share the campaign wrap-up with contributors, investors, and your ops team without exporting a single CSV.',
+    detail: 'Snapshots and audit trails live alongside task performance so you can answer any “was this real?” question instantly.',
+  },
 ]
 
 export default function HowItWorks() {
   return (
-    <section id="how-it-works" className="py-24 px-6 bg-white">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-20">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
+    <section id="how-it-works" className="px-6 py-24">
+      <div className="mx-auto flex max-w-6xl flex-col gap-16">
+        <div className="max-w-3xl">
+          <motion.h2
+            initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
             viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-balance text-4xl font-semibold tracking-tight text-slate-900 sm:text-[2.8rem]"
           >
-            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-              How It Works
-            </h2>
-            <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-              Three simple steps to build your thriving community
-            </p>
-          </motion.div>
+            Three deliberate steps, no growth theater.
+          </motion.h2>
+          <motion.p
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5, delay: 0.05 }}
+            className="mt-4 max-w-2xl text-lg text-slate-600"
+          >
+            DAppDrop keeps the ops tight so you can focus on telling the story. Launch, moderate, and prove impact without piecing together six tools.
+          </motion.p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-12 relative">
-          {/* Connecting Line */}
-          <div className="hidden md:block absolute top-20 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-200 via-blue-200 to-purple-200"></div>
-
+        <div className="relative grid gap-12 lg:grid-cols-3">
+          <div className="absolute left-4 top-0 bottom-0 hidden w-px bg-gradient-to-b from-slate-200 via-slate-200/40 to-transparent lg:block"></div>
           {steps.map((step, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 20 }}
+            <motion.article
+              key={step.label}
+              initial={{ opacity: 0, y: 32 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: index * 0.2 }}
-              viewport={{ once: true }}
-              className="relative"
+              viewport={{ once: true, amount: 0.4 }}
+              transition={{ duration: 0.5, delay: index * 0.08 }}
+              className="relative rounded-3xl border border-slate-200 bg-white/90 p-8 shadow-sm"
             >
-              {/* Number Badge */}
-              <div className="relative z-10 w-16 h-16 bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl flex items-center justify-center text-white font-bold text-xl mb-6 mx-auto shadow-lg">
-                {step.number}
+              <div className="flex items-center gap-4">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-300 text-sm font-semibold text-slate-600">
+                  {step.label}
+                </span>
+                <h3 className="text-xl font-semibold text-slate-900">{step.title}</h3>
               </div>
-
-              {/* Icon */}
-              <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-blue-100 rounded-xl flex items-center justify-center text-purple-600 mb-6 mx-auto">
-                {step.icon}
+              <p className="mt-6 text-sm leading-relaxed text-slate-600 sm:text-base">
+                {step.description}
+              </p>
+              <div className="mt-6 rounded-2xl border border-dashed border-slate-300/80 bg-slate-50 p-4 text-sm text-slate-500">
+                {step.detail}
               </div>
-
-              {/* Content */}
-              <div className="text-center">
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">
-                  {step.title}
-                </h3>
-                <p className="text-gray-600 leading-relaxed">
-                  {step.description}
-                </p>
-              </div>
-            </motion.div>
+            </motion.article>
           ))}
         </div>
       </div>

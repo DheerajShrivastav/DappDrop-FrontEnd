@@ -2,77 +2,141 @@
 
 import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { ArrowRight, Sparkles } from 'lucide-react'
+import { ArrowUpRight, Check } from 'lucide-react'
+
+const proofPoints = [
+  'Wallet-gated tasks keep sybils out',
+  'Reward drops land straight in your contracts',
+  'Analytics stitched to the exact action users take',
+]
+
+const stats = [
+  { value: '4.7x', label: 'Faster to first cohort' },
+  { value: '63%', label: 'Repeat campaign creators' },
+  { value: '92%', label: 'Verified human submissions' },
+]
 
 export default function Hero() {
   return (
-    <section className="relative pt-32 pb-20 px-6 overflow-hidden">
-      {/* Decorative elements */}
-      <div className="absolute top-20 left-10 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob"></div>
-      <div className="absolute top-40 right-10 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
-      <div className="absolute -bottom-8 left-40 w-72 h-72 bg-pink-300 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
+    <section className="relative px-6 pt-32 pb-24">
+      <div className="absolute inset-x-0 top-24 mx-auto h-96 max-w-5xl rounded-3xl bg-white/70 blur-2xl"></div>
 
-      <div className="max-w-6xl mx-auto relative z-10">
+      <div className="relative mx-auto grid max-w-6xl gap-16 lg:grid-cols-[1.1fr,0.9fr]">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="text-center"
+          className="flex flex-col"
         >
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200/50 rounded-full mb-8">
-            <Sparkles className="w-4 h-4 text-purple-600" />
-            <span className="text-sm font-semibold text-gray-700">
-              Find The Next Billion Real Users
-            </span>
-          </div>
+          <span className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-slate-300/80 bg-white px-4 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">
+            Built for community leads
+          </span>
 
-          {/* Main Heading */}
-          <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-gray-900 mb-6 leading-tight">
-            A New Era of
-            <br />
-            <span className="bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Community Building
-            </span>
+          <h1 className="text-balance text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl lg:text-[3.2rem]">
+            Launch campaigns your audience actually wants to finish.
           </h1>
 
-          {/* Subheading */}
-          <p className="text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto mb-10 leading-relaxed">
-            Launch campaigns, engage real users, and build thriving communities on-chain.
-            <span className="font-semibold text-gray-900"> Ditch the bots, find your tribe.</span>
+          <p className="mt-6 max-w-xl text-lg text-slate-600 sm:text-xl">
+            DAppDrop helps you orchestrate on-chain tasks, reward the right people, and show proof that your growth came from real humans—not farm accounts.
           </p>
 
-          {/* CTA Buttons */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link 
-              href="/#campaigns" 
-              className="group px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-full font-semibold hover:shadow-xl hover:shadow-purple-500/30 transition-all duration-300 flex items-center gap-2"
+          <div className="mt-10 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+            <Link
+              href="/create-campaign"
+              className="inline-flex items-center justify-center rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-slate-700"
             >
-              Explore Campaigns
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              Start a campaign
+              <ArrowUpRight className="ml-2 h-4 w-4" />
             </Link>
-            <Link 
-              href="/create-campaign" 
-              className="px-8 py-4 bg-white text-gray-900 rounded-full font-semibold border-2 border-gray-200 hover:border-purple-300 hover:shadow-lg transition-all duration-300"
+            <Link
+              href="/#campaigns"
+              className="inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:text-slate-900"
             >
-              Get Started
+              Browse live examples
             </Link>
           </div>
 
-          {/* Stats */}
-          <div className="mt-16 grid grid-cols-3 gap-8 max-w-2xl mx-auto">
-            {[
-              { value: '10K+', label: 'Active Users' },
-              { value: '500+', label: 'Campaigns' },
-              { value: '99%', label: 'Real Users' }
-            ].map((stat, index) => (
-              <div key={index} className="text-center">
-                <div className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                  {stat.value}
-                </div>
-                <div className="text-sm text-gray-600 mt-1">{stat.label}</div>
+          <ul className="mt-12 space-y-4">
+            {proofPoints.map((point) => (
+              <li key={point} className="flex gap-3 text-sm text-slate-600">
+                <span className="mt-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700">
+                  <Check className="h-3 w-3" />
+                </span>
+                <span>{point}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-12 grid gap-6 sm:grid-cols-3">
+            {stats.map((stat) => (
+              <div
+                key={stat.label}
+                className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+              >
+                <div className="text-2xl font-semibold text-slate-900">{stat.value}</div>
+                <div className="mt-1 text-sm text-slate-500">{stat.label}</div>
               </div>
             ))}
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 32 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.1 }}
+          className="relative"
+        >
+          <div className="absolute -top-10 -right-10 hidden h-32 w-32 rounded-full border border-dashed border-slate-300/70 sm:block"></div>
+          <div className="absolute -bottom-12 -left-8 hidden h-24 w-24 rotate-6 rounded-2xl border border-slate-200 bg-white/60 sm:block"></div>
+
+          <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.08)]">
+            <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Campaign dashboard
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Real-time view across tasks, wallets, and issued rewards.
+              </p>
+            </div>
+
+            <div className="grid gap-6 px-6 py-8">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Completion rate</p>
+                    <p className="mt-2 text-3xl font-semibold text-slate-900">86%</p>
+                  </div>
+                  <span className="rounded-full bg-emerald-100/70 px-3 py-1 text-xs font-medium text-emerald-700">
+                    +12% vs last drop
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Top tasks</div>
+                <dl className="mt-4 space-y-3 text-sm text-slate-600">
+                  <div className="flex items-center justify-between">
+                    <dt>Mint loyalty credential</dt>
+                    <dd className="font-semibold text-slate-900">1,248</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt>Join Telegram hub</dt>
+                    <dd className="font-semibold text-slate-900">948</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt>Verify builder NFT</dt>
+                    <dd className="font-semibold text-slate-900">712</dd>
+                  </div>
+                </dl>
+              </div>
+
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-5 text-sm text-slate-600">
+                <p className="font-semibold text-slate-900">No more spreadsheets.</p>
+                <p className="mt-2">
+                  Every task is stored on-chain with signer proofs so you can reconcile rewards without passing around CSV exports.
+                </p>
+              </div>
+            </div>
           </div>
         </motion.div>
       </div>
