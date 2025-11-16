@@ -117,8 +117,52 @@ export async function POST(request: Request) {
         }
       }
     } else {
-      // Default to verified for any other task types
-      isVerified = true
+      // For HUMANITY_VERIFICATION and other tasks, determine task type
+      const taskType = taskMetadata?.taskType || 'OTHER'
+
+      if (taskType === 'HUMANITY_VERIFICATION' && userAddress) {
+        try {
+          // First check cached verification status
+          const humanityResponse = await fetch(
+            `${
+              process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+            }/api/verify-humanity?walletAddress=${userAddress}`
+          )
+
+          if (humanityResponse.ok) {
+            const humanityData = await humanityResponse.json()
+            isVerified = humanityData.success && humanityData.isHuman
+
+            // If not verified in cache, trigger verification
+            if (!isVerified) {
+              const verifyResponse = await fetch(
+                `${
+                  process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+                }/api/verify-humanity`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ walletAddress: userAddress }),
+                }
+              )
+
+              if (verifyResponse.ok) {
+                const verifyData = await verifyResponse.json()
+                isVerified = verifyData.success && verifyData.isHuman
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Humanity verification error:', error)
+          isVerified = false
+        }
+      } else if (taskType === 'HUMANITY_VERIFICATION' && !userAddress) {
+        // HUMANITY_VERIFICATION requires a wallet address
+        isVerified = false
+      } else {
+        // Default to verified for any other task types when no specific verification is needed
+        isVerified = true
+      }
     }
 
     return NextResponse.json({
