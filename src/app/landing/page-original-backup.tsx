@@ -36,7 +36,7 @@ import Link from 'next/link'
 //
 // ============================================================================
 
-// Navbar Component - Glassmorphism, Sticky, Blurred
+// Navbar Component - Minimal, Sticky, Blurred on Scroll
 function Navbar() {
   const [scrolled, setScrolled] = useState(false)
 
@@ -52,29 +52,34 @@ function Navbar() {
     <motion.nav
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.6, type: 'spring', stiffness: 100 }}
+      transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
         scrolled
-          ? 'bg-white/10 backdrop-blur-xl border-b border-white/20 shadow-lg shadow-white/5'
+          ? 'bg-white/80 backdrop-blur-xl border-b border-[#1E1E1E]/5 shadow-sm'
           : 'bg-transparent'
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-12 py-5 flex items-center justify-between">
-        <Link href="/" className="text-2xl font-black tracking-tight text-white">
+        <Link href="/" className="text-2xl font-black tracking-tight text-[#1E1E1E]">
           DAppDrop
         </Link>
 
         <div className="flex items-center gap-4">
           <Link
             href="/#campaigns"
-            className="hidden md:block text-white font-medium hover:text-white/80 transition-colors"
+            className="hidden md:block text-[#1E1E1E] font-medium hover:text-[#FF6B00] transition-colors"
           >
             Explore
           </Link>
           <Link
             href="/create-campaign"
-            className="group relative overflow-hidden px-6 py-2.5 bg-white/10 backdrop-blur-md text-white font-bold rounded-full border border-white/20 hover:shadow-lg hover:shadow-white/20 transition-all duration-300"
+            className="relative overflow-hidden px-6 py-2.5 bg-[#FF6B00] text-white font-bold rounded-full group"
           >
+            <motion.span
+              className="absolute inset-0 bg-gradient-to-r from-[#FF6B00] to-[#FF8C00]"
+              whileHover={{ scale: 1.05 }}
+              transition={{ duration: 0.3 }}
+            />
             <span className="relative z-10">Create Campaign</span>
           </Link>
         </div>
@@ -83,7 +88,7 @@ function Navbar() {
   )
 }
 
-// Community Constellation - The Hero Centerpiece (Mouse-Reactive)
+// Community Constellation - The Hero Centerpiece
 function CommunityConstellation() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const mouseX = useMotionValue(0)
@@ -109,7 +114,7 @@ function CommunityConstellation() {
     updateSize()
     window.addEventListener('resize', updateSize)
 
-    // Create luminous nodes
+    // Create nodes (users in the community)
     const nodes: Array<{
       x: number
       y: number
@@ -120,13 +125,13 @@ function CommunityConstellation() {
       angle: number
     }> = []
 
-    const nodeCount = 100
+    const nodeCount = 80
     const centerX = canvas.offsetWidth / 2
     const centerY = canvas.offsetHeight / 2
 
     for (let i = 0; i < nodeCount; i++) {
       const angle = (Math.PI * 2 * i) / nodeCount
-      const distance = 100 + Math.random() * 250
+      const distance = 150 + Math.random() * 200
       const baseX = centerX + Math.cos(angle) * distance
       const baseY = centerY + Math.sin(angle) * distance
 
@@ -135,8 +140,8 @@ function CommunityConstellation() {
         y: baseY,
         baseX,
         baseY,
-        radius: 1.5 + Math.random() * 2.5,
-        speed: 0.0001 + Math.random() * 0.0002,
+        radius: 2 + Math.random() * 3,
+        speed: 0.0002 + Math.random() * 0.0003,
         angle: angle,
       })
     }
@@ -155,8 +160,8 @@ function CommunityConstellation() {
     const animate = () => {
       ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight)
 
-      // Draw connections first (luminous white lines)
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'
+      // Draw connections first (behind nodes)
+      ctx.strokeStyle = 'rgba(255, 107, 0, 0.08)'
       ctx.lineWidth = 1
       
       for (let i = 0; i < nodes.length; i++) {
@@ -165,9 +170,9 @@ function CommunityConstellation() {
           const dy = nodes[i].y - nodes[j].y
           const distance = Math.sqrt(dx * dx + dy * dy)
 
-          if (distance < 120) {
-            const opacity = (1 - distance / 120) * 0.15
-            ctx.strokeStyle = `rgba(255, 255, 255, ${opacity})`
+          if (distance < 150) {
+            const opacity = (1 - distance / 150) * 0.3
+            ctx.strokeStyle = `rgba(255, 107, 0, ${opacity})`
             ctx.beginPath()
             ctx.moveTo(nodes[i].x, nodes[i].y)
             ctx.lineTo(nodes[j].x, nodes[j].y)
@@ -177,36 +182,36 @@ function CommunityConstellation() {
       }
 
       // Update and draw nodes
-      nodes.forEach((node) => {
-        // Gentle orbit animation
+      nodes.forEach((node, i) => {
+        // Orbit animation
         node.angle += node.speed
-        node.x = node.baseX + Math.cos(node.angle) * 15
-        node.y = node.baseY + Math.sin(node.angle) * 15
+        node.x = node.baseX + Math.cos(node.angle) * 20
+        node.y = node.baseY + Math.sin(node.angle) * 20
 
-        // Mouse interaction (magnetic attraction like a field)
+        // Mouse interaction (magnetic attraction)
         const dx = mouseXPos - node.x
         const dy = mouseYPos - node.y
         const distance = Math.sqrt(dx * dx + dy * dy)
         
-        if (distance < 180) {
-          const force = (180 - distance) / 180
-          node.x += dx * force * 0.03
-          node.y += dy * force * 0.03
+        if (distance < 200) {
+          const force = (200 - distance) / 200
+          node.x += dx * force * 0.05
+          node.y += dy * force * 0.05
         }
 
-        // Draw node with luminous glow
-        const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, node.radius * 4)
-        gradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)')
-        gradient.addColorStop(0.4, 'rgba(255, 255, 255, 0.4)')
-        gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+        // Draw node with glow
+        const gradient = ctx.createRadialGradient(node.x, node.y, 0, node.x, node.y, node.radius * 3)
+        gradient.addColorStop(0, 'rgba(255, 107, 0, 0.8)')
+        gradient.addColorStop(0.5, 'rgba(255, 107, 0, 0.3)')
+        gradient.addColorStop(1, 'rgba(255, 107, 0, 0)')
 
         ctx.fillStyle = gradient
         ctx.beginPath()
-        ctx.arc(node.x, node.y, node.radius * 4, 0, Math.PI * 2)
+        ctx.arc(node.x, node.y, node.radius * 3, 0, Math.PI * 2)
         ctx.fill()
 
         // Draw core
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'
+        ctx.fillStyle = '#FF6B00'
         ctx.beginPath()
         ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2)
         ctx.fill()
@@ -248,49 +253,41 @@ function Hero() {
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.12,
-        delayChildren: 0.2,
+        staggerChildren: 0.15,
+        delayChildren: 0.3,
       },
     },
   }
 
   const wordVariants = {
-    hidden: { opacity: 0, y: 40 },
+    hidden: { opacity: 0, y: 50 },
     visible: {
       opacity: 1,
       y: 0,
       transition: {
-        duration: 0.7,
-        type: 'spring',
-        stiffness: 80,
+        duration: 0.8,
+        ease: [0.22, 1, 0.36, 1],
       },
     },
   }
 
   const ctaVariants = {
-    hidden: { opacity: 0, y: 30, scale: 0.95 },
+    hidden: { opacity: 0, y: 30, scale: 0.9 },
     visible: {
       opacity: 1,
       y: 0,
       scale: 1,
       transition: {
-        duration: 0.5,
-        type: 'spring',
-        stiffness: 100,
+        duration: 0.6,
+        ease: [0.22, 1, 0.36, 1],
       },
     },
   }
 
   return (
-    <section 
-      className="relative min-h-screen flex items-center justify-center overflow-hidden"
-      style={{
-        background: '#EEAECA',
-        backgroundImage: 'radial-gradient(circle, rgba(238, 174, 202, 1) 0%, rgba(148, 187, 233, 1) 100%)',
-      }}
-    >
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white">
       {/* Constellation Background */}
-      <div className="absolute inset-0 opacity-30">
+      <div className="absolute inset-0 opacity-40">
         <CommunityConstellation />
       </div>
 
@@ -299,22 +296,22 @@ function Hero() {
         variants={containerVariants}
         initial="hidden"
         animate="visible"
-        className="relative z-10 max-w-6xl mx-auto px-6 text-center"
+        className="relative z-10 max-w-5xl mx-auto px-6 text-center"
       >
         {/* Badge */}
         <motion.div
           variants={wordVariants}
-          className="inline-block mb-10 px-8 py-3 bg-white/10 backdrop-blur-md rounded-full border border-white/20"
+          className="inline-block mb-8 px-6 py-2 bg-[#FF6B00]/10 rounded-full border border-[#FF6B00]/20"
         >
-          <span className="text-sm font-bold text-white tracking-wider">
+          <span className="text-sm font-bold text-[#FF6B00] tracking-wide">
             FIND THE NEXT BILLION REAL USERS FOR YOUR PROJECT
           </span>
         </motion.div>
 
-        {/* Headline - staggerChildren word animation */}
+        {/* Headline - Word by word animation */}
         <div className="mb-6 overflow-hidden">
-          <motion.h1 className="text-6xl md:text-7xl lg:text-8xl xl:text-9xl font-black tracking-tighter text-white leading-[0.92]">
-            {['Find', 'The', 'Next', 'Billion', 'Real', 'Users'].map((word, i) => (
+          <motion.h1 className="text-6xl md:text-7xl lg:text-8xl font-black tracking-tighter text-[#1E1E1E] leading-[0.95]">
+            {['A', 'New', 'Era', 'of', 'Community', 'Building'].map((word, i) => (
               <motion.span
                 key={i}
                 variants={wordVariants}
@@ -326,47 +323,41 @@ function Hero() {
           </motion.h1>
         </div>
 
-        <div className="mb-8 overflow-hidden">
-          <motion.h2 className="text-5xl md:text-6xl lg:text-7xl font-black tracking-tight text-white/95 leading-tight">
-            {['A', 'New', 'Era', 'of', 'Community', 'Building'].map((word, i) => (
-              <motion.span
-                key={i}
-                variants={wordVariants}
-                className="inline-block mr-3 md:mr-5"
-              >
-                {word}
-              </motion.span>
-            ))}
-          </motion.h2>
-        </div>
-
         {/* Subheadline */}
         <motion.p
           variants={wordVariants}
-          className="text-xl md:text-2xl text-white/90 font-medium max-w-3xl mx-auto mb-14 leading-relaxed"
+          className="text-xl md:text-2xl text-[#1E1E1E]/70 font-medium max-w-3xl mx-auto mb-12 leading-relaxed"
         >
           The ultimate platform to launch your project, engage real users, and
           build a thriving community on-chain.{' '}
-          <span className="font-black text-white">
+          <span className="text-[#FF6B00] font-bold">
             Ditch the bots, find your tribe.
           </span>
         </motion.p>
 
-        {/* CTAs - Glassmorphism */}
+        {/* CTAs */}
         <motion.div
           variants={containerVariants}
-          className="flex flex-col sm:flex-row items-center justify-center gap-5"
+          className="flex flex-col sm:flex-row items-center justify-center gap-4"
         >
           <motion.div variants={ctaVariants}>
             <Link
               href="/#campaigns"
-              className="group relative overflow-hidden px-10 py-4 bg-white/15 backdrop-blur-md text-white font-bold rounded-full text-lg inline-flex items-center gap-3 border border-white/30 hover:bg-white/25 hover:shadow-xl hover:shadow-white/30 transition-all duration-300"
+              className="group relative overflow-hidden px-8 py-4 bg-[#FF6B00] text-white font-bold rounded-full text-lg inline-flex items-center gap-2"
             >
-              <span className="relative z-10">Explore</span>
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-[#FF8C00] to-[#FF6B00]"
+                initial={{ clipPath: 'circle(0% at 50% 50%)' }}
+                whileHover={{
+                  clipPath: 'circle(150% at 50% 50%)',
+                  transition: { duration: 0.5, ease: 'easeOut' },
+                }}
+              />
+              <span className="relative z-10">Explore Campaigns</span>
               <motion.span
                 className="relative z-10"
                 animate={{ x: [0, 5, 0] }}
-                transition={{ duration: 1.8, repeat: Infinity }}
+                transition={{ duration: 1.5, repeat: Infinity }}
               >
                 →
               </motion.span>
@@ -376,12 +367,12 @@ function Hero() {
           <motion.div variants={ctaVariants}>
             <Link
               href="/create-campaign"
-              className="group px-10 py-4 bg-white/20 backdrop-blur-md border-2 border-white/40 text-white font-bold rounded-full text-lg inline-flex items-center gap-3 hover:bg-white/30 hover:shadow-xl hover:shadow-white/30 transition-all duration-300"
+              className="group px-8 py-4 bg-transparent border-2 border-[#1E1E1E] text-[#1E1E1E] font-bold rounded-full text-lg inline-flex items-center gap-2 hover:bg-[#1E1E1E] hover:text-white transition-all duration-300"
             >
-              <span>Create</span>
+              <span>Create Your Campaign</span>
               <motion.span
                 animate={{ rotate: [0, 90, 0] }}
-                transition={{ duration: 2.5, repeat: Infinity }}
+                transition={{ duration: 2, repeat: Infinity }}
               >
                 +
               </motion.span>
@@ -397,9 +388,9 @@ function Hero() {
         transition={{ delay: 2, duration: 1, repeat: Infinity, repeatType: 'reverse' }}
         className="absolute bottom-12 left-1/2 -translate-x-1/2"
       >
-        <div className="w-6 h-10 border-2 border-white/30 rounded-full flex justify-center backdrop-blur-sm">
+        <div className="w-6 h-10 border-2 border-[#1E1E1E]/20 rounded-full flex justify-center">
           <motion.div
-            className="w-1.5 h-1.5 bg-white rounded-full mt-2"
+            className="w-1.5 h-1.5 bg-[#FF6B00] rounded-full mt-2"
             animate={{ y: [0, 16, 0] }}
             transition={{ duration: 1.5, repeat: Infinity }}
           />
@@ -409,7 +400,7 @@ function Hero() {
   )
 }
 
-// How It Works - Scroll-Driven Timeline with SVG Path Drawing
+// How It Works - Scroll-Driven Timeline
 function HowItWorks() {
   const containerRef = useRef<HTMLDivElement>(null)
   const { scrollYProgress } = useScroll({
@@ -443,11 +434,7 @@ function HowItWorks() {
   return (
     <section
       ref={containerRef}
-      className="relative py-32 overflow-hidden"
-      style={{
-        background: '#EEAECA',
-        backgroundImage: 'radial-gradient(circle, rgba(238, 174, 202, 1) 0%, rgba(148, 187, 233, 1) 100%)',
-      }}
+      className="relative py-32 bg-white overflow-hidden"
     >
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
         {/* Section Header */}
@@ -456,19 +443,19 @@ function HowItWorks() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8 }}
-          className="text-center mb-28"
+          className="text-center mb-24"
         >
-          <h2 className="text-5xl md:text-6xl lg:text-7xl font-black text-white tracking-tight mb-5">
+          <h2 className="text-5xl md:text-6xl font-black text-[#1E1E1E] tracking-tight mb-4">
             How It Works
           </h2>
-          <p className="text-xl md:text-2xl text-white/80 font-medium">
+          <p className="text-xl text-[#1E1E1E]/60 font-medium">
             Three simple steps to build your tribe
           </p>
         </motion.div>
 
         {/* Timeline */}
         <div className="relative">
-          {/* Vertical SVG Line - Draws on Scroll */}
+          {/* Vertical SVG Line */}
           <div className="absolute left-8 md:left-24 top-0 bottom-0 w-1">
             <svg className="w-full h-full" preserveAspectRatio="none">
               <motion.line
@@ -476,7 +463,7 @@ function HowItWorks() {
                 y1="0%"
                 x2="50%"
                 y2="100%"
-                stroke="rgba(255, 255, 255, 0.6)"
+                stroke="#FF6B00"
                 strokeWidth="3"
                 strokeLinecap="round"
                 style={{ pathLength }}
@@ -486,7 +473,7 @@ function HowItWorks() {
           </div>
 
           {/* Steps */}
-          <div className="space-y-28 md:space-y-36">
+          <div className="space-y-24 md:space-y-32">
             {steps.map((step, index) => (
               <StepItem key={index} step={step} index={index} />
             ))}
@@ -512,43 +499,46 @@ function StepItem({
       ref={ref}
       initial={{ opacity: 0, x: -50 }}
       animate={isInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -50 }}
-      transition={{ duration: 0.8, type: 'spring', stiffness: 80 }}
+      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
       className="relative flex items-start gap-8 md:gap-16"
     >
-      {/* Number Badge - Frosted Glass */}
+      {/* Number Badge */}
       <motion.div
         animate={
           isInView
-            ? { scale: 1, backgroundColor: 'rgba(255, 255, 255, 0.2)' }
-            : { scale: 0.8, backgroundColor: 'rgba(255, 255, 255, 0.05)' }
+            ? { scale: 1, backgroundColor: '#FF6B00' }
+            : { scale: 0.8, backgroundColor: '#FFFFFF' }
         }
         transition={{ duration: 0.5 }}
-        className="flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-full border-3 border-white/40 flex items-center justify-center relative z-10 backdrop-blur-md"
-        style={{ borderWidth: '3px' }}
+        className="flex-shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-[#FF6B00] flex items-center justify-center relative z-10"
       >
         <span className="text-2xl md:text-3xl font-black text-white">
           {step.number}
         </span>
       </motion.div>
 
-      {/* Content - Frosted Glass Card */}
-      <motion.div
-        animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-        className="flex-1 pt-0 p-8 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 hover:bg-white/15 hover:shadow-xl hover:shadow-white/20 transition-all duration-300"
-      >
-        <h3 className="text-3xl md:text-4xl lg:text-5xl font-black text-white mb-4 tracking-tight">
+      {/* Content */}
+      <div className="flex-1 pt-2">
+        <motion.h3
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+          transition={{ duration: 0.6, delay: 0.2 }}
+          className="text-3xl md:text-4xl font-black text-[#1E1E1E] mb-4 tracking-tight"
+        >
           {step.title}
-        </h3>
-        <p className="text-lg md:text-xl text-white/85 font-medium leading-relaxed">
+        </motion.h3>
+        <motion.p
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          className="text-lg md:text-xl text-[#1E1E1E]/70 font-medium leading-relaxed max-w-2xl"
+        >
           {step.description}
-        </p>
-      </motion.div>
+        </motion.p>
+      </div>
     </motion.div>
   )
 }
 
-// Proof Section - Bot Filter Visualization (Asymmetrical Layout)
+// Proof Section - Bot Filter Visualization
 function ProofSection() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -567,7 +557,7 @@ function ProofSection() {
     updateSize()
     window.addEventListener('resize', updateSize)
 
-    // Particles (luminous white for users, dark faded for bots)
+    // Particles
     const particles: Array<{
       x: number
       y: number
@@ -583,14 +573,14 @@ function ProofSection() {
     const filterX = width * 0.5
 
     // Generate particles
-    for (let i = 0; i < 60; i++) {
+    for (let i = 0; i < 50; i++) {
       particles.push({
-        x: Math.random() * width * 0.35,
+        x: Math.random() * width * 0.4,
         y: Math.random() * height,
-        vx: 0.8 + Math.random() * 1.5,
-        vy: (Math.random() - 0.5) * 0.4,
-        radius: 3 + Math.random() * 3,
-        type: Math.random() > 0.55 ? 'user' : 'bot',
+        vx: 1 + Math.random() * 2,
+        vy: (Math.random() - 0.5) * 0.5,
+        radius: 3 + Math.random() * 2,
+        type: Math.random() > 0.6 ? 'user' : 'bot',
         filtered: false,
       })
     }
@@ -600,26 +590,15 @@ function ProofSection() {
     const animate = () => {
       ctx.clearRect(0, 0, width, height)
 
-      // Draw filter line (luminous white)
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'
-      ctx.lineWidth = 5
-      ctx.setLineDash([12, 6])
+      // Draw filter line
+      ctx.strokeStyle = '#FF6B00'
+      ctx.lineWidth = 4
+      ctx.setLineDash([10, 5])
       ctx.beginPath()
       ctx.moveTo(filterX, 0)
       ctx.lineTo(filterX, height)
       ctx.stroke()
       ctx.setLineDash([])
-
-      // Add glow to filter line
-      ctx.shadowBlur = 20
-      ctx.shadowColor = 'rgba(255, 255, 255, 0.5)'
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'
-      ctx.lineWidth = 15
-      ctx.beginPath()
-      ctx.moveTo(filterX, 0)
-      ctx.lineTo(filterX, height)
-      ctx.stroke()
-      ctx.shadowBlur = 0
 
       // Update and draw particles
       particles.forEach((p) => {
@@ -637,31 +616,21 @@ function ProofSection() {
         if (p.x > filterX && !p.filtered) {
           p.filtered = true
           if (p.type === 'bot') {
-            // Bots bounce away
-            p.vy = p.y < height / 2 ? -3 : 3
-            p.vx = -Math.abs(p.vx) * 0.8
+            p.vy = p.y < height / 2 ? -3 : 3 // Bounce away
+            p.vx = -p.vx
           }
         }
 
         // Draw particle
-        if (p.type === 'user') {
-          // Luminous white/pink for real users
-          const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.radius * 2)
-          gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
-          gradient.addColorStop(0.5, 'rgba(255, 182, 193, 0.8)')
-          gradient.addColorStop(1, 'rgba(255, 182, 193, 0)')
-          ctx.fillStyle = gradient
-          ctx.beginPath()
-          ctx.arc(p.x, p.y, p.radius * 2, 0, Math.PI * 2)
-          ctx.fill()
-        } else {
-          // Dark, faded dots for bots
-          const alpha = p.filtered ? 0.2 : 0.4
-          ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`
-          ctx.beginPath()
-          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2)
-          ctx.fill()
-        }
+        const color = p.type === 'user' ? '#FF6B00' : '#CCCCCC'
+        const alpha = p.type === 'bot' && p.filtered ? 0.3 : 0.8
+
+        ctx.fillStyle = `${color}${Math.round(alpha * 255)
+          .toString(16)
+          .padStart(2, '0')}`
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2)
+        ctx.fill()
       })
 
       animationId = requestAnimationFrame(animate)
@@ -676,24 +645,18 @@ function ProofSection() {
   }, [])
 
   return (
-    <section 
-      className="relative py-32 overflow-hidden"
-      style={{
-        background: '#EEAECA',
-        backgroundImage: 'radial-gradient(circle, rgba(238, 174, 202, 1) 0%, rgba(148, 187, 233, 1) 100%)',
-      }}
-    >
+    <section className="relative py-32 bg-[#FAFAFA] overflow-hidden">
       <div className="max-w-7xl mx-auto px-6 lg:px-12">
         <div className="grid md:grid-cols-2 gap-16 items-center">
-          {/* Left: Animated Bot Filter Graphic */}
+          {/* Left: Animated Graphic */}
           <motion.div
             initial={{ opacity: 0, x: -50 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.8, type: 'spring', stiffness: 80 }}
-            className="relative order-2 md:order-1"
+            transition={{ duration: 0.8 }}
+            className="relative"
           >
-            <div className="relative aspect-square rounded-3xl overflow-hidden bg-white/10 backdrop-blur-md border border-white/20 shadow-2xl shadow-white/10">
+            <div className="relative aspect-square rounded-3xl overflow-hidden bg-white shadow-2xl">
               <canvas
                 ref={canvasRef}
                 className="w-full h-full"
@@ -701,9 +664,9 @@ function ProofSection() {
               />
             </div>
             <motion.div
-              animate={{ scale: [1, 1.15, 1], opacity: [0.3, 0.5, 0.3] }}
-              transition={{ duration: 4, repeat: Infinity }}
-              className="absolute -bottom-6 -right-6 w-40 h-40 bg-white/30 rounded-full blur-3xl"
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 3, repeat: Infinity }}
+              className="absolute -bottom-4 -right-4 w-32 h-32 bg-[#FF6B00]/20 rounded-full blur-3xl"
             />
           </motion.div>
 
@@ -712,13 +675,12 @@ function ProofSection() {
             initial={{ opacity: 0, x: 50 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.8, delay: 0.2, type: 'spring', stiffness: 80 }}
-            className="order-1 md:order-2"
+            transition={{ duration: 0.8, delay: 0.2 }}
           >
-            <h2 className="text-5xl md:text-6xl lg:text-7xl font-black text-white tracking-tight mb-10 leading-tight">
+            <h2 className="text-5xl md:text-6xl font-black text-[#1E1E1E] tracking-tight mb-8">
               Ditch the Bots.
               <br />
-              Find Your Tribe.
+              <span className="text-[#FF6B00]">Find Your Tribe.</span>
             </h2>
 
             <div className="space-y-6">
@@ -742,11 +704,11 @@ function ProofSection() {
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.6, delay: 0.3 + i * 0.1 }}
-                  className="flex items-start gap-5 p-6 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 hover:bg-white/15 hover:shadow-lg hover:shadow-white/20 transition-all duration-300"
+                  className="flex items-start gap-4"
                 >
-                  <div className="flex-shrink-0 w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#FF6B00] flex items-center justify-center">
                     <svg
-                      className="w-6 h-6 text-white"
+                      className="w-5 h-5 text-white"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -760,10 +722,10 @@ function ProofSection() {
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-xl md:text-2xl font-black text-white mb-2">
+                    <h4 className="text-xl font-bold text-[#1E1E1E] mb-1">
                       {item.title}
                     </h4>
-                    <p className="text-white/85 font-medium leading-relaxed text-base md:text-lg">
+                    <p className="text-[#1E1E1E]/70 font-medium leading-relaxed">
                       {item.text}
                     </p>
                   </div>
@@ -777,35 +739,28 @@ function ProofSection() {
   )
 }
 
-// Footer - Glassmorphism
+// Footer - Minimal and Clean
 function Footer() {
   return (
-    <footer 
-      className="relative py-16 border-t border-white/20"
-      style={{
-        background: '#EEAECA',
-        backgroundImage: 'radial-gradient(circle, rgba(238, 174, 202, 1) 0%, rgba(148, 187, 233, 1) 100%)',
-      }}
-    >
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm"></div>
-      <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-12">
+    <footer className="bg-[#1E1E1E] text-white py-16">
+      <div className="max-w-7xl mx-auto px-6 lg:px-12">
         <div className="grid md:grid-cols-3 gap-12 mb-12">
           <div>
-            <h3 className="text-2xl font-black mb-4 text-white">DAppDrop</h3>
-            <p className="text-white/80 font-medium">
+            <h3 className="text-2xl font-black mb-4">DAppDrop</h3>
+            <p className="text-white/60 font-medium">
               Building the future of community engagement, one campaign at a time.
             </p>
           </div>
 
           <div>
-            <h4 className="text-sm font-bold uppercase tracking-wider mb-4 text-white">
+            <h4 className="text-sm font-bold uppercase tracking-wider mb-4 text-[#FF6B00]">
               Platform
             </h4>
             <ul className="space-y-2">
               <li>
                 <Link
                   href="/"
-                  className="text-white/80 hover:text-white transition-colors font-medium"
+                  className="text-white/70 hover:text-[#FF6B00] transition-colors font-medium"
                 >
                   Home
                 </Link>
@@ -813,7 +768,7 @@ function Footer() {
               <li>
                 <Link
                   href="/about"
-                  className="text-white/80 hover:text-white transition-colors font-medium"
+                  className="text-white/70 hover:text-[#FF6B00] transition-colors font-medium"
                 >
                   About
                 </Link>
@@ -821,7 +776,7 @@ function Footer() {
               <li>
                 <Link
                   href="/dashboard"
-                  className="text-white/80 hover:text-white transition-colors font-medium"
+                  className="text-white/70 hover:text-[#FF6B00] transition-colors font-medium"
                 >
                   Dashboard
                 </Link>
@@ -830,14 +785,14 @@ function Footer() {
           </div>
 
           <div>
-            <h4 className="text-sm font-bold uppercase tracking-wider mb-4 text-white">
+            <h4 className="text-sm font-bold uppercase tracking-wider mb-4 text-[#FF6B00]">
               Resources
             </h4>
             <ul className="space-y-2">
               <li>
                 <Link
                   href="/changelog"
-                  className="text-white/80 hover:text-white transition-colors font-medium"
+                  className="text-white/70 hover:text-[#FF6B00] transition-colors font-medium"
                 >
                   Changelog
                 </Link>
@@ -847,7 +802,7 @@ function Footer() {
                   href="https://github.com"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-white/80 hover:text-white transition-colors font-medium"
+                  className="text-white/70 hover:text-[#FF6B00] transition-colors font-medium"
                 >
                   GitHub
                 </a>
@@ -856,20 +811,20 @@ function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-white/20 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-white/70 text-sm font-medium">
+        <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+          <p className="text-white/60 text-sm font-medium">
             © 2025 DAppDrop. All rights reserved.
           </p>
           <div className="flex items-center gap-6">
             <a
               href="#"
-              className="text-white/70 hover:text-white transition-colors font-medium"
+              className="text-white/60 hover:text-[#FF6B00] transition-colors"
             >
               Twitter
             </a>
             <a
               href="#"
-              className="text-white/70 hover:text-white transition-colors font-medium"
+              className="text-white/60 hover:text-[#FF6B00] transition-colors"
             >
               Discord
             </a>
@@ -881,9 +836,9 @@ function Footer() {
 }
 
 // Main Landing Page Component
-export default function EtherealLandingPage() {
+export default function LandingPage() {
   return (
-    <div className="font-satoshi">
+    <div className="bg-white text-[#1E1E1E]">
       <Navbar />
       <Hero />
       <HowItWorks />

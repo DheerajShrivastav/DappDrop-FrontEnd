@@ -4,6 +4,7 @@ import { WalletProvider } from '@/context/wallet-provider';
 import Header from '@/components/header';
 import { Toaster } from '@/components/ui/toaster';
 import { Inter } from 'next/font/google'
+import Script from 'next/script'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -23,7 +24,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} dark`} style={{ scrollBehavior: 'smooth' }} suppressHydrationWarning>
-      <body className="font-body antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
+      <head>
+        <link href="https://api.fontshare.com/v2/css?f[]=satoshi@700,500,400,900&display=swap" rel="stylesheet" />
+      </head>
+      <body className="font-satoshi antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
         <WalletProvider>
           <Header />
           <main className="flex-grow">{children}</main>
