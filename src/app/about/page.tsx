@@ -1,226 +1,224 @@
 
-'use client';
+'use client'
 
-import { CheckCircle, Gift, PlusCircle, Rocket, Users, Zap, ShieldCheck, ShieldOff, Bot } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { CheckCircle, Gift, PlusCircle, Rocket, Users, Zap, ShieldCheck, ShieldOff, Bot } from 'lucide-react'
+
+const hostMilestones = [
+  {
+    step: '01',
+    title: 'Design the journey',
+    description:
+      'Template your campaign, stack gated tasks, and line up the stories you want new members to experience first.',
+  },
+  {
+    step: '02',
+    title: 'Verify on autopilot',
+    description:
+      'Let DAppDrop run the checks—wallet ownership, social proof, allowlists—while you focus on the narrative.',
+  },
+  {
+    step: '03',
+    title: 'Reward the believers',
+    description:
+      'Trigger token drops, credential mints, or merch claims directly from the dashboard with full audit trails.',
+  },
+]
+
+const participantMilestones = [
+  {
+    step: '01',
+    title: 'Spot the missions',
+    description:
+      'Browse live drops and find the communities aligned with how you build, collect, or contribute.',
+  },
+  {
+    step: '02',
+    title: 'Prove your moves',
+    description:
+      'Complete verifiable tasks on-chain and off-chain. Your wallet becomes the resume; no screenshots required.',
+  },
+  {
+    step: '03',
+    title: 'Claim and keep building',
+    description:
+      'Unlock rewards that pull you deeper into the project—roles, tokens, IRL passes, and more.',
+  },
+]
+
+const comparison = [
+  {
+    title: 'The old playbook',
+    icon: ShieldOff,
+    tone: 'text-rose-500',
+    body: [
+      'Forms flooded with bots make ops teams second-guess every submission.',
+      'Spreadsheet approvals and DM screenshots slow launch momentum.',
+      'Participants barely touch the product before rewards go out.',
+    ],
+  },
+  {
+    title: 'The DAppDrop way',
+    icon: ShieldCheck,
+    tone: 'text-sky-600',
+    body: [
+      'On-chain signatures and device checks surface the believers instantly.',
+      'Reward logic lives in contracts, so fulfillment is trustless and fast.',
+      'Campaign narratives guide users through the exact experiences you envisioned.',
+    ],
+  },
+]
+
+const pillars = [
+  {
+    title: 'Transparent infrastructure',
+    icon: Zap,
+    description:
+      'Every quest, verification, and reward is immutably tracked so you can share proof with your team, community, or investors.',
+  },
+  {
+    title: 'Flexible orchestration',
+    icon: PlusCircle,
+    description:
+      'Mix on-chain actions with social checkpoints, role gates, or custom logic. Reuse sequences or build entirely new ones in minutes.',
+  },
+  {
+    title: 'Meaningful rewards',
+    icon: Gift,
+    description:
+      'Drop tokens, loyalty badges, or physical claims once participants cross the finish line—no spreadsheets or manual approvals.',
+  },
+]
 
 export default function AboutPage() {
   return (
-    <div className="bg-background text-foreground">
-      <section className="bg-card border-b border-primary/20">
-        <div className="container mx-auto px-4 py-20 text-center">
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tighter">
-            About DApp Drop Zone
+    <div className="bg-[#f6f2eb] text-slate-900">
+      <section className="relative overflow-hidden px-6 pb-24 pt-28">
+        <div className="absolute inset-x-24 top-12 h-48 rounded-full bg-gradient-to-r from-sky-200/60 via-blue-100/50 to-indigo-200/60 blur-3xl" />
+        <div className="mx-auto max-w-5xl text-center">
+          <span className="inline-flex items-center rounded-full border border-white/70 bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 shadow-sm">
+            Why DAppDrop exists
+          </span>
+          <h1 className="mt-8 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+            We build campaign rails that make community growth feel intentional, not artificial.
           </h1>
-          <p className="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
-            Our mission is to provide a decentralized, transparent, and engaging platform that connects innovative Web3 projects with genuine, active users, fostering real community growth and rewarding participation.
+          <p className="mt-6 text-lg text-slate-600 sm:text-xl">
+            DAppDrop replaces chaotic forms and bot armies with a guided, measurable journey that proves every win came from real people.
           </p>
         </div>
-      </section>
 
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold tracking-tight text-center mb-12">How It Works</h2>
-          <div className="grid md:grid-cols-2 gap-12">
-            
-            {/* For Project Hosts */}
-            <div className="space-y-8">
-              <h3 className="text-2xl font-semibold text-center text-primary flex items-center justify-center gap-2"><Rocket className="h-6 w-6" /> For Project Hosts</h3>
-              <div className="space-y-4">
-                <Card className="bg-card border">
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 text-primary p-3 rounded-full font-bold text-lg">1</div>
-                      <div>
-                        <CardTitle className="text-xl">Create Your Campaign</CardTitle>
-                        <p className="text-muted-foreground">Use our intuitive step-by-step form to define your campaign details, from the title and description to the duration and branding.</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-                 <Card className="bg-card border">
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 text-primary p-3 rounded-full font-bold text-lg">2</div>
-                      <div>
-                        <CardTitle className="text-xl">Add Engaging Tasks</CardTitle>
-                        <p className="text-muted-foreground">Design a series of on-chain or off-chain tasks for participants to complete, such as following on social media or interacting with a smart contract.</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-                 <Card className="bg-card border">
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 text-primary p-3 rounded-full font-bold text-lg">3</div>
-                      <div>
-                        <CardTitle className="text-xl">Set the Rewards</CardTitle>
-                        <p className="text-muted-foreground">Define the rewards for completion. Distribute ERC20 tokens, mint exclusive NFTs, or provide other unique off-chain benefits.</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-                 <Card className="bg-card border">
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 text-primary p-3 rounded-full font-bold text-lg">4</div>
-                      <div>
-                        <CardTitle className="text-xl">Launch &amp; Grow</CardTitle>
-                        <p className="text-muted-foreground">Open your campaign to the public from your dashboard and watch your community grow as users participate and complete tasks.</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </div>
+        <div className="mx-auto mt-16 grid max-w-5xl gap-4 sm:grid-cols-3">
+          {[{ value: '12.4K', label: 'Verified participants' }, { value: '640', label: 'Campaigns orchestrated' }, { value: '92%', label: 'Average task completion' }].map((stat) => (
+            <div
+              key={stat.label}
+              className="rounded-2xl border border-white/60 bg-white/70 px-6 py-5 text-left shadow-[0_20px_60px_rgba(15,23,42,0.08)]"
+            >
+              <p className="text-3xl font-semibold text-slate-900">{stat.value}</p>
+              <p className="mt-1 text-sm text-slate-600">{stat.label}</p>
             </div>
-
-            {/* For Participants */}
-            <div className="space-y-8">
-              <h3 className="text-2xl font-semibold text-center text-primary flex items-center justify-center gap-2"><Users className="h-6 w-6" /> For Participants</h3>
-               <div className="space-y-4">
-                <Card className="bg-card border">
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 text-primary p-3 rounded-full font-bold text-lg">1</div>
-                      <div>
-                        <CardTitle className="text-xl">Discover New Projects</CardTitle>
-                        <p className="text-muted-foreground">Browse active campaigns on our platform to find the latest and most exciting projects in the Web3 space.</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-                 <Card className="bg-card border">
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 text-primary p-3 rounded-full font-bold text-lg">2</div>
-                      <div>
-                        <CardTitle className="text-xl">Complete Tasks</CardTitle>
-                        <p className="text-muted-foreground">Connect your wallet and complete the tasks listed for a campaign. Your progress is tracked on-chain for transparency.</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-                 <Card className="bg-card border">
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 text-primary p-3 rounded-full font-bold text-lg">3</div>
-                      <div>
-                        <CardTitle className="text-xl">Claim Your Rewards</CardTitle>
-                        <p className="text-muted-foreground">Once all required tasks are done and the campaign has ended, you can claim your rewards directly to your wallet.</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-                 <Card className="bg-card border">
-                  <CardHeader>
-                    <div className="flex items-start gap-4">
-                      <div className="bg-primary/10 text-primary p-3 rounded-full font-bold text-lg">4</div>
-                      <div>
-                        <CardTitle className="text-xl">Join a Community</CardTitle>
-                        <p className="text-muted-foreground">By participating, you become an early member of a new project's community, with the potential for future benefits and access.</p>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </Card>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
-       <section className="py-20 bg-card border-t">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-4xl mx-auto">
-            <h2 className="text-3xl font-bold tracking-tight mb-4">Beyond the Form: Why On-Chain Engagement Matters</h2>
-            <p className="text-muted-foreground mb-12">
-              Tired of sifting through thousands of bot entries from a Google Form? DApp Drop Zone leverages the power of the blockchain to ensure every participant is genuine and every action is verifiable.
+      <section className="px-6 pb-24">
+        <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-[1.05fr,0.95fr]">
+          <div className="rounded-3xl border border-white/60 bg-white/80 p-10 shadow-[0_25px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-900">For project hosts</h2>
+            <p className="mt-4 text-base text-slate-600">
+              You bring the vision. We provide the infrastructure that keeps growth sprints tidy, measurable, and human.
             </p>
+            <div className="mt-10 space-y-6">
+              {hostMilestones.map((item) => (
+                <div key={item.step} className="rounded-2xl border border-slate-200/80 bg-white/70 p-6 shadow-sm">
+                  <div className="flex items-center gap-4 text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700">
+                      {item.step}
+                    </span>
+                    {item.title}
+                  </div>
+                  <p className="mt-3 text-sm text-slate-600">{item.description}</p>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            <Card className="bg-background border-destructive/30">
-              <CardHeader>
-                <div className="flex items-center gap-4">
-                    <ShieldOff className="h-10 w-10 text-destructive" />
-                    <div>
-                        <CardTitle className="text-2xl">The Old Way: Forms &amp; Bots</CardTitle>
-                        <CardDescription>Manual, inefficient, and vulnerable to spam.</CardDescription>
-                    </div>
+
+          <div className="rounded-3xl border border-white/60 bg-white/70 p-10 shadow-[0_25px_80px_rgba(59,130,246,0.12)] backdrop-blur">
+            <h2 className="text-3xl font-semibold tracking-tight text-slate-900">For participants</h2>
+            <p className="mt-4 text-base text-slate-600">
+              Earn your spot by proving it on-chain. Campaigns reward the exact behavior teams need, not the fastest form filler.
+            </p>
+            <div className="mt-10 space-y-6">
+              {participantMilestones.map((item) => (
+                <div key={item.step} className="rounded-2xl border border-slate-200/80 bg-white/70 p-6 shadow-sm">
+                  <div className="flex items-center gap-4 text-sm font-semibold uppercase tracking-[0.2em] text-slate-500">
+                    <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700">
+                      {item.step}
+                    </span>
+                    {item.title}
+                  </div>
+                  <p className="mt-3 text-sm text-slate-600">{item.description}</p>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-3 text-muted-foreground">
-                <div className="flex items-start gap-3">
-                  <Bot className="h-5 w-5 mt-1 shrink-0" />
-                  <p><strong className="text-foreground">Bot Magnet:</strong> Simple forms are easily spammed by bots, creating thousands of fake entries and making it impossible to find real users.</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <Bot className="h-5 w-5 mt-1 shrink-0" />
-                   <p><strong className="text-foreground">Manual Verification Hell:</strong> Hosts spend countless hours trying to manually verify social follows or other tasks, often with unreliable results.</p>
-                </div>
-                 <div className="flex items-start gap-3">
-                  <Bot className="h-5 w-5 mt-1 shrink-0" />
-                   <p><strong className="text-foreground">No Real Engagement:</strong> Participants just fill out a form. There's no meaningful interaction with your project or its on-chain assets.</p>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-background border-primary/30">
-              <CardHeader>
-                <div className="flex items-center gap-4">
-                    <ShieldCheck className="h-10 w-10 text-primary" />
-                    <div>
-                        <CardTitle className="text-2xl">The New Way: DApp Drop Zone</CardTitle>
-                        <CardDescription>Automated, transparent, and bot-resistant.</CardDescription>
-                    </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3 text-muted-foreground">
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 mt-1 shrink-0 text-primary" />
-                  <p><strong className="text-foreground">Verifiable On-Chain Actions:</strong> Tasks are completed and verified directly through smart contracts, proving genuine participation.</p>
-                </div>
-                <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 mt-1 shrink-0 text-primary" />
-                   <p><strong className="text-foreground">Automated &amp; Trustless:</strong> The smart contract handles everything from task validation to reward distribution, eliminating manual work and bias.</p>
-                </div>
-                 <div className="flex items-start gap-3">
-                  <CheckCircle className="h-5 w-5 mt-1 shrink-0 text-primary" />
-                   <p><strong className="text-foreground">Sybil Resistant:</strong> Requiring a wallet connection and on-chain interactions naturally filters out low-effort bots and ensures a higher quality audience.</p>
-                </div>
-              </CardContent>
-            </Card>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-            <h2 className="text-3xl font-bold tracking-tight text-center mb-12">Core Features</h2>
-            <div className="grid md:grid-cols-3 gap-8 text-center max-w-5xl mx-auto">
-                <div className="flex flex-col items-center p-6 bg-card rounded-lg">
-                    <div className="bg-primary/10 p-4 rounded-full mb-4">
-                        <Zap className="h-8 w-8 text-primary"/>
+      <section className="relative overflow-hidden px-6 py-24">
+        <div className="absolute inset-x-12 top-10 h-56 rounded-3xl bg-gradient-to-r from-sky-200/50 via-white/40 to-indigo-200/50 blur-3xl" />
+        <div className="relative mx-auto max-w-6xl">
+          <div className="mb-16 grid gap-8 rounded-3xl border border-white/60 bg-white/75 p-10 shadow-[0_30px_90px_rgba(15,23,42,0.12)] backdrop-blur">
+            <div className="grid gap-8 lg:grid-cols-2">
+              {comparison.map((item) => {
+                const Icon = item.icon
+                return (
+                  <div key={item.title} className="rounded-3xl border border-slate-200/80 bg-white/70 p-8 shadow-sm">
+                    <div className="flex items-center gap-4">
+                      <span className={`rounded-2xl border border-white/70 bg-white p-3 shadow-inner ${item.tone}`}>
+                        <Icon className="h-6 w-6" />
+                      </span>
+                      <h3 className="text-lg font-semibold text-slate-900">{item.title}</h3>
                     </div>
-                    <h3 className="text-xl font-semibold mb-2">Decentralized &amp; Transparent</h3>
-                    <p className="text-muted-foreground">All campaign logic, participation data, and reward distributions are handled by smart contracts on the Sepolia testnet, ensuring fairness and transparency.</p>
-                </div>
-                <div className="flex flex-col items-center p-6 bg-card rounded-lg">
-                    <div className="bg-primary/10 p-4 rounded-full mb-4">
-                        <PlusCircle className="h-8 w-8 text-primary"/>
-                    </div>
-                    <h3 className="text-xl font-semibold mb-2">Flexible Campaign Creation</h3>
-                    <p className="text-muted-foreground">Hosts can easily create custom campaigns with a variety of on-chain and off-chain tasks to suit their project's specific engagement goals.</p>
-                </div>
-                 <div className="flex flex-col items-center p-6 bg-card rounded-lg">
-                    <div className="bg-primary/10 p-4 rounded-full mb-4">
-                        <Gift className="h-8 w-8 text-primary"/>
-                    </div>
-                    <h3 className="text-xl font-semibold mb-2">Verifiable On-Chain Rewards</h3>
-                    <p className="text-muted-foreground">Reward your community with tangible, on-chain assets like ERC20 tokens or unique ERC721 NFTs, all handled securely through the smart contract.</p>
-                </div>
+                    <ul className="mt-6 space-y-3 text-sm text-slate-600">
+                      {item.body.map((line) => (
+                        <li key={line} className="flex gap-3">
+                          <span className="mt-1 inline-block h-1.5 w-6 rounded-full bg-slate-300" />
+                          <span>{line}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
             </div>
+
+            <div className="rounded-3xl border border-slate-200/70 bg-white/70 p-8 shadow-sm">
+              <div className="flex gap-4 text-slate-600">
+                <Rocket className="h-6 w-6 flex-shrink-0 text-sky-500" />
+                <p className="text-sm leading-relaxed">
+                  DAppDrop is built by operators who have run campaigns, managed allowlists, and babysat spreadsheets at 3 A.M. We translated that pain into infrastructure that keeps your team focused on storytelling—not triaging bots.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-6 rounded-3xl border border-white/60 bg-white/80 p-10 shadow-[0_25px_80px_rgba(15,23,42,0.08)] backdrop-blur sm:grid-cols-3">
+            {pillars.map((pillar) => {
+              const Icon = pillar.icon
+              return (
+                <div key={pillar.title} className="rounded-2xl border border-slate-200/70 bg-white/70 p-6 shadow-sm">
+                  <span className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white p-3 text-sky-500">
+                    <Icon className="h-5 w-5" />
+                  </span>
+                  <h3 className="mt-4 text-base font-semibold text-slate-900">{pillar.title}</h3>
+                  <p className="mt-3 text-sm text-slate-600">{pillar.description}</p>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </section>
     </div>
-  );
+  )
 }
 
     
