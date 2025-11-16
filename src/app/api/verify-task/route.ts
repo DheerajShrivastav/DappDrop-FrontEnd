@@ -5,6 +5,8 @@ import {
   verifyTelegramJoin,
 } from '@/lib/verification-service'
 import { prisma } from '@/lib/prisma'
+import { getCampaignById } from '@/lib/web3-service'
+import type { Campaign } from '@/lib/types'
 
 export async function POST(request: Request) {
   try {
@@ -117,8 +119,212 @@ export async function POST(request: Request) {
         }
       }
     } else {
-      // Default to verified for any other task types
-      isVerified = true
+      // For HUMANITY_VERIFICATION and other tasks, get canonical task type from campaign data
+      // Get the campaign to determine the actual task type
+      let canonicalTaskType: string | null = null
+      let requiresHumanityVerification = false
+
+      try {
+        const campaign = await getCampaignById(campaignId.toString())
+        if (campaign && campaign.tasks && campaign.tasks[taskIndex]) {
+          canonicalTaskType = campaign.tasks[taskIndex].type
+          requiresHumanityVerification =
+            canonicalTaskType === 'HUMANITY_VERIFICATION'
+        }
+      } catch (error) {
+        console.error(
+          'Error fetching campaign for task type validation:',
+          error
+        )
+      }
+
+      // Use metadata as override only if canonical type is available
+      const effectiveTaskType = canonicalTaskType || taskMetadata?.taskType
+
+      console.log('Task type validation:', {
+        taskIndex,
+        canonicalTaskType,
+        metadataTaskType: taskMetadata?.taskType,
+        effectiveTaskType,
+        requiresHumanityVerification,
+      })
+
+      if (effectiveTaskType === 'HUMANITY_VERIFICATION' && userAddress) {
+        // Create request-origin-safe URL for internal API calls
+        const baseUrl = new URL('/api/verify-humanity', request.url)
+
+        try {
+          console.log('Performing humanity verification for:', userAddress)
+
+          // First check cached verification status
+          const cacheCheckUrl = new URL(baseUrl)
+          cacheCheckUrl.searchParams.set('walletAddress', userAddress)
+
+          const humanityResponse = await fetch(cacheCheckUrl.toString(), {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          })
+
+          let verificationResult = {
+            success: false,
+            isHuman: false,
+            error: null as string | null,
+            internalError: false,
+          }
+
+          if (humanityResponse.ok) {
+            const humanityData = await humanityResponse.json()
+            console.log('Cache check result:', humanityData)
+
+            if (humanityData.success && humanityData.isHuman) {
+              // Already verified in cache
+              verificationResult = {
+                success: true,
+                isHuman: true,
+                error: null,
+                internalError: false,
+              }
+            } else {
+              // Not in cache or not verified, trigger fresh verification
+              console.log('Triggering fresh humanity verification')
+
+              const verifyResponse = await fetch(baseUrl.toString(), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ walletAddress: userAddress }),
+              })
+
+              if (verifyResponse.ok) {
+                const verifyData = await verifyResponse.json()
+                console.log('Fresh verification result:', verifyData)
+
+                if (verifyData.success) {
+                  verificationResult = {
+                    success: true,
+                    isHuman: verifyData.isHuman,
+                    error: verifyData.error || null,
+                    internalError: false,
+                  }
+                } else {
+                  verificationResult = {
+                    success: false,
+                    isHuman: false,
+                    error: verifyData.error || 'Verification service error',
+                    internalError: true,
+                  }
+                }
+              } else {
+                console.error(
+                  'Humanity verification API call failed:',
+                  verifyResponse.status,
+                  verifyResponse.statusText
+                )
+                verificationResult = {
+                  success: false,
+                  isHuman: false,
+                  error: `Verification service unavailable (${verifyResponse.status})`,
+                  internalError: true,
+                }
+              }
+            }
+          } else {
+            console.error(
+              'Cache check API call failed:',
+              humanityResponse.status,
+              humanityResponse.statusText
+            )
+            verificationResult = {
+              success: false,
+              isHuman: false,
+              error: `Verification service unavailable (${humanityResponse.status})`,
+              internalError: true,
+            }
+          }
+
+          isVerified = verificationResult.isHuman
+
+          // Return detailed response for humanity verification
+          return NextResponse.json({
+            success: verificationResult.success,
+            verified: isVerified,
+            message: isVerified
+              ? 'Humanity verification successful'
+              : verificationResult.error || 'Humanity verification failed',
+            internalError: verificationResult.internalError,
+            verificationDetails: {
+              taskType: effectiveTaskType,
+              walletAddress: userAddress,
+              isHuman: verificationResult.isHuman,
+            },
+          })
+        } catch (error: any) {
+          console.error(
+            'Network/infrastructure error during humanity verification:',
+            error
+          )
+          return NextResponse.json(
+            {
+              success: false,
+              verified: false,
+              message: 'Infrastructure error during verification',
+              internalError: true,
+              error: error.message || 'Network error',
+            },
+            { status: 500 }
+          )
+        }
+      } else if (
+        effectiveTaskType === 'HUMANITY_VERIFICATION' &&
+        !userAddress
+      ) {
+        // HUMANITY_VERIFICATION requires a wallet address - fail closed
+        return NextResponse.json({
+          success: false,
+          verified: false,
+          message: 'Wallet address required for humanity verification',
+          internalError: false,
+        })
+      } else if (requiresHumanityVerification && !effectiveTaskType) {
+        // Canonical task requires humanity verification but metadata is missing/misconfigured - fail closed
+        console.warn(
+          'Missing task type metadata for humanity verification task:',
+          {
+            campaignId,
+            taskIndex,
+            canonicalTaskType,
+            metadataTaskType: taskMetadata?.taskType,
+          }
+        )
+        return NextResponse.json({
+          success: false,
+          verified: false,
+          message:
+            'Task configuration error - humanity verification required but not properly configured',
+          internalError: true,
+        })
+      } else {
+        // For non-humanity verification tasks, default to verified only if we have a valid task type
+        if (
+          effectiveTaskType &&
+          effectiveTaskType !== 'HUMANITY_VERIFICATION'
+        ) {
+          isVerified = true
+        } else {
+          // Unknown task type - fail closed for security
+          console.warn('Unknown or missing task type - failing closed:', {
+            campaignId,
+            taskIndex,
+            canonicalTaskType,
+            metadataTaskType: taskMetadata?.taskType,
+          })
+          return NextResponse.json({
+            success: false,
+            verified: false,
+            message: 'Unknown task type - verification failed',
+            internalError: true,
+          })
+        }
+      }
     }
 
     return NextResponse.json({

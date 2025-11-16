@@ -18,6 +18,17 @@ export async function POST(request: Request) {
     console.log('Verifying humanity for wallet:', validAddress)
     const result = await verifyHumanity(validAddress)
 
+    // Check if verification was successful (no error in response)
+    if (result.error) {
+      console.log('Verification completed with error:', result.error)
+      return NextResponse.json({
+        success: true, // API call succeeded
+        isHuman: result.is_human, // but verification failed
+        walletAddress: result.wallet_address,
+        error: result.error,
+      })
+    }
+
     return NextResponse.json({
       success: true,
       isHuman: result.is_human,
@@ -26,27 +37,25 @@ export async function POST(request: Request) {
     })
   } catch (error: any) {
     console.error('Humanity verification API error:', error)
-    
+
     // Handle validation errors
-    if (error.message?.includes('required') || error.message?.includes('Invalid')) {
+    if (
+      error.message?.includes('required') ||
+      error.message?.includes('Invalid')
+    ) {
       return NextResponse.json(
-        { error: error.message },
+        {
+          success: false,
+          error: error.message,
+        },
         { status: 400 }
-      )
-    }
-    
-    // Handle rate limiting
-    if (error.message?.includes('Rate limit')) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 429 }
       )
     }
 
     return NextResponse.json(
       {
-        error: error.message || 'Failed to verify humanity',
         success: false,
+        error: error.message || 'Failed to verify humanity',
       },
       { status: 500 }
     )
@@ -74,15 +83,15 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     console.error('Humanity verification check error:', error)
-    
+
     // Handle validation errors
-    if (error.message?.includes('required') || error.message?.includes('Invalid')) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 400 }
-      )
+    if (
+      error.message?.includes('required') ||
+      error.message?.includes('Invalid')
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 400 })
     }
-    
+
     return NextResponse.json(
       {
         error: error.message || 'Failed to check verification status',
