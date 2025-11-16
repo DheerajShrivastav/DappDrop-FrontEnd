@@ -86,6 +86,7 @@ const mapContractDataToCampaign = (
     'JOIN_DISCORD',
     'JOIN_TELEGRAM',
     'RETWEET',
+    'HUMANITY_VERIFICATION',
     'ONCHAIN_TX',
   ]
 
@@ -570,8 +571,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     JOIN_DISCORD: 1,
     JOIN_TELEGRAM: 2,
     RETWEET: 3,
-    ONCHAIN_TX: 4,
     HUMANITY_VERIFICATION: 4,
+    ONCHAIN_TX: 4,
   }
 
   try {
@@ -790,8 +791,8 @@ export const createCampaign = async (campaignData: any) => {
     JOIN_DISCORD: 1,
     JOIN_TELEGRAM: 2,
     RETWEET: 3,
-    ONCHAIN_TX: 4,
     HUMANITY_VERIFICATION: 4,
+    ONCHAIN_TX: 4,
   }
 
   try {
