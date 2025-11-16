@@ -8,6 +8,7 @@ import BenefitsSection from '@/components/landing/BenefitsSection'
 import Testimonials from '@/components/landing/Testimonials'
 import CTASection from '@/components/landing/CTASection'
 import Footer from '@/components/landing/Footer'
+import OrbitingShowcase from '@/components/landing/OrbitingShowcase'
 
 export default function Home() {
   return (
@@ -30,6 +31,7 @@ export default function Home() {
 
       <Navbar />
       <Hero />
+      <OrbitingShowcase />
       <SignalStrip />
       <Features />
       <CampaignSpotlight />
