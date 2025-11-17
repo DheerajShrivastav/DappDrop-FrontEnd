@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { ShieldCheck, ExternalLink, Info, Wallet, Edit3 } from 'lucide-react'
 import { useWallet } from '@/context/wallet-provider'
+import { isValidEthereumAddress } from '@/lib/validation-utils'
 
 interface HumanityVerificationModalProps {
   isOpen: boolean
@@ -36,10 +37,8 @@ export function HumanityVerificationModal({
 
   // Use environment variable or default to testnet
   const humanityPortalUrl =
-    typeof window !== 'undefined' && (window as any).ENV?.HUMANITY_PORTAL_URL
-      ? (window as any).ENV.HUMANITY_PORTAL_URL
-      : process.env.NEXT_PUBLIC_HUMANITY_PORTAL_URL ||
-        'https://testnet.humanity.org'
+    process.env.NEXT_PUBLIC_HUMANITY_PORTAL_URL ||
+    'https://testnet.humanity.org'
 
   const handleOpenHumanityProtocol = () => {
     window.open(humanityPortalUrl, '_blank')
@@ -54,13 +53,9 @@ export function HumanityVerificationModal({
     onVerify(addressToVerify)
   }
 
-  const isValidEthAddress = (addr: string) => {
-    return /^0x[a-fA-F0-9]{40}$/.test(addr)
-  }
-
   const canVerify = () => {
     if (useCustomAddress) {
-      return customWalletAddress && isValidEthAddress(customWalletAddress)
+      return customWalletAddress && isValidEthereumAddress(customWalletAddress)
     }
     return isConnected && address
   }
@@ -170,7 +165,7 @@ export function HumanityVerificationModal({
                         className="font-mono text-sm"
                       />
                       {customWalletAddress &&
-                        !isValidEthAddress(customWalletAddress) && (
+                        !isValidEthereumAddress(customWalletAddress) && (
                           <p className="text-xs text-red-600">
                             Please enter a valid Ethereum address
                           </p>

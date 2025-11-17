@@ -24,7 +24,7 @@ export function HumanityBadge({
       `}
     >
       {showIcon && <ShieldCheck className="h-3 w-3 mr-1" />}
-      Humanity Verified Required
+      Humanity Verifufication Required
     </Badge>
   )
 }
