@@ -10,13 +10,17 @@ import { validateWalletAddress } from '@/lib/validation-utils'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { walletAddress } = body
+    const { walletAddress, forceRefresh } = body
 
     // Validate and sanitize wallet address
     const validAddress = validateWalletAddress(walletAddress)
 
-    console.log('Verifying humanity for wallet:', validAddress)
-    const result = await verifyHumanity(validAddress)
+    console.log(
+      'Verifying humanity for wallet:',
+      validAddress,
+      forceRefresh ? '(force refresh)' : '(using cache)'
+    )
+    const result = await verifyHumanity(validAddress, forceRefresh || false)
 
     // Check if verification was successful (no error in response)
     if (result.error) {
@@ -44,12 +48,9 @@ export async function POST(request: Request) {
       error.message?.includes('Invalid')
     ) {
       return NextResponse.json(
-        {
-          success: false,
-          error: error.message,
-        },
+        { success: false, error: error.message },
         { status: 400 }
-      )
+     )
     }
 
     return NextResponse.json(
@@ -92,12 +93,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-    return NextResponse.json(
-      {
-        error: error.message || 'Failed to check verification status',
-        success: false,
-      },
-      { status: 500 }
-    )
+     return NextResponse.json(
+        { success: false, error: error.message },
+        { status: 400 }
+      )
   }
 }

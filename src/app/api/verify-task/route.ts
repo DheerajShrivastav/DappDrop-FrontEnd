@@ -80,7 +80,19 @@ export async function POST(request: Request) {
       }
     } else if (isTelegramTask) {
       // Basic Telegram verification
-      const telegramChatId = taskMetadata?.telegramChatId || ''
+      const telegramChatId = taskMetadata?.telegramChatId
+      if (!telegramChatId) {
+        console.warn('Telegram task missing chat ID metadata', {
+          campaignId,
+          taskIndex,
+        })
+        return NextResponse.json({
+          success: false,
+          verified: false,
+          message: 'Telegram chat ID is not configured for this task',
+          internalError: true,
+        })
+      }
 
       isVerified = await verifyTelegramJoin(
         telegramUsername || '',
@@ -156,13 +168,15 @@ export async function POST(request: Request) {
         try {
           console.log('Performing humanity verification for:', userAddress)
 
-          // First check cached verification status
-          const cacheCheckUrl = new URL(baseUrl)
-          cacheCheckUrl.searchParams.set('walletAddress', userAddress)
-
-          const humanityResponse = await fetch(cacheCheckUrl.toString(), {
-            method: 'GET',
+          // For task verification, we want to force a fresh check
+          // This ensures users who just completed verification can immediately complete tasks
+          const verifyResponse = await fetch(baseUrl.toString(), {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              walletAddress: userAddress,
+              forceRefresh: true, // Force fresh verification for task completion
+            }),
           })
 
           let verificationResult = {
@@ -172,71 +186,35 @@ export async function POST(request: Request) {
             internalError: false,
           }
 
-          if (humanityResponse.ok) {
-            const humanityData = await humanityResponse.json()
-            console.log('Cache check result:', humanityData)
+          if (verifyResponse.ok) {
+            const verifyData = await verifyResponse.json()
+            console.log('Fresh verification result for task:', verifyData)
 
-            if (humanityData.success && humanityData.isHuman) {
-              // Already verified in cache
+            if (verifyData.success) {
               verificationResult = {
                 success: true,
-                isHuman: true,
-                error: null,
+                isHuman: verifyData.isHuman,
+                error: verifyData.error || null,
                 internalError: false,
               }
             } else {
-              // Not in cache or not verified, trigger fresh verification
-              console.log('Triggering fresh humanity verification')
-
-              const verifyResponse = await fetch(baseUrl.toString(), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ walletAddress: userAddress }),
-              })
-
-              if (verifyResponse.ok) {
-                const verifyData = await verifyResponse.json()
-                console.log('Fresh verification result:', verifyData)
-
-                if (verifyData.success) {
-                  verificationResult = {
-                    success: true,
-                    isHuman: verifyData.isHuman,
-                    error: verifyData.error || null,
-                    internalError: false,
-                  }
-                } else {
-                  verificationResult = {
-                    success: false,
-                    isHuman: false,
-                    error: verifyData.error || 'Verification service error',
-                    internalError: true,
-                  }
-                }
-              } else {
-                console.error(
-                  'Humanity verification API call failed:',
-                  verifyResponse.status,
-                  verifyResponse.statusText
-                )
-                verificationResult = {
-                  success: false,
-                  isHuman: false,
-                  error: `Verification service unavailable (${verifyResponse.status})`,
-                  internalError: true,
-                }
+              verificationResult = {
+                success: false,
+                isHuman: false,
+                error: verifyData.error || 'Verification service error',
+                internalError: true,
               }
             }
           } else {
             console.error(
-              'Cache check API call failed:',
-              humanityResponse.status,
-              humanityResponse.statusText
+              'Humanity verification API call failed:',
+              verifyResponse.status,
+              verifyResponse.statusText
             )
             verificationResult = {
               success: false,
               isHuman: false,
-              error: `Verification service unavailable (${humanityResponse.status})`,
+              error: `Verification service unavailable (${verifyResponse.status})`,
               internalError: true,
             }
           }

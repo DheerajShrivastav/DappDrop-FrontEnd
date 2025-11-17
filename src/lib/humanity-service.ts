@@ -1,9 +1,11 @@
 // src/lib/humanity-service.ts
+import { clear } from 'console'
 import { prisma } from './prisma'
 import type {
   HumanityVerificationRequest,
   HumanityVerificationResponse,
 } from './types'
+import { isValidEthereumAddress } from './validation-utils'
 
 // Cache TTL: 24 hours in milliseconds
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
@@ -42,13 +44,16 @@ function checkRateLimit(walletAddress: string): boolean {
 
 /**
  * Verify a wallet address using Humanity Protocol API
+ * @param walletAddress - The wallet address to verify
+ * @param forceRefresh - If true, bypasses cache and forces fresh verification
  */
 export async function verifyHumanity(
-  walletAddress: string
+  walletAddress: string,
+  forceRefresh: boolean = false
 ): Promise<HumanityVerificationResponse> {
   try {
     // Validate wallet address format
-    if (!walletAddress || !walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+    if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
       console.error('Invalid wallet address format:', walletAddress)
       return {
         is_human: false,
@@ -57,8 +62,8 @@ export async function verifyHumanity(
       }
     }
 
-    // Check rate limiting
-    if (!checkRateLimit(walletAddress)) {
+    // Check rate limiting (but allow some leeway for force refresh)
+    if (!forceRefresh && !checkRateLimit(walletAddress)) {
       console.warn('Rate limit exceeded for wallet:', walletAddress)
       return {
         is_human: false,
@@ -67,15 +72,58 @@ export async function verifyHumanity(
       }
     }
 
-    // Check cache first
-    const cachedVerification = await getCachedVerification(walletAddress)
-    if (cachedVerification) {
-      console.log('Using cached Humanity verification for:', walletAddress)
-      return {
-        is_human: cachedVerification.isHuman,
-        wallet_address: walletAddress,
-        verified_at: cachedVerification.verifiedAt.toISOString(),
+    // Check cache first, but with smart logic
+    if (!forceRefresh) {
+      const cachedVerification = await getCachedVerification(walletAddress)
+      if (cachedVerification) {
+        // Always trust positive verification results from cache
+        if (cachedVerification.isHuman) {
+          console.log(
+            'Using cached positive Humanity verification for:',
+            walletAddress
+          )
+          return {
+            is_human: true,
+            wallet_address: walletAddress,
+            verified_at: cachedVerification.verifiedAt.toISOString(),
+          }
+        }
+
+        // For negative results, only use cache if it's recent (within 1 hour)
+        // This allows users to retry verification after completing the process
+        const now = new Date()
+        const cacheAge = now.getTime() - cachedVerification.verifiedAt.getTime()
+        const oneHourMs = 60 * 60 * 1000
+
+        if (cacheAge < oneHourMs) {
+          console.log(
+            'Using recent cached negative verification for:',
+            walletAddress,
+            'age:',
+            Math.round(cacheAge / 1000 / 60),
+            'minutes'
+          )
+          return {
+            is_human: false,
+            wallet_address: walletAddress,
+            verified_at: cachedVerification.verifiedAt.toISOString(),
+            error: 'Recently checked - not verified with Humanity Protocol',
+          }
+        } else {
+          console.log(
+            'Cached negative result is old (',
+            Math.round(cacheAge / 1000 / 60),
+            'minutes), allowing fresh check for:',
+            walletAddress
+          )
+        }
       }
+    } else {
+      console.log(
+        'Force refresh requested for:',
+        walletAddress,
+        'bypassing cache'
+      )
     }
 
     // Call Humanity Protocol API
@@ -97,58 +145,82 @@ export async function verifyHumanity(
 
     console.log('Calling Humanity Protocol API for:', walletAddress)
 
-    const response = await fetch(`${apiUrl}?wallet_address=${walletAddress}`, {
-      method: 'GET',
-      headers: {
-        'X-HP-API-Key': apiKey,
-        'Content-Type': 'application/json',
-      },
-      timeout: 10000, // 10 second timeout
-    })
+    // Create AbortController for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+    try {
+      const response = await fetch(
+        `${apiUrl}?wallet_address=${walletAddress}`,
+        {
+          method: 'GET',
+          headers: {
+            'X-HP-API-Key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal,
+        }
+      )
 
-    // Handle different response statuses gracefully
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error')
-      console.warn(`Humanity API responded with ${response.status}:`, errorText)
+      clearTimeout(timeoutId)
 
-      // Handle specific error cases
-      if (response.status === 404) {
-        // Wallet not found in Humanity Protocol - this means not verified
-        await updateUserVerificationStatus(walletAddress, false)
+      // Handle different response statuses gracefully
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        console.warn(
+          `Humanity API responded with ${response.status}:`,
+          errorText
+        )
+
+        // Handle specific error cases
+        if (response.status === 404) {
+          // Wallet not found in Humanity Protocol - this means not verified
+          await updateUserVerificationStatus(walletAddress, false)
+          return {
+            is_human: false,
+            wallet_address: walletAddress,
+            error: 'Wallet not verified with Humanity Protocol',
+          }
+        }
+
+        if (response.status === 401 || response.status === 403) {
+          return {
+            is_human: false,
+            wallet_address: walletAddress,
+            error: 'API authentication failed',
+          }
+        }
+
+        // For other errors, return generic error
         return {
           is_human: false,
           wallet_address: walletAddress,
-          error: 'Wallet not verified with Humanity Protocol',
+          error: `API error (${response.status}): ${errorText}`,
         }
       }
 
-      if (response.status === 401 || response.status === 403) {
+      const data: HumanityVerificationResponse = await response.json()
+      console.log('Humanity Protocol verification result:', {
+        wallet: walletAddress,
+        isHuman: data.is_human,
+        verifiedAt: data.verified_at,
+      })
+
+      // Update user record in database
+      await updateUserVerificationStatus(walletAddress, data.is_human)
+
+      return data
+    } catch (error: any) {
+      clearTimeout(timeoutId)
+      if (error.name === 'AbortError') {
+        console.error('Humanity API request timed out for:', walletAddress)
         return {
           is_human: false,
           wallet_address: walletAddress,
-          error: 'API authentication failed',
+          error: 'Humanity timed out',
         }
       }
-
-      // For other errors, return generic error
-      return {
-        is_human: false,
-        wallet_address: walletAddress,
-        error: `API error (${response.status}): ${errorText}`,
-      }
+      throw error
     }
-
-    const data: HumanityVerificationResponse = await response.json()
-    console.log('Humanity Protocol verification result:', {
-      wallet: walletAddress,
-      isHuman: data.is_human,
-      verifiedAt: data.verified_at,
-    })
-
-    // Update user record in database
-    await updateUserVerificationStatus(walletAddress, data.is_human)
-
-    return data
   } catch (error: any) {
     console.error('Error during humanity verification:', {
       wallet: walletAddress,
@@ -262,7 +334,7 @@ async function updateUserVerificationStatus(
 export async function isUserVerified(walletAddress: string): Promise<boolean> {
   try {
     // Validate wallet address
-    if (!walletAddress || !walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+    if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
       console.warn(
         'Invalid wallet address for verification check:',
         walletAddress
@@ -294,13 +366,14 @@ export async function isUserVerified(walletAddress: string): Promise<boolean> {
 
 /**
  * Force refresh verification status for a user
+ * This bypasses cache and forces a fresh verification check
  */
 export async function refreshVerification(
   walletAddress: string
 ): Promise<{ success: boolean; isHuman: boolean; error?: string }> {
   try {
-    console.log('Refreshing verification for:', walletAddress)
-    const result = await verifyHumanity(walletAddress)
+    console.log('Force refreshing verification for:', walletAddress)
+    const result = await verifyHumanity(walletAddress, true) // Force refresh
 
     return {
       success: !result.error,
@@ -314,5 +387,25 @@ export async function refreshVerification(
       isHuman: false,
       error: 'Failed to refresh verification',
     }
+  }
+}
+/**
+ * Clear cached verification for a wallet address
+ * Useful when user wants to force a fresh check
+ */
+export async function clearVerificationCache(
+  walletAddress: string
+): Promise<void> {
+  try {
+    await prisma.user.updateMany({
+      where: { walletAddress: walletAddress.toLowerCase() },
+      data: {
+        lastHumanityCheck: null,
+        humanityVerified: false,
+      },
+    })
+    console.log('Cleared verification cache for:', walletAddress)
+  } catch (error) {
+    console.warn('Error clearing verification cache for:', walletAddress, error)
   }
 }
