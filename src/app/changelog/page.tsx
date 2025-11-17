@@ -1,10 +1,10 @@
 
-'use client';
 
-import { format } from 'date-fns';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { GitCommit, ShieldCheck, Zap, Bot, UserPlus, Rocket } from 'lucide-react';
+"use client"
+
+import { format } from 'date-fns'
+import { GitCommit, ShieldCheck, Zap, Bot, UserPlus, Rocket } from 'lucide-react'
+import Navbar from '@/components/landing/Navbar'
 
 const changelogData = [
     {
@@ -94,75 +94,105 @@ const changelogData = [
             },
         ],
     }
-];
+]
 
-const ChangeTypeIcon = ({ type, icon: Icon }: { type: string; icon: React.ElementType }) => {
-    const getBadgeVariant = () => {
-        switch (type) {
-            case 'Security': return 'destructive';
-            case 'Feature': return 'default';
-            case 'Improvement': return 'secondary';
-            case 'Governance': return 'outline';
-            default: return 'outline';
-        }
+const badgeTone = (type: string) => {
+    switch (type) {
+        case 'Security':
+            return 'bg-rose-100 text-rose-700'
+        case 'Feature':
+            return 'bg-sky-100 text-sky-700'
+        case 'Improvement':
+            return 'bg-slate-100 text-slate-700'
+        case 'Governance':
+            return 'bg-indigo-100 text-indigo-700'
+        default:
+            return 'bg-slate-100 text-slate-700'
     }
-    return (
-        <Badge variant={getBadgeVariant()} className="mr-2">
-            <Icon className="h-3 w-3 mr-1" />
-            {type}
-        </Badge>
-    );
-};
+}
 
 export default function ChangelogPage() {
-    // Sort data descending by date
-    const sortedChangelogData = changelogData.sort((a, b) => b.date.getTime() - a.date.getTime());
+    const sortedChangelogData = changelogData
+        .slice()
+        .sort((a, b) => b.date.getTime() - a.date.getTime())
 
     return (
-        <div className="bg-background text-foreground">
-            <section className="bg-card border-b border-primary/20">
-                <div className="container mx-auto px-4 py-20 text-center">
-                <h1 className="text-4xl md:text-6xl font-bold tracking-tighter">
-                    Changelog
-                </h1>
-                <p className="mt-6 text-lg text-muted-foreground max-w-3xl mx-auto">
-                    Stay updated with the latest features, improvements, and bug fixes for DApp Drop Zone.
-                </p>
+        <div className="bg-[#f6f2eb] text-slate-900">
+            <Navbar />
+            <section className="relative overflow-hidden px-6 pb-24 pt-28">
+                <div className="absolute inset-x-16 top-16 h-48 rounded-3xl bg-gradient-to-r from-sky-200/60 via-blue-100/50 to-indigo-200/60 blur-3xl" />
+                <div className="relative mx-auto max-w-4xl text-center">
+                    <span className="inline-flex items-center rounded-full border border-white/70 bg-white/80 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-slate-500 shadow-sm">
+                        Build log
+                    </span>
+                    <h1 className="mt-8 text-balance text-4xl font-semibold tracking-tight sm:text-5xl">
+                        Every release moves DAppDrop closer to verifiable, human growth.
+                    </h1>
+                    <p className="mt-6 text-lg text-slate-600 sm:text-xl">
+                        Follow along as we ship infrastructure for campaign teams, participants, and the operators who connect them.
+                    </p>
+                </div>
+
+                <div className="relative mx-auto mt-16 max-w-5xl rounded-3xl border border-white/60 bg-white/80 p-10 shadow-[0_30px_90px_rgba(15,23,42,0.12)] backdrop-blur">
+                    <div className="grid gap-6 sm:grid-cols-3">
+                        {[
+                            { label: 'Latest milestone', value: sortedChangelogData[0]?.version ?? '—' },
+                            { label: 'Total releases tracked', value: sortedChangelogData.length.toString() },
+                            { label: 'Contract upgrades', value: sortedChangelogData.filter((entry) => entry.title.toLowerCase().includes('contract')).length.toString() },
+                        ].map((item) => (
+                            <div key={item.label} className="rounded-2xl border border-slate-200/80 bg-white/70 px-5 py-4 shadow-sm">
+                                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">{item.label}</p>
+                                <p className="mt-2 text-lg font-semibold text-slate-900">{item.value}</p>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </section>
 
-            <section className="py-20">
-                <div className="container mx-auto px-4 max-w-4xl">
-                   <div className="relative">
-                        <div className="absolute left-4 top-0 h-full w-0.5 bg-border -translate-x-1/2" aria-hidden="true"></div>
-                        <div className="space-y-12">
-                            {sortedChangelogData.map((entry, index) => (
-                                <div key={index} className="relative pl-8">
-                                    <div className="absolute left-4 top-2 h-4 w-4 bg-primary rounded-full -translate-x-1/2 border-4 border-card"></div>
-                                    <p className="text-sm text-muted-foreground font-medium mb-1">{format(entry.date, 'MMMM dd, yyyy')}</p>
-                                    <Card className="bg-card border shadow-md">
-                                        <CardHeader>
-                                            <CardTitle className="text-2xl">{entry.title}</CardTitle>
-                                            <CardDescription>{entry.description}</CardDescription>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <ul className="space-y-3">
-                                                {entry.changes.map((change, cIndex) => (
-                                                    <li key={cIndex} className="flex items-start">
-                                                        <ChangeTypeIcon type={change.type} icon={change.icon} />
-                                                        <span className="flex-1 text-muted-foreground">{change.text}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </CardContent>
-                                    </Card>
+            <section className="relative px-6 pb-32">
+                <div className="absolute inset-x-12 top-0 h-72 rounded-3xl bg-gradient-to-b from-white/80 via-white/40 to-transparent blur-3xl" />
+                <div className="relative mx-auto max-w-5xl">
+                    <div className="flex flex-col gap-10 before:absolute before:left-1/2 before:top-6 before:h-[calc(100%-3rem)] before:w-px before:-translate-x-1/2 before:bg-gradient-to-b before:from-sky-200 before:via-slate-200 before:to-transparent md:before:left-6 md:before:translate-x-0">
+                        {sortedChangelogData.map((entry, index) => (
+                            <div
+                                key={entry.title}
+                                className="relative grid gap-6 rounded-3xl border border-white/60 bg-white/80 p-8 shadow-[0_25px_80px_rgba(15,23,42,0.08)] backdrop-blur md:grid-cols-[200px,1fr]"
+                            >
+                                <div className="flex flex-col gap-4 md:items-start">
+                                    <div className="inline-flex items-center gap-3 rounded-full border border-slate-200/80 bg-white/70 px-4 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">
+                                        {format(entry.date, 'MMM dd, yyyy')}
+                                    </div>
+                                    <p className="text-base font-semibold text-slate-700">{entry.version}</p>
                                 </div>
-                            ))}
-                        </div>
-                   </div>
+
+                                <div>
+                                    <h2 className="text-xl font-semibold text-slate-900">{entry.title}</h2>
+                                    <p className="mt-2 text-sm text-slate-600">{entry.description}</p>
+                                    <ul className="mt-6 space-y-3 text-sm text-slate-600">
+                                        {entry.changes.map((change, changeIndex) => {
+                                            const Icon = change.icon
+                                            return (
+                                                <li key={changeIndex} className="flex items-start gap-3 rounded-2xl border border-slate-200/70 bg-white/70 p-4 shadow-sm">
+                                                    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${badgeTone(change.type)}`}>
+                                                        <Icon className="h-3.5 w-3.5" />
+                                                        {change.type}
+                                                    </span>
+                                                    <span className="flex-1 leading-relaxed">{change.text}</span>
+                                                </li>
+                                            )
+                                        })}
+                                    </ul>
+                                </div>
+
+                                <span className="absolute left-1/2 top-6 -translate-x-1/2 rounded-full border border-white/70 bg-gradient-to-br from-sky-400 to-indigo-400 p-2 text-white shadow-lg md:left-6 md:translate-x-0">
+                                    <Rocket className="h-4 w-4" />
+                                </span>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </section>
         </div>
-    );
+    )
 }
 
