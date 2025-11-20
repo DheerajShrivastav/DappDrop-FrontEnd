@@ -18,9 +18,49 @@ import {
   Rocket,
   MessageSquare,
   Send,
+  Users,
 } from 'lucide-react'
 
 const changelogData = [
+  {
+    date: new Date('2025-11-20T16:00:00Z'),
+    version: 'Identity & Trust',
+    title: 'Humanity Protocol Integration',
+    description:
+      'Revolutionary human verification system integration with Humanity Protocol, enabling campaigns to verify authentic human participation and prevent bot manipulation.',
+    changes: [
+      {
+        type: 'Feature',
+        icon: Users,
+        text: 'Integrated Humanity Protocol API for comprehensive human verification and sybil resistance.',
+      },
+      {
+        type: 'Feature',
+        icon: ShieldCheck,
+        text: 'Added HUMANITY_VERIFICATION task type with wallet-based authentication and verification.',
+      },
+      {
+        type: 'Feature',
+        icon: Zap,
+        text: 'Implemented humanity verification modal with connected and custom wallet address options.',
+      },
+      {
+        type: 'Security',
+        icon: ShieldCheck,
+        text: 'Enhanced task verification security with fail-closed approach for missing humanity verification metadata.',
+      },
+      {
+        type: 'Feature',
+        icon: Bot,
+        text: 'Created intelligent caching system with smart refresh logic for verification status management.',
+      },
+      {
+        type: 'Improvement',
+        icon: GitCommit,
+        text: 'Implemented request-origin-safe URLs and distinguished infrastructure errors from verification failures.',
+      },
+    ],
+  },
   {
     date: new Date('2025-11-07T14:00:00Z'),
     version: 'Communication Expansion',
