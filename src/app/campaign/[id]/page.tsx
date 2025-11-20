@@ -57,6 +57,7 @@ import { Progress } from '@/components/ui/progress'
 import { CampaignAnalytics } from '@/components/campaign-analytics'
 import { DiscordAuthButton } from '@/components/discord-auth-button'
 import { TaskVerificationForm } from '@/components/task-verification-form'
+import { HumanityVerificationModal } from '@/components/humanity-verification-modal'
 import {
   Dialog,
   DialogContent,
@@ -89,6 +90,8 @@ const TaskIcon = ({ type }: { type: TaskType['type'] }) => {
       return <Twitter className="h-5 w-5 text-sky-400" />
     case 'ONCHAIN_TX':
       return <ShieldCheck className="h-5 w-5 text-green-500" />
+    case 'HUMANITY_VERIFICATION':
+      return <ShieldCheck className="h-5 w-5 text-purple-600" />
     default:
       return <Bot className="h-5 w-5 text-muted-foreground" />
   }
@@ -127,7 +130,35 @@ export default function CampaignDetailsPage() {
   } | null>(null)
   const [verifyingTaskId, setVerifyingTaskId] = useState<string | null>(null)
 
+  // Humanity Protocol Verification State
+  const [isHumanityModalOpen, setIsHumanityModalOpen] = useState(false)
+  const [isCheckingHumanity, setIsCheckingHumanity] = useState(false)
+  const [userHumanityStatus, setUserHumanityStatus] = useState<boolean | null>(
+    null
+  )
+
   const campaignId = id as string
+
+  // Check user's Humanity verification status
+  const checkHumanityStatus = async () => {
+    if (!address) return
+
+    setIsCheckingHumanity(true)
+    try {
+      const response = await fetch(
+        `/api/verify-humanity?walletAddress=${address}`
+      )
+      const data = await response.json()
+
+      if (data.success) {
+        setUserHumanityStatus(data.isHuman)
+      }
+    } catch (error) {
+      console.error('Error checking Humanity status:', error)
+    } finally {
+      setIsCheckingHumanity(false)
+    }
+  }
 
   const fetchAllCampaignData = useCallback(
     async (forceRefresh: boolean = false) => {
@@ -308,6 +339,13 @@ export default function CampaignDetailsPage() {
     }
   }, [campaign?.id, campaign?.tasks])
 
+  // Check Humanity verification status when wallet connects
+  useEffect(() => {
+    if (address && isConnected) {
+      checkHumanityStatus()
+    }
+  }, [address, isConnected])
+
   const handleShare = () => {
     const url = window.location.href
     navigator.clipboard
@@ -442,6 +480,24 @@ export default function CampaignDetailsPage() {
         }
       }
 
+      // Handle HUMANITY_VERIFICATION task type - check verification status but let it flow through normal verification
+      if (taskType === 'HUMANITY_VERIFICATION') {
+        // Check if user is verified before proceeding
+        const humanityResponse = await fetch(
+          `/api/verify-humanity?walletAddress=${address}`
+        )
+        const humanityData = await humanityResponse.json()
+
+        if (!humanityData.success || !humanityData.isHuman) {
+          // User is not verified, show modal
+          setIsHumanityModalOpen(true)
+          throw new Error(
+            'Please complete Humanity Protocol verification first'
+          )
+        }
+        // If verified, continue with normal flow
+      }
+
       // Format discord username with discriminator if available
       const discordUsername =
         discordData?.username && discordData?.discriminator
@@ -529,6 +585,82 @@ export default function CampaignDetailsPage() {
       setIsVerifyDialogOpen(false)
       setVerifyingTaskId(null)
       setDiscordUserData(null)
+    }
+  }
+
+  // Verify user with Humanity Protocol
+  const handleVerifyHumanity = async (walletAddress?: string) => {
+    console.log('🚀 handleVerifyHumanity called with:', walletAddress)
+    const addressToVerify = walletAddress || address
+    if (!addressToVerify) {
+      console.log('❌ No wallet address provided')
+      toast({
+        variant: 'destructive',
+        title: 'No Wallet Address',
+        description: 'Please provide a wallet address to verify.',
+      })
+      return
+    }
+
+    console.log('🔍 Verifying humanity for address:', addressToVerify)
+    setIsCheckingHumanity(true)
+    try {
+      const response = await fetch('/api/verify-humanity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: addressToVerify }),
+      })
+
+      console.log(
+        '📡 API response status:',
+        response.status,
+        response.statusText
+      )
+      const data = await response.json()
+      console.log('📄 Raw API Response:', JSON.stringify(data, null, 2))
+
+      if (data.success) {
+        console.log(
+          '✅ API success=true, isHuman value:',
+          data.isHuman,
+          typeof data.isHuman
+        )
+        setUserHumanityStatus(data.isHuman)
+
+        if (data.isHuman) {
+          console.log('🎉 SHOWING SUCCESS TOAST - data.isHuman is truthy')
+          toast({
+            title: 'Verification Successful!',
+            description: `Address ${addressToVerify.slice(
+              0,
+              6
+            )}...${addressToVerify.slice(
+              -4
+            )} is verified as human. You can now complete this task.`,
+          })
+          setIsHumanityModalOpen(false)
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Not Verified',
+            description: `Address ${addressToVerify.slice(
+              0,
+              6
+            )}...${addressToVerify.slice(
+              -4
+            )} is not verified. Please complete verification on Humanity Protocol first.`,
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error verifying Humanity:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Verification Failed',
+        description: 'Could not verify Humanity status. Please try again.',
+      })
+    } finally {
+      setIsCheckingHumanity(false)
     }
   }
 
@@ -710,121 +842,165 @@ export default function CampaignDetailsPage() {
                 return (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between p-4 rounded-md bg-secondary/50"
+                    className="flex flex-col p-4 rounded-md bg-secondary/50 gap-3"
                   >
-                    <div className="flex items-center space-x-4">
-                      <div className="p-2 bg-background rounded-full">
-                        <TaskIcon type={task.type} />
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4">
+                        <div className="p-2 bg-background rounded-full">
+                          <TaskIcon type={task.type} />
+                        </div>
+                        <label
+                          htmlFor={`task-${task.id}`}
+                          className="text-sm font-medium leading-none"
+                        >
+                          {task.description}
+                        </label>
                       </div>
-                      <label
-                        htmlFor={`task-${task.id}`}
-                        className="text-sm font-medium leading-none"
-                      >
-                        {task.description}
-                      </label>
+                      {role === 'participant' && (
+                        <div className="flex items-center gap-2">
+                          {userTask?.completed ? (
+                            <Button
+                              id={`task-${task.id}`}
+                              size="sm"
+                              variant="ghost"
+                              disabled
+                            >
+                              <CheckCircle className="mr-2 h-4 w-4 text-green-500" />{' '}
+                              Completed
+                            </Button>
+                          ) : task.type === 'HUMANITY_VERIFICATION' ||
+                            task.type === 'ONCHAIN_TX' ? (
+                            <>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={userHumanityStatus === true}
+                                onClick={() => setIsHumanityModalOpen(true)}
+                              >
+                                {userHumanityStatus ? (
+                                  <>
+                                    <CheckCircle className="mr-2 h-4 w-4 text-green-500" />
+                                    Verified
+                                  </>
+                                ) : (
+                                  <>
+                                    <ShieldCheck className="mr-2 h-4 w-4" />
+                                    Get Verified
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                id={`task-${task.id}`}
+                                size="sm"
+                                variant="outline"
+                                disabled={isTaskDisabled || !userHumanityStatus}
+                                onClick={() =>
+                                  handleCompleteTask(task.id, task.type)
+                                }
+                              >
+                                {userTask?.isCompleting ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <ShieldCheck className="mr-2 h-4 w-4" />
+                                )}
+                                Verify Task
+                              </Button>
+                            </>
+                          ) : task.type === 'JOIN_DISCORD' ? (
+                            <>
+                              <Button size="sm" asChild variant="outline">
+                                <Link
+                                  href={
+                                    task.discordInviteLink
+                                      ? task.discordInviteLink.startsWith(
+                                          'http'
+                                        )
+                                        ? task.discordInviteLink
+                                        : `https://discord.gg/${task.discordInviteLink}`
+                                      : `https://discord.gg/${
+                                          task.verificationData || 'placeholder'
+                                        }`
+                                  }
+                                  target="_blank"
+                                >
+                                  Join
+                                </Link>
+                              </Button>
+                              <Button
+                                id={`task-${task.id}`}
+                                size="sm"
+                                variant="outline"
+                                disabled={isTaskDisabled}
+                                onClick={() => {
+                                  setVerifyingTaskId(task.id)
+                                  setIsVerifyDialogOpen(true)
+                                }}
+                              >
+                                {userTask?.isCompleting ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <ShieldCheck className="mr-2 h-4 w-4" />
+                                )}
+                                Verify
+                              </Button>
+                            </>
+                          ) : task.type === 'JOIN_TELEGRAM' ? (
+                            <>
+                              <Button size="sm" asChild variant="outline">
+                                <Link
+                                  href={
+                                    task.telegramInviteLink
+                                      ? task.telegramInviteLink.startsWith(
+                                          'http'
+                                        )
+                                        ? task.telegramInviteLink
+                                        : `https://t.me/${task.telegramInviteLink}`
+                                      : `https://t.me/${
+                                          task.verificationData || 'placeholder'
+                                        }`
+                                  }
+                                  target="_blank"
+                                >
+                                  Join
+                                </Link>
+                              </Button>
+                              <Button
+                                id={`task-${task.id}`}
+                                size="sm"
+                                variant="outline"
+                                disabled={isTaskDisabled}
+                                onClick={() => {
+                                  setVerifyingTaskId(task.id)
+                                  setIsVerifyDialogOpen(true)
+                                }}
+                              >
+                                {userTask?.isCompleting ? (
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                ) : (
+                                  <ShieldCheck className="mr-2 h-4 w-4" />
+                                )}
+                                Verify
+                              </Button>
+                            </>
+                          ) : (
+                            <Button
+                              id={`task-${task.id}`}
+                              size="sm"
+                              variant="outline"
+                              disabled={isTaskDisabled}
+                              onClick={() =>
+                                handleCompleteTask(task.id, task.type)
+                              }
+                            >
+                              {userTask?.isCompleting && (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              )}
+                              Complete Task
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    {role === 'participant' && (
-                      <div className="flex items-center gap-2">
-                        {userTask?.completed ? (
-                          <Button
-                            id={`task-${task.id}`}
-                            size="sm"
-                            variant="ghost"
-                            disabled
-                          >
-                            <CheckCircle className="mr-2 h-4 w-4 text-green-500" />{' '}
-                            Completed
-                          </Button>
-                        ) : task.type === 'JOIN_DISCORD' ? (
-                          <>
-                            <Button size="sm" asChild variant="outline">
-                              <Link
-                                href={
-                                  task.discordInviteLink
-                                    ? task.discordInviteLink.startsWith('http')
-                                      ? task.discordInviteLink
-                                      : `https://discord.gg/${task.discordInviteLink}`
-                                    : `https://discord.gg/${
-                                        task.verificationData || 'placeholder'
-                                      }`
-                                }
-                                target="_blank"
-                              >
-                                Join
-                              </Link>
-                            </Button>
-                            <Button
-                              id={`task-${task.id}`}
-                              size="sm"
-                              variant="outline"
-                              disabled={isTaskDisabled}
-                              onClick={() => {
-                                setVerifyingTaskId(task.id)
-                                setIsVerifyDialogOpen(true)
-                              }}
-                            >
-                              {userTask?.isCompleting ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : (
-                                <ShieldCheck className="mr-2 h-4 w-4" />
-                              )}
-                              Verify
-                            </Button>
-                          </>
-                        ) : task.type === 'JOIN_TELEGRAM' ? (
-                          <>
-                            <Button size="sm" asChild variant="outline">
-                              <Link
-                                href={
-                                  task.telegramInviteLink
-                                    ? task.telegramInviteLink.startsWith('http')
-                                      ? task.telegramInviteLink
-                                      : `https://t.me/${task.telegramInviteLink}`
-                                    : `https://t.me/${
-                                        task.verificationData || 'placeholder'
-                                      }`
-                                }
-                                target="_blank"
-                              >
-                                Join
-                              </Link>
-                            </Button>
-                            <Button
-                              id={`task-${task.id}`}
-                              size="sm"
-                              variant="outline"
-                              disabled={isTaskDisabled}
-                              onClick={() => {
-                                setVerifyingTaskId(task.id)
-                                setIsVerifyDialogOpen(true)
-                              }}
-                            >
-                              {userTask?.isCompleting ? (
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              ) : (
-                                <ShieldCheck className="mr-2 h-4 w-4" />
-                              )}
-                              Verify
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            id={`task-${task.id}`}
-                            size="sm"
-                            variant="outline"
-                            disabled={isTaskDisabled}
-                            onClick={() =>
-                              handleCompleteTask(task.id, task.type)
-                            }
-                          >
-                            {userTask?.isCompleting && (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            )}
-                            Complete Task
-                          </Button>
-                        )}
-                      </div>
-                    )}
                   </div>
                 )
               })}
@@ -1005,9 +1181,11 @@ export default function CampaignDetailsPage() {
                     </p>
                   )}
                 {address && isConnected && (
-                  <p className="text-xs text-center text-muted-foreground pt-2 break-all">
-                    Connected as: {address}
-                  </p>
+                  <>
+                    <p className="text-xs text-center text-muted-foreground pt-2 break-all">
+                      Connected as: {address}
+                    </p>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1059,6 +1237,14 @@ export default function CampaignDetailsPage() {
         }
         campaignId={campaignId}
         onVerify={handleCompleteTask}
+      />
+
+      {/* Humanity Protocol Verification Modal */}
+      <HumanityVerificationModal
+        isOpen={isHumanityModalOpen}
+        onOpenChange={setIsHumanityModalOpen}
+        onVerify={handleVerifyHumanity}
+        isVerifying={isCheckingHumanity}
       />
     </div>
   )

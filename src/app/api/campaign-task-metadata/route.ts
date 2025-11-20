@@ -16,6 +16,7 @@ export async function POST(request: Request) {
       discordInviteLink,
       telegramInviteLink,
       telegramChatId,
+      requiresHumanityVerification,
       metadata,
     } = body
 
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       discordInviteLink,
       telegramInviteLink,
       telegramChatId,
+      requiresHumanityVerification,
       metadata,
     })
 
@@ -49,6 +51,7 @@ export async function POST(request: Request) {
         discordInviteLink,
         telegramInviteLink,
         telegramChatId,
+        requiresHumanityVerification: requiresHumanityVerification || false,
         metadata,
       },
       create: {
@@ -58,6 +61,7 @@ export async function POST(request: Request) {
         discordInviteLink,
         telegramInviteLink,
         telegramChatId,
+        requiresHumanityVerification: requiresHumanityVerification || false,
         metadata,
       },
     })
