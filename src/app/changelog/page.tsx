@@ -17,9 +17,54 @@ import {
   UserPlus,
   Rocket,
   MessageSquare,
+  Send,
 } from 'lucide-react'
 
 const changelogData = [
+  {
+    date: new Date('2025-11-07T14:00:00Z'),
+    version: 'Communication Expansion',
+    title: 'Telegram Bot Verification System',
+    description:
+      'Expanded social verification capabilities with comprehensive Telegram integration, enabling campaigns to verify user participation in Telegram channels and groups.',
+    changes: [
+      {
+        type: 'Feature',
+        icon: Send,
+        text: 'Added complete Telegram Bot API integration for channel and group membership verification.',
+      },
+      {
+        type: 'Feature',
+        icon: Bot,
+        text: 'Implemented Telegram-specific verification logic with both username and user ID support.',
+      },
+      {
+        type: 'Feature',
+        icon: Zap,
+        text: 'Created Telegram task verification with secure API endpoints and proper error handling.',
+      },
+      {
+        type: 'Security',
+        icon: ShieldCheck,
+        text: 'Enhanced security with proper Telegram API parameter validation and rate limiting.',
+      },
+      {
+        type: 'Improvement',
+        icon: GitCommit,
+        text: 'Fixed Telegram getChatMember API implementation to use correct numeric user ID format.',
+      },
+      {
+        type: 'Improvement',
+        icon: GitCommit,
+        text: 'Added comprehensive Telegram verification debugging and logging capabilities.',
+      },
+      {
+        type: 'Feature',
+        icon: MessageSquare,
+        text: 'Integrated Telegram invite link management and validation for campaign tasks.',
+      },
+    ],
+  },
   {
     date: new Date('2025-09-20T16:00:00Z'),
     version: 'Social Integration',
