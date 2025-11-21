@@ -13,7 +13,15 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ShieldCheck, ExternalLink, Info, Wallet, Edit3, ChevronDown, HelpCircle } from 'lucide-react'
+import {
+  ShieldCheck,
+  ExternalLink,
+  Info,
+  Wallet,
+  Edit3,
+  ChevronDown,
+  HelpCircle,
+} from 'lucide-react'
 import { useWallet } from '@/context/wallet-provider'
 import { isValidEthereumAddress } from '@/lib/validation-utils'
 import {
@@ -86,7 +94,9 @@ export function HumanityVerificationModal({
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-xs">
                   <p className="text-xs">
-                    <strong>Why verify?</strong> Prevents Sybil attacks and ensures fair reward distribution through biometric palm verification.
+                    <strong>Why verify?</strong> Prevents Sybil attacks and
+                    ensures fair reward distribution through biometric palm
+                    verification.
                   </p>
                   <ul className="text-xs mt-2 space-y-1 list-disc list-inside">
                     <li>One-time verification per wallet</li>
@@ -105,7 +115,11 @@ export function HumanityVerificationModal({
         {/* Collapsible Instructions */}
         <Collapsible open={showInstructions} onOpenChange={setShowInstructions}>
           <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronDown className={`h-4 w-4 transition-transform ${showInstructions ? 'rotate-180' : ''}`} />
+            <ChevronDown
+              className={`h-4 w-4 transition-transform ${
+                showInstructions ? 'rotate-180' : ''
+              }`}
+            />
             How it works
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-3">
@@ -121,7 +135,7 @@ export function HumanityVerificationModal({
         {/* Compact Wallet Selection */}
         <div className="space-y-3">
           <Label className="text-sm font-medium">Select wallet</Label>
-          
+
           {/* Connected Wallet - Compact Card */}
           <button
             onClick={() => setUseCustomAddress(false)}
@@ -130,11 +144,17 @@ export function HumanityVerificationModal({
               !useCustomAddress && isConnected
                 ? 'border-purple-500 bg-purple-500/10'
                 : 'border-border hover:border-border/80'
-            } ${!isConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+            } ${
+              !isConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            }`}
           >
-            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-              !useCustomAddress && isConnected ? 'border-purple-500' : 'border-muted-foreground'
-            }`}>
+            <div
+              className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                !useCustomAddress && isConnected
+                  ? 'border-purple-500'
+                  : 'border-muted-foreground'
+              }`}
+            >
               {!useCustomAddress && isConnected && (
                 <div className="w-2 h-2 rounded-full bg-purple-500" />
               )}
@@ -164,9 +184,13 @@ export function HumanityVerificationModal({
                 : 'border-border hover:border-border/80'
             }`}
           >
-            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-              useCustomAddress ? 'border-purple-500' : 'border-muted-foreground'
-            }`}>
+            <div
+              className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                useCustomAddress
+                  ? 'border-purple-500'
+                  : 'border-muted-foreground'
+              }`}
+            >
               {useCustomAddress && (
                 <div className="w-2 h-2 rounded-full bg-purple-500" />
               )}
