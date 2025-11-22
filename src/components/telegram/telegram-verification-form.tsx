@@ -4,10 +4,22 @@ import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Loader2, MessageCircle, Info } from 'lucide-react'
+import { Loader2, MessageCircle, HelpCircle, ExternalLink } from 'lucide-react'
 import { useWallet } from '@/context/wallet-provider'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 interface TelegramVerificationFormProps {
   campaignId: string
@@ -31,6 +43,8 @@ export function TelegramVerificationForm({
   const [telegramUserId, setTelegramUserId] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showHelpModal, setShowHelpModal] = useState(false)
+  const [focusedField, setFocusedField] = useState<string | null>(null)
 
   const handleVerification = async () => {
     if (!address) {
@@ -118,117 +132,202 @@ export function TelegramVerificationForm({
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+    <>
+      {/* Main Compact Form */}
+      <div className="w-full max-w-md space-y-4 p-6">
+        {/* Minimal Header */}
+        <div className="flex items-center gap-2 pb-2">
           <MessageCircle className="h-5 w-5 text-blue-500" />
-          Telegram Verification
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <Alert>
-          <Info className="h-4 w-4" />
-          <AlertDescription>
-            You need to be a member of the Telegram channel/group to complete
-            this task. <strong>Telegram User ID is required</strong> for
-            accurate verification due to Telegram Bot API limitations.
-          </AlertDescription>
-        </Alert>
+          <h3 className="text-lg font-semibold">Telegram Verification</h3>
+        </div>
 
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="telegram-userid">
-              Telegram User ID (Required){' '}
-              <span className="text-red-500">*</span>
+        {/* Condensed Input Group */}
+        <div className="space-y-4">
+          {/* User ID Field with Inline Tooltip */}
+          <div className="space-y-2">
+            <Label
+              htmlFor="telegram-userid"
+              className="flex items-center gap-1.5 text-sm"
+            >
+              Telegram User ID <span className="text-destructive">*</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    <p className="text-xs">
+                      Your numeric Telegram ID is required for accurate
+                      verification due to Telegram Bot API limitations.
+                      Username-only verification is unreliable.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </Label>
             <Input
               id="telegram-userid"
               type="text"
-              placeholder="Your Telegram user ID (e.g., 123456789)"
+              placeholder="123456789"
               value={telegramUserId}
               onChange={(e) =>
                 setTelegramUserId(e.target.value.replace(/\D/g, ''))
               }
+              onFocus={() => setFocusedField('userid')}
+              onBlur={() => setFocusedField(null)}
               disabled={isLoading || isVerifying}
+              className="font-mono"
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              Numeric user ID is required for verification
-            </p>
+            {focusedField === 'userid' && (
+              <p className="text-xs text-muted-foreground animate-in fade-in slide-in-from-top-1 duration-200">
+                Enter your numeric Telegram user ID
+              </p>
+            )}
           </div>
 
-          <div>
-            <Label htmlFor="telegram-username">
-              Telegram Username (Optional)
+          {/* Username Field */}
+          <div className="space-y-2">
+            <Label htmlFor="telegram-username" className="text-sm">
+              Telegram Username{' '}
+              <span className="text-muted-foreground text-xs">(Optional)</span>
             </Label>
             <Input
               id="telegram-username"
               type="text"
-              placeholder="username (without @)"
+              placeholder="username"
               value={telegramUsername}
               onChange={(e) =>
                 setTelegramUsername(e.target.value.replace('@', ''))
               }
+              onFocus={() => setFocusedField('username')}
+              onBlur={() => setFocusedField(null)}
               disabled={isLoading || isVerifying}
             />
-            <p className="text-xs text-muted-foreground mt-1">
-              Optional: Your username for additional verification
-            </p>
+            {focusedField === 'username' && (
+              <p className="text-xs text-muted-foreground animate-in fade-in slide-in-from-top-1 duration-200">
+                Without @ symbol
+              </p>
+            )}
           </div>
         </div>
 
+        {/* Help Link - Replaces Entire Instructions Section */}
+        <button
+          onClick={() => setShowHelpModal(true)}
+          className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 transition-colors"
+        >
+          <HelpCircle className="h-3 w-3" />
+          Where do I find my User ID?
+        </button>
+
+        {/* Compact Error Display */}
         {error && (
-          <Alert variant="destructive">
-            <AlertDescription>{error}</AlertDescription>
+          <Alert variant="destructive" className="py-2">
+            <AlertDescription className="text-sm">{error}</AlertDescription>
           </Alert>
         )}
 
+        {/* Loading State - Minimal */}
+        {isVerifying && (
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground py-2">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            <span>Verifying membership...</span>
+          </div>
+        )}
+
+        {/* Primary Action Button */}
         <Button
           onClick={handleVerification}
           disabled={isLoading || isVerifying || !telegramUserId}
-          className="w-full"
+          className="w-full bg-blue-600 hover:bg-blue-700 h-10 font-medium"
+          size="lg"
         >
           {isVerifying ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Verifying membership...
+              Verifying...
             </>
           ) : (
-            'Verify Telegram Membership'
+            'Verify Membership'
           )}
         </Button>
+      </div>
 
-        {isVerifying && (
-          <div className="text-xs text-muted-foreground text-center border rounded p-2 bg-blue-50">
-            <p>Checking your membership via Telegram API...</p>
-            <p>This may take a few moments due to network conditions.</p>
-            <p className="text-orange-600">
-              If it takes too long, we'll retry automatically.
-            </p>
-          </div>
-        )}
+      {/* Help Modal - Separate from Main Form */}
+      <Dialog open={showHelpModal} onOpenChange={setShowHelpModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageCircle className="h-5 w-5 text-blue-500" />
+              How to Find Your Telegram User ID
+            </DialogTitle>
+            <DialogDescription>
+              Use any of these methods to get your numeric user ID
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="text-xs text-muted-foreground space-y-2 border-t pt-3">
-          <p>
-            <strong>How to find your Telegram User ID:</strong>
-          </p>
-          <div className="bg-muted p-2 rounded text-xs space-y-1">
-            <p>
-              <strong>Method 1:</strong> Message @userinfobot on Telegram
-            </p>
-            <p>
-              <strong>Method 2:</strong> Message @getmyid_bot on Telegram
-            </p>
-            <p>
-              <strong>Method 3:</strong> Forward any message to @userinfobot
-            </p>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 text-xs">
+                  1
+                </span>
+                Using @userinfobot
+              </h4>
+              <p className="text-sm text-muted-foreground pl-7">
+                Open Telegram and search for{' '}
+                <code className="bg-secondary px-1.5 py-0.5 rounded text-xs">
+                  @userinfobot
+                </code>
+                . Send any message or forward a message to get your ID.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium flex items-center gap-2">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 text-xs">
+                  2
+                </span>
+                Using @getmyid_bot
+              </h4>
+              <p className="text-sm text-muted-foreground pl-7">
+                Search for{' '}
+                <code className="bg-secondary px-1.5 py-0.5 rounded text-xs">
+                  @getmyid_bot
+                </code>{' '}
+                and start a chat to receive your user ID instantly.
+              </p>
+            </div>
+
+            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-4">
+              <p className="text-xs text-blue-900 dark:text-blue-100">
+                <strong>Note:</strong> Your User ID is a numeric value (e.g.,
+                123456789). It's different from your username.
+              </p>
+            </div>
           </div>
-          <p className="text-orange-600">
-            ⚠️ Username-only verification is not reliable due to Telegram API
-            limitations. User ID is required for accurate membership
-            verification.
-          </p>
-        </div>
-      </CardContent>
-    </Card>
+
+          <div className="flex gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowHelpModal(false)}
+              className="flex-1"
+            >
+              Got it
+            </Button>
+            <Button
+              onClick={() => {
+                window.open('https://t.me/userinfobot', '_blank')
+                setShowHelpModal(false)
+              }}
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
+            >
+              <ExternalLink className="mr-2 h-4 w-4" />
+              Open Bot
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
