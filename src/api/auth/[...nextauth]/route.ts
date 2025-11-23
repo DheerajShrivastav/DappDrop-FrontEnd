@@ -18,8 +18,8 @@ const handler = NextAuth({
         where: { userId: user.id, provider: 'discord' },
       })
       if (account && session.user) {
-        // Extend session user with discordId
-        (session.user as any).discordId = account.providerAccountId
+        // discordId is defined in src/types/next-auth.d.ts
+        session.user.discordId = account.providerAccountId
       }
       return session
     },

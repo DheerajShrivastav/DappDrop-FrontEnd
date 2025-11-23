@@ -6,6 +6,13 @@ import { connectWallet as web3Connect, isHost as web3IsHost } from '@/lib/web3-s
 
 type Role = 'host' | 'participant' | null;
 
+// Define ethereum provider interface with event methods
+interface EthereumProvider {
+  request: (args: { method: string; params?: any[] }) => Promise<any>;
+  on: (event: string, callback: (...args: any[]) => void) => void;
+  removeListener?: (event: string, callback: (...args: any[]) => void) => void;
+}
+
 interface WalletContextType {
   isConnected: boolean;
   address: string | null;
@@ -58,7 +65,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     }
     
     // Type assertion for ethereum event listeners
-    const ethereum = window.ethereum as any;
+    const ethereum = window.ethereum as unknown as EthereumProvider;
     ethereum.on('accountsChanged', handleAccountsChanged);
 
     return () => {

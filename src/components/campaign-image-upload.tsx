@@ -62,10 +62,11 @@ export function CampaignImageUpload({
               })
 
               onUploadComplete?.(imageUrl)
-            } catch (error: any) {
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Could not save image to database'
               toast({
                 title: 'Failed to save image',
-                description: error.message || 'Could not save image to database',
+                description: errorMessage,
                 variant: 'destructive',
               })
             }
