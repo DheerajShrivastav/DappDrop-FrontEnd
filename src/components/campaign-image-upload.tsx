@@ -52,8 +52,14 @@ export function CampaignImageUpload({
               })
 
               if (!response.ok) {
-                const error = await response.json()
-                throw new Error(error.error || 'Failed to save image')
+                let errorMessage = 'Failed to save image'
+                try {
+                  const error = await response.json()
+                  errorMessage = error.error || errorMessage
+                } catch {
+                  // If JSON parsing fails, use default error message
+                }
+                throw new Error(errorMessage)
               }
 
               toast({

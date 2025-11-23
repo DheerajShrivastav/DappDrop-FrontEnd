@@ -8,9 +8,9 @@ type Role = 'host' | 'participant' | null;
 
 // Define ethereum provider interface with event methods
 interface EthereumProvider {
-  request: (args: { method: string; params?: any[] }) => Promise<any>;
-  on: (event: string, callback: (...args: any[]) => void) => void;
-  removeListener?: (event: string, callback: (...args: any[]) => void) => void;
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on: (event: string, callback: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, callback: (...args: unknown[]) => void) => void;
 }
 
 interface WalletContextType {
@@ -66,11 +66,17 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     
     // Type assertion for ethereum event listeners
     const ethereum = window.ethereum as unknown as EthereumProvider;
-    ethereum.on('accountsChanged', handleAccountsChanged);
+    
+    // Wrapper to handle the type conversion from unknown[] to string[]
+    const accountsChangedHandler = (...args: unknown[]) => {
+      handleAccountsChanged(args[0] as string[]);
+    };
+    
+    ethereum.on('accountsChanged', accountsChangedHandler);
 
     return () => {
       if (ethereum?.removeListener) {
-        ethereum.removeListener('accountsChanged', handleAccountsChanged);
+        ethereum.removeListener('accountsChanged', accountsChangedHandler);
       }
     };
   }, [handleAccountsChanged]);
