@@ -17,8 +17,9 @@ const handler = NextAuth({
       const account = await prisma.account.findFirst({
         where: { userId: user.id, provider: 'discord' },
       })
-      if (account) {
-        session.user.discordId = account.providerAccountId
+      if (account && session.user) {
+        // Extend session user with discordId
+        (session.user as any).discordId = account.providerAccountId
       }
       return session
     },

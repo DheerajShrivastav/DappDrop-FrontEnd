@@ -57,11 +57,13 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
     
-    window.ethereum.on('accountsChanged', handleAccountsChanged);
+    // Type assertion for ethereum event listeners
+    const ethereum = window.ethereum as any;
+    ethereum.on('accountsChanged', handleAccountsChanged);
 
     return () => {
-      if (window.ethereum?.removeListener) {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      if (ethereum?.removeListener) {
+        ethereum.removeListener('accountsChanged', handleAccountsChanged);
       }
     };
   }, [handleAccountsChanged]);
