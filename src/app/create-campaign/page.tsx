@@ -150,6 +150,7 @@ export default function CreateCampaignPage() {
   const [aiPrompt, setAiPrompt] = useState('')
   const [createMode, setCreateMode] = useState<'draft' | 'activate'>('activate')
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
+  const [campaignCreated, setCampaignCreated] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
   const { address, isConnected, role, checkRoles } = useWallet()
@@ -213,6 +214,9 @@ export default function CreateCampaignPage() {
       console.log('✅ Campaign created successfully with ID:', campaignId)
       console.log('📸 Image URL in form data:', data.imageUrl)
 
+      // Mark campaign as successfully created to prevent cleanup
+      setCampaignCreated(true)
+
       const successMessage =
         createMode === 'activate'
           ? `Your campaign (ID: ${campaignId}) has been created and activated!`
@@ -238,6 +242,11 @@ export default function CreateCampaignPage() {
   // Cleanup orphaned image when component unmounts without successful campaign creation
   useEffect(() => {
     return () => {
+      // Only cleanup if campaign was NOT successfully created
+      if (campaignCreated) {
+        return
+      }
+
       // If user navigates away and there's an uploaded image that wasn't used
       const imageUrl = uploadedImageUrl || form.getValues('imageUrl')
       if (
@@ -249,14 +258,13 @@ export default function CreateCampaignPage() {
         cleanupOrphanedImage(imageUrl)
       }
     }
-  }, [uploadedImageUrl])
+  }, [uploadedImageUrl, campaignCreated])
 
   const cleanupOrphanedImage = async (imageUrl: string) => {
     try {
       console.log('🗑️ Cleaning up orphaned image:', imageUrl)
-      // Use a dummy campaign ID since we're just cleaning up an orphaned file
-      await fetch('/api/campaigns/0/image', {
-        method: 'DELETE',
+      await fetch('/api/uploadthing/cleanup', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl }),
       })

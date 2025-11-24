@@ -17,8 +17,11 @@ function extractFileKeyFromUrl(url: string): string | null {
     // UploadThing URLs are in format: https://utfs.io/f/{fileKey}
     if (urlObj.hostname.includes('utfs.io')) {
       const pathParts = urlObj.pathname.split('/')
-      const fileKey = pathParts[pathParts.length - 1]
-      return fileKey || null
+      // Validate that the second-to-last part is 'f' for correct URL structure
+      if (pathParts.length >= 2 && pathParts[pathParts.length - 2] === 'f') {
+        const fileKey = pathParts[pathParts.length - 1]
+        return fileKey || null
+      }
     }
     return null
   } catch {
@@ -298,23 +301,17 @@ export async function DELETE(
         success: true,
         message: 'Image deleted successfully',
       })
-    } catch (deleteError: any) {
+    } catch (deleteError) {
       console.error('❌ Failed to delete image:', deleteError)
       return NextResponse.json(
-        {
-          error: 'Failed to delete image',
-          details: deleteError.message,
-        },
+        { error: 'Failed to delete image from storage' },
         { status: 500 }
       )
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error('❌ Error in DELETE endpoint:', error)
     return NextResponse.json(
-      {
-        error: 'Internal server error',
-        details: error.message,
-      },
+      { error: 'Internal server error' },
       { status: 500 }
     )
   }
