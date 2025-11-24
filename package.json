@@ -66,6 +66,8 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "eslint": "9.39.1",
+    "eslint-config-next": "16.0.3",
     "genkit-cli": "^1.14.1",
     "postcss": "^8",
     "prisma": "^6.15.0",

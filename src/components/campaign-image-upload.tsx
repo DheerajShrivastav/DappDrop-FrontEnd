@@ -7,10 +7,14 @@ import { useToast } from '@/hooks/use-toast'
 
 interface CampaignImageUploadProps {
   onUploadComplete?: (url: string) => void
+  campaignId?: number
+  userAddress?: string
 }
 
 export function CampaignImageUpload({
   onUploadComplete,
+  campaignId,
+  userAddress,
 }: CampaignImageUploadProps) {
   const [isUploading, setIsUploading] = useState(false)
   const { toast } = useToast()
@@ -19,7 +23,7 @@ export function CampaignImageUpload({
     <div className="space-y-2">
       <UploadButton<OurFileRouter, 'campaignImage'>
         endpoint="campaignImage"
-        onClientUploadComplete={(res) => {
+        onClientUploadComplete={async (res) => {
           setIsUploading(false)
 
           if (!res?.[0]?.url) {
@@ -33,13 +37,54 @@ export function CampaignImageUpload({
 
           const imageUrl = res[0].url
 
-          // Just return the URL to parent component - no database operations
-          toast({
-            title: 'Image uploaded',
-            description: 'Image ready to be saved with campaign',
-          })
+          // If campaignId and userAddress are provided, save directly to database
+          if (campaignId && userAddress) {
+            try {
+              const response = await fetch(`/api/campaigns/${campaignId}/image`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  imageUrl,
+                  userAddress,
+                }),
+              })
 
-          onUploadComplete?.(imageUrl)
+              if (!response.ok) {
+                let errorMessage = 'Failed to save image'
+                try {
+                  const error = await response.json()
+                  errorMessage = error.error || errorMessage
+                } catch {
+                  // If JSON parsing fails, use default error message
+                }
+                throw new Error(errorMessage)
+              }
+
+              toast({
+                title: 'Image updated',
+                description: 'Campaign image has been updated successfully',
+              })
+
+              onUploadComplete?.(imageUrl)
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Could not save image to database'
+              toast({
+                title: 'Failed to save image',
+                description: errorMessage,
+                variant: 'destructive',
+              })
+            }
+          } else {
+            // Just return the URL to parent component - no database operations
+            toast({
+              title: 'Image uploaded',
+              description: 'Image ready to be saved with campaign',
+            })
+
+            onUploadComplete?.(imageUrl)
+          }
         }}
         onUploadError={(error: Error) => {
           toast({

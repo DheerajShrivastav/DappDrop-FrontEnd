@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -150,6 +150,7 @@ export default function CreateCampaignPage() {
   const [aiPrompt, setAiPrompt] = useState('')
   const [createMode, setCreateMode] = useState<'draft' | 'activate'>('activate')
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
+  const [campaignCreated, setCampaignCreated] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
   const { address, isConnected, role, checkRoles } = useWallet()
@@ -213,6 +214,9 @@ export default function CreateCampaignPage() {
       console.log('✅ Campaign created successfully with ID:', campaignId)
       console.log('📸 Image URL in form data:', data.imageUrl)
 
+      // Mark campaign as successfully created to prevent cleanup
+      setCampaignCreated(true)
+
       const successMessage =
         createMode === 'activate'
           ? `Your campaign (ID: ${campaignId}) has been created and activated!`
@@ -226,8 +230,48 @@ export default function CreateCampaignPage() {
       router.push(`/campaign/${campaignId}`)
     } catch (e) {
       // Error toast is handled in the service
+      // Cleanup uploaded image if campaign creation failed
+      if (uploadedImageUrl && uploadedImageUrl !== 'https://placehold.co/600x400') {
+        cleanupOrphanedImage(uploadedImageUrl)
+      }
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // Cleanup orphaned image when component unmounts without successful campaign creation
+  useEffect(() => {
+    return () => {
+      // Only cleanup if campaign was NOT successfully created
+      if (campaignCreated) {
+        return
+      }
+
+      // If user navigates away and there's an uploaded image that wasn't used
+      const imageUrl = uploadedImageUrl || form.getValues('imageUrl')
+      if (
+        imageUrl &&
+        imageUrl !== 'https://placehold.co/600x400' &&
+        imageUrl.includes('utfs.io')
+      ) {
+        // Only cleanup if it's an UploadThing URL (not external URL)
+        cleanupOrphanedImage(imageUrl)
+      }
+    }
+  }, [uploadedImageUrl, campaignCreated])
+
+  const cleanupOrphanedImage = async (imageUrl: string) => {
+    try {
+      console.log('🗑️ Cleaning up orphaned image:', imageUrl)
+      await fetch('/api/uploadthing/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl }),
+      })
+      console.log('✅ Orphaned image cleaned up')
+    } catch (error) {
+      // Silently fail - this is a cleanup operation
+      console.warn('⚠️ Failed to cleanup orphaned image:', error)
     }
   }
 
