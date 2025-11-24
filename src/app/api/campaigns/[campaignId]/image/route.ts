@@ -3,6 +3,28 @@ import { prisma } from '@/lib/prisma'
 import { ethers } from 'ethers'
 import config from '@/app/config'
 import Web3Campaigns from '@/lib/abi/Web3Campaigns.json'
+import { UTApi } from 'uploadthing/server'
+
+const utapi = new UTApi()
+
+/**
+ * Extract file key from UploadThing URL
+ * Example: https://utfs.io/f/abc123.png -> abc123.png
+ */
+function extractFileKeyFromUrl(url: string): string | null {
+  try {
+    const urlObj = new URL(url)
+    // UploadThing URLs are in format: https://utfs.io/f/{fileKey}
+    if (urlObj.hostname.includes('utfs.io')) {
+      const pathParts = urlObj.pathname.split('/')
+      const fileKey = pathParts[pathParts.length - 1]
+      return fileKey || null
+    }
+    return null
+  } catch {
+    return null
+  }
+}
 
 export async function POST(
   request: NextRequest,
@@ -148,6 +170,22 @@ export async function POST(
         )
       }
 
+      // Delete old image from UploadThing if it exists and is different from new one
+      if (existingCache.imageUrl && existingCache.imageUrl !== imageUrl) {
+        try {
+          // Extract file key from UploadThing URL
+          const oldImageKey = extractFileKeyFromUrl(existingCache.imageUrl)
+          if (oldImageKey) {
+            console.log('🗑️ Deleting old image:', oldImageKey)
+            await utapi.deleteFiles(oldImageKey)
+            console.log('✅ Old image deleted successfully')
+          }
+        } catch (deleteError) {
+          // Log error but don't fail the update
+          console.warn('⚠️ Failed to delete old image:', deleteError)
+        }
+      }
+
       // Update imageUrl in database
       existingCache = await prisma.campaignCache.update({
         where: { id: existingCache.id },
@@ -216,6 +254,67 @@ export async function GET(
     console.error('Error fetching campaign image:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}
+
+// DELETE endpoint to clean up orphaned images
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ campaignId: string }> }
+) {
+  try {
+    const resolvedParams = await params
+    const campaignIdString = resolvedParams.campaignId
+
+    // Parse request body
+    const { imageUrl } = await request.json()
+
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      return NextResponse.json(
+        { error: 'imageUrl is required' },
+        { status: 400 }
+      )
+    }
+
+    console.log('🗑️ Delete request for image:', imageUrl)
+
+    // Extract file key from URL
+    const fileKey = extractFileKeyFromUrl(imageUrl)
+    if (!fileKey) {
+      return NextResponse.json(
+        { error: 'Invalid UploadThing URL' },
+        { status: 400 }
+      )
+    }
+
+    // Delete from UploadThing
+    try {
+      await utapi.deleteFiles(fileKey)
+      console.log('✅ Image deleted successfully:', fileKey)
+
+      return NextResponse.json({
+        success: true,
+        message: 'Image deleted successfully',
+      })
+    } catch (deleteError: any) {
+      console.error('❌ Failed to delete image:', deleteError)
+      return NextResponse.json(
+        {
+          error: 'Failed to delete image',
+          details: deleteError.message,
+        },
+        { status: 500 }
+      )
+    }
+  } catch (error: any) {
+    console.error('❌ Error in DELETE endpoint:', error)
+    return NextResponse.json(
+      {
+        error: 'Internal server error',
+        details: error.message,
+      },
       { status: 500 }
     )
   }

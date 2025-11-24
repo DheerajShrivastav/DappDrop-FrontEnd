@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -226,8 +226,44 @@ export default function CreateCampaignPage() {
       router.push(`/campaign/${campaignId}`)
     } catch (e) {
       // Error toast is handled in the service
+      // Cleanup uploaded image if campaign creation failed
+      if (uploadedImageUrl && uploadedImageUrl !== 'https://placehold.co/600x400') {
+        cleanupOrphanedImage(uploadedImageUrl)
+      }
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // Cleanup orphaned image when component unmounts without successful campaign creation
+  useEffect(() => {
+    return () => {
+      // If user navigates away and there's an uploaded image that wasn't used
+      const imageUrl = uploadedImageUrl || form.getValues('imageUrl')
+      if (
+        imageUrl &&
+        imageUrl !== 'https://placehold.co/600x400' &&
+        imageUrl.includes('utfs.io')
+      ) {
+        // Only cleanup if it's an UploadThing URL (not external URL)
+        cleanupOrphanedImage(imageUrl)
+      }
+    }
+  }, [uploadedImageUrl])
+
+  const cleanupOrphanedImage = async (imageUrl: string) => {
+    try {
+      console.log('🗑️ Cleaning up orphaned image:', imageUrl)
+      // Use a dummy campaign ID since we're just cleaning up an orphaned file
+      await fetch('/api/campaigns/0/image', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl }),
+      })
+      console.log('✅ Orphaned image cleaned up')
+    } catch (error) {
+      // Silently fail - this is a cleanup operation
+      console.warn('⚠️ Failed to cleanup orphaned image:', error)
     }
   }
 
