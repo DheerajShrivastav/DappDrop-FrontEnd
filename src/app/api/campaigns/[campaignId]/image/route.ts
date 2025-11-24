@@ -4,30 +4,9 @@ import { ethers } from 'ethers'
 import config from '@/app/config'
 import Web3Campaigns from '@/lib/abi/Web3Campaigns.json'
 import { UTApi } from 'uploadthing/server'
+import { extractFileKeyFromUrl } from '@/lib/uploadthing'
 
 const utapi = new UTApi()
-
-/**
- * Extract file key from UploadThing URL
- * Example: https://utfs.io/f/abc123.png -> abc123.png
- */
-function extractFileKeyFromUrl(url: string): string | null {
-  try {
-    const urlObj = new URL(url)
-    // UploadThing URLs are in format: https://utfs.io/f/{fileKey}
-    if (urlObj.hostname.includes('utfs.io')) {
-      const pathParts = urlObj.pathname.split('/')
-      // Validate that the second-to-last part is 'f' for correct URL structure
-      if (pathParts.length >= 2 && pathParts[pathParts.length - 2] === 'f') {
-        const fileKey = pathParts[pathParts.length - 1]
-        return fileKey || null
-      }
-    }
-    return null
-  } catch {
-    return null
-  }
-}
 
 export async function POST(
   request: NextRequest,
