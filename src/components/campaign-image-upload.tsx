@@ -38,7 +38,7 @@ export function CampaignImageUpload({
           const imageUrl = res[0].url
 
           // If campaignId and userAddress are provided, save directly to database
-          if (campaignId && userAddress) {
+          if (campaignId != null && userAddress) {
             try {
               const response = await fetch(`/api/campaigns/${campaignId}/image`, {
                 method: 'POST',
@@ -87,6 +87,7 @@ export function CampaignImageUpload({
           }
         }}
         onUploadError={(error: Error) => {
+          setIsUploading(false)
           toast({
             title: 'Upload failed',
             description: error.message,
