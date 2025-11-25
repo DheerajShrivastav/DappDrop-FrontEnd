@@ -1,5 +1,5 @@
 'use client'
-
+import type {ElementType} from 'react'
 import { format } from 'date-fns'
 import {
   Card,
@@ -242,7 +242,7 @@ const ChangeTypeIcon = ({
   icon: Icon,
 }: {
   type: string
-  icon: React.ElementType
+  icon: ElementType
 }) => {
   const getBadgeVariant = () => {
     switch (type) {
