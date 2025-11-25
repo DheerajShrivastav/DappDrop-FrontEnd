@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -154,6 +154,8 @@ export default function CreateCampaignPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { address, isConnected, role, checkRoles } = useWallet()
+  const uploadedImageUrlRef = useRef<string | null>(null)
+  const campaignCreatedRef = useRef(false)
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignSchema),
@@ -238,6 +240,13 @@ export default function CreateCampaignPage() {
       setIsLoading(false)
     }
   }
+   useEffect(() => {
+    uploadedImageUrlRef.current = uploadedImageUrl
+  }, [uploadedImageUrl])
+
+  useEffect(() => {
+    campaignCreatedRef.current = campaignCreated
+  }, [campaignCreated])
 
   // Cleanup orphaned image when component unmounts without successful campaign creation
   useEffect(() => {
@@ -248,7 +257,7 @@ export default function CreateCampaignPage() {
       }
 
       // If user navigates away and there's an uploaded image that wasn't used
-      const imageUrl = uploadedImageUrl || form.getValues('imageUrl')
+      const imageUrl = uploadedImageUrlRef.current || form.getValues('imageUrl')
       if (
         imageUrl &&
         imageUrl !== 'https://placehold.co/600x400' &&
@@ -258,7 +267,7 @@ export default function CreateCampaignPage() {
         cleanupOrphanedImage(imageUrl)
       }
     }
-  }, [uploadedImageUrl, campaignCreated])
+  }, [])
 
   const cleanupOrphanedImage = async (imageUrl: string) => {
     try {
