@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 
 import config from '@/app/config'
+import { CampaignImageUpload } from '@/components/campaign-image-upload'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -148,9 +149,13 @@ export default function CreateCampaignPage() {
   const [isBecomingHost, setIsBecomingHost] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [createMode, setCreateMode] = useState<'draft' | 'activate'>('activate')
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
+  const [campaignCreated, setCampaignCreated] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
   const { address, isConnected, role, checkRoles } = useWallet()
+  const uploadedImageUrlRef = useRef<string | null>(null)
+  const campaignCreatedRef = useRef(false)
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignSchema),
@@ -209,6 +214,10 @@ export default function CreateCampaignPage() {
           : await createCampaign(data)
 
       console.log('✅ Campaign created successfully with ID:', campaignId)
+      console.log('📸 Image URL in form data:', data.imageUrl)
+
+      // Mark campaign as successfully created to prevent cleanup
+      setCampaignCreated(true)
 
       const successMessage =
         createMode === 'activate'
@@ -219,11 +228,59 @@ export default function CreateCampaignPage() {
         title: 'Success!',
         description: successMessage,
       })
+
       router.push(`/campaign/${campaignId}`)
     } catch (e) {
       // Error toast is handled in the service
+      // Cleanup uploaded image if campaign creation failed
+      if (uploadedImageUrl && uploadedImageUrl !== 'https://placehold.co/600x400') {
+        cleanupOrphanedImage(uploadedImageUrl)
+      }
     } finally {
       setIsLoading(false)
+    }
+  }
+   useEffect(() => {
+    uploadedImageUrlRef.current = uploadedImageUrl
+  }, [uploadedImageUrl])
+
+  useEffect(() => {
+    campaignCreatedRef.current = campaignCreated
+  }, [campaignCreated])
+
+  // Cleanup orphaned image when component unmounts without successful campaign creation
+  useEffect(() => {
+    return () => {
+      // Only cleanup if campaign was NOT successfully created
+      if (campaignCreated) {
+        return
+      }
+
+      // If user navigates away and there's an uploaded image that wasn't used
+      const imageUrl = uploadedImageUrlRef.current || form.getValues('imageUrl')
+      if (
+        imageUrl &&
+        imageUrl !== 'https://placehold.co/600x400' &&
+        imageUrl.includes('utfs.io')
+      ) {
+        // Only cleanup if it's an UploadThing URL (not external URL)
+        cleanupOrphanedImage(imageUrl)
+      }
+    }
+  }, [])
+
+  const cleanupOrphanedImage = async (imageUrl: string) => {
+    try {
+      console.log('🗑️ Cleaning up orphaned image:', imageUrl)
+      await fetch('/api/uploadthing/cleanup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl }),
+      })
+      console.log('✅ Orphaned image cleaned up')
+    } catch (error) {
+      // Silently fail - this is a cleanup operation
+      console.warn('⚠️ Failed to cleanup orphaned image:', error)
     }
   }
 
@@ -660,17 +717,41 @@ export default function CreateCampaignPage() {
                     name="imageUrl"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Image URL</FormLabel>
+                        <FormLabel>Campaign Image</FormLabel>
                         <FormControl>
                           <Input
                             placeholder="https://example.com/image.png"
                             {...field}
+                            value={uploadedImageUrl || field.value}
+                            onChange={(e) => {
+                              field.onChange(e)
+                              setUploadedImageUrl(null)
+                            }}
                           />
                         </FormControl>
                         <FormDescription>
-                          A visually appealing image for your campaign card.
+                          Enter an image URL or upload an image below.
                         </FormDescription>
                         <FormMessage />
+
+                        {/* Image Upload Section */}
+                        <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Or upload an image (max 4MB):
+                          </p>
+                          <CampaignImageUpload
+                            onUploadComplete={(url) => {
+                              setUploadedImageUrl(url)
+                              form.setValue('imageUrl', url)
+                            }}
+                          />
+                          {uploadedImageUrl && (
+                            <div className="mt-3 p-2 bg-green-500/10 border border-green-500/20 rounded text-sm text-green-600">
+                              ✓ Image uploaded. You can change it after campaign
+                              creation.
+                            </div>
+                          )}
+                        </div>
                       </FormItem>
                     )}
                   />
@@ -783,7 +864,7 @@ export default function CreateCampaignPage() {
                           <span className="sr-only">Remove Task</span>
                         </Button>
                       </div>
-                      
+
                       {tasks[index].type === 'JOIN_DISCORD' && (
                         <div className="space-y-4">
                           <FormField

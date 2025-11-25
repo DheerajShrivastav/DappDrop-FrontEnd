@@ -77,7 +77,8 @@ const getSigner = async () => {
 const mapContractDataToCampaign = (
   contractData: any,
   id: number,
-  taskMetadata?: Array<{ taskIndex: number; discordInviteLink?: string }>
+  taskMetadata?: Array<{ taskIndex: number; discordInviteLink?: string }>,
+  imageUrl?: string
 ): Campaign => {
   const statusMap = ['Draft', 'Open', 'Ended', 'Closed']
   const rewardTypeMap = ['ERC20', 'ERC721', 'None']
@@ -181,7 +182,7 @@ const mapContractDataToCampaign = (
       amount: contractData.reward.amountOrTokenId.toString(),
       name: rewardName,
     },
-    imageUrl: `https://placehold.co/600x400`,
+    imageUrl: imageUrl || `https://placehold.co/600x400`,
     'data-ai-hint': 'blockchain technology',
   }
 }
@@ -362,7 +363,26 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
         if (Number(campaignData.status) !== 3) {
           // Not 'Closed'
 
-          const campaign = mapContractDataToCampaign(campaignData, i)
+          // Fetch image URL from database if available
+          let imageUrl: string | undefined
+          if (typeof window !== 'undefined') {
+            try {
+              const imageResponse = await fetch(`/api/campaigns/${i}/image`)
+              if (imageResponse.ok) {
+                const imageData = await imageResponse.json()
+                imageUrl = imageData.imageUrl
+              }
+            } catch (e) {
+              // Silently fail if image fetch fails
+            }
+          }
+
+          const campaign = mapContractDataToCampaign(
+            campaignData,
+            i,
+            undefined,
+            imageUrl
+          )
 
           campaigns.push(campaign)
         }
@@ -418,7 +438,26 @@ export const getCampaignsByHostAddress = async (
         try {
           const campaignData = await contractToUse.getCampaign(id)
 
-          const campaign = mapContractDataToCampaign(campaignData, id)
+          // Fetch image URL from database if available
+          let imageUrl: string | undefined
+          if (typeof window !== 'undefined') {
+            try {
+              const imageResponse = await fetch(`/api/campaigns/${id}/image`)
+              if (imageResponse.ok) {
+                const imageData = await imageResponse.json()
+                imageUrl = imageData.imageUrl
+              }
+            } catch (e) {
+              // Silently fail if image fetch fails
+            }
+          }
+
+          const campaign = mapContractDataToCampaign(
+            campaignData,
+            id,
+            undefined,
+            imageUrl
+          )
 
           return campaign
         } catch (error) {
@@ -475,13 +514,33 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
       totalParticipants: Number(campaignData.totalParticipants),
     })
 
-    const campaign = mapContractDataToCampaign(campaignData, parseInt(id))
+    // Fetch image URL from database if available
+    let imageUrl: string | undefined
+    if (typeof window !== 'undefined') {
+      try {
+        const imageResponse = await fetch(`/api/campaigns/${id}/image`)
+        if (imageResponse.ok) {
+          const imageData = await imageResponse.json()
+          imageUrl = imageData.imageUrl
+        }
+      } catch (e) {
+        // Silently fail if image fetch fails
+      }
+    }
+
+    const campaign = mapContractDataToCampaign(
+      campaignData,
+      parseInt(id),
+      undefined,
+      imageUrl
+    )
     console.log(`Mapped campaign data for ${id}:`, {
       id: campaign.id,
       status: campaign.status,
       title: campaign.title,
       host: campaign.host,
       participants: campaign.participants,
+      imageUrl: campaign.imageUrl,
     })
 
     return campaign
@@ -533,6 +592,8 @@ export const getCampaignByIdWithMetadata = async (
       console.warn('Failed to enhance campaign with task metadata:', e)
     }
   }
+
+  // Note: imageUrl is already fetched in getCampaignById, no need to fetch again
 
   console.log(`Final enhanced campaign data for ${id}:`, {
     status: campaign.status,
@@ -737,6 +798,45 @@ export const createAndActivateCampaign = async (campaignData: any) => {
 
     // 4. If the start time is in the future, the campaign will be in Draft status and can be opened later
     // If the start time is now or very soon, it should automatically become Active
+
+    // Save image URL to database if provided
+    if (
+      campaignData.imageUrl &&
+      campaignData.imageUrl !== 'https://placehold.co/600x400'
+    ) {
+      console.log('💾 Saving image URL to database...')
+      try {
+        // Sign authentication message
+        const address = await signer.getAddress()
+        const nonce = Date.now().toString()
+        const message = `Sign this message to authenticate with DappDrop\n\nWallet: ${address}\nNonce: ${nonce}`
+        const signature = await signer.signMessage(message)
+
+        const imageResponse = await fetch(
+          `/api/campaigns/${campaignId}/image`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageUrl: campaignData.imageUrl,
+              signature,
+              message,
+            }),
+          }
+        )
+
+        if (imageResponse.ok) {
+          console.log('✅ Image URL saved to database')
+        } else {
+          console.warn(
+            '⚠️ Failed to save image URL, but campaign created successfully'
+          )
+        }
+      } catch (imageError) {
+        console.warn('⚠️ Error saving image URL:', imageError)
+        // Don't fail campaign creation if image save fails
+      }
+    }
 
     const statusMessage =
       actualStartTime <= now + 60
@@ -997,6 +1097,45 @@ export const createCampaign = async (campaignData: any) => {
     }
 
     console.log('🎯 Campaign creation successful! Campaign ID:', campaignId)
+
+    // Save image URL to database if provided
+    if (
+      campaignData.imageUrl &&
+      campaignData.imageUrl !== 'https://placehold.co/600x400'
+    ) {
+      console.log('💾 Saving image URL to database...')
+      try {
+        // Sign authentication message
+        const address = await signer.getAddress()
+        const nonce = Date.now().toString()
+        const message = `Sign this message to authenticate with DappDrop\n\nWallet: ${address}\nNonce: ${nonce}`
+        const signature = await signer.signMessage(message)
+
+        const imageResponse = await fetch(
+          `/api/campaigns/${campaignId}/image`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageUrl: campaignData.imageUrl,
+              signature,
+              message,
+            }),
+          }
+        )
+
+        if (imageResponse.ok) {
+          console.log('✅ Image URL saved to database')
+        } else {
+          console.warn(
+            '⚠️ Failed to save image URL, but campaign created successfully'
+          )
+        }
+      } catch (imageError) {
+        console.warn('⚠️ Error saving image URL:', imageError)
+        // Don't fail campaign creation if image save fails
+      }
+    }
 
     toast({
       title: 'Success!',

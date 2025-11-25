@@ -52,12 +52,14 @@ import {
   Award,
   Trophy,
   RefreshCw,
+  ImageIcon,
 } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { CampaignAnalytics } from '@/components/campaign-analytics'
 import { DiscordAuthButton } from '@/components/discord-auth-button'
 import { TaskVerificationForm } from '@/components/task-verification-form'
 import { HumanityVerificationModal } from '@/components/humanity-verification-modal'
+import { CampaignImageUpload } from '@/components/campaign-image-upload'
 import {
   Dialog,
   DialogContent,
@@ -781,11 +783,12 @@ export default function CampaignDetailsPage() {
             <CardHeader className="p-0">
               <div className="relative h-80 w-full">
                 <Image
-                  src={campaign.imageUrl}
+                  src={campaign.imageUrl || '/images/campaign-placeholder.jpg'}
                   alt={campaign.title}
                   fill
                   className="object-cover rounded-t-lg"
                   data-ai-hint={campaign['data-ai-hint']}
+                  unoptimized={campaign.imageUrl?.startsWith('http')}
                 />
               </div>
             </CardHeader>
@@ -1016,6 +1019,29 @@ export default function CampaignDetailsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                      <ImageIcon className="h-5 w-5 text-primary" /> Campaign
+                      Image
+                    </CardTitle>
+                    <CardDescription>
+                      Upload a custom image for your campaign (max 4MB).
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {address && (
+                      <CampaignImageUpload
+                        campaignId={parseInt(campaignId)}
+                        userAddress={address}
+                        onUploadComplete={(url) => {
+                          // Refresh campaign data to show new image
+                          fetchAllCampaignData(true)
+                        }}
+                      />
+                    )}
+                  </CardContent>
+                </Card>
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-xl">

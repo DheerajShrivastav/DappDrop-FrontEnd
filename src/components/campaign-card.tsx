@@ -120,11 +120,12 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
           <CardHeader className="p-0">
             <div className="relative h-48 w-full">
               <Image
-                src={campaign.imageUrl}
+                src={campaign.imageUrl || '/images/campaign-placeholder.jpg'}
                 alt={campaign.title}
                 fill
                 className="object-cover rounded-t-lg"
                 data-ai-hint={campaign['data-ai-hint']}
+                unoptimized={campaign.imageUrl?.startsWith('http')}
               />
               <Badge
                 variant={getBadgeVariant()}

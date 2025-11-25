@@ -6,6 +6,13 @@ import { connectWallet as web3Connect, isHost as web3IsHost } from '@/lib/web3-s
 
 type Role = 'host' | 'participant' | null;
 
+// Define ethereum provider interface with event methods
+interface EthereumProvider {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on: (event: string, callback: (...args: unknown[]) => void) => void;
+  removeListener?: (event: string, callback: (...args: unknown[]) => void) => void;
+}
+
 interface WalletContextType {
   isConnected: boolean;
   address: string | null;
@@ -57,11 +64,19 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
     
-    window.ethereum.on('accountsChanged', handleAccountsChanged);
+    // Type assertion for ethereum event listeners
+    const ethereum = window.ethereum as unknown as EthereumProvider;
+    
+    // Wrapper to handle the type conversion from unknown[] to string[]
+    const accountsChangedHandler = (...args: unknown[]) => {
+      handleAccountsChanged(args[0] as string[]);
+    };
+    
+    ethereum.on('accountsChanged', accountsChangedHandler);
 
     return () => {
-      if (window.ethereum?.removeListener) {
-        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      if (ethereum?.removeListener) {
+        ethereum.removeListener('accountsChanged', accountsChangedHandler);
       }
     };
   }, [handleAccountsChanged]);
