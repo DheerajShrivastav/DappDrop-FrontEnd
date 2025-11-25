@@ -5,6 +5,13 @@ import type { OurFileRouter } from '@/app/api/uploadthing/core'
 import { useState } from 'react'
 import { useToast } from '@/hooks/use-toast'
 
+// Extend window with ethereum property
+declare global {
+  interface Window {
+    ethereum?: any
+  }
+}
+
 interface CampaignImageUploadProps {
   onUploadComplete?: (url: string) => void
   campaignId?: number
@@ -40,16 +47,34 @@ export function CampaignImageUpload({
           // If campaignId and userAddress are provided, save directly to database
           if (campaignId != null && userAddress) {
             try {
-              const response = await fetch(`/api/campaigns/${campaignId}/image`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  imageUrl,
-                  userAddress,
-                }),
-              })
+              // Sign authentication message
+              if (typeof window.ethereum === 'undefined') {
+                throw new Error('Wallet not connected')
+              }
+
+              const provider = new (await import('ethers')).BrowserProvider(
+                window.ethereum
+              )
+              const signer = await provider.getSigner()
+              const address = await signer.getAddress()
+              const nonce = Date.now().toString()
+              const message = `Sign this message to authenticate with DappDrop\n\nWallet: ${address}\nNonce: ${nonce}`
+              const signature = await signer.signMessage(message)
+
+              const response = await fetch(
+                `/api/campaigns/${campaignId}/image`,
+                {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    imageUrl,
+                    signature,
+                    message,
+                  }),
+                }
+              )
 
               if (!response.ok) {
                 let errorMessage = 'Failed to save image'
@@ -69,7 +94,10 @@ export function CampaignImageUpload({
 
               onUploadComplete?.(imageUrl)
             } catch (error) {
-              const errorMessage = error instanceof Error ? error.message : 'Could not save image to database'
+              const errorMessage =
+                error instanceof Error
+                  ? error.message
+                  : 'Could not save image to database'
               toast({
                 title: 'Failed to save image',
                 description: errorMessage,
