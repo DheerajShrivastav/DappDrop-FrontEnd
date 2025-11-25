@@ -806,7 +806,12 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     ) {
       console.log('💾 Saving image URL to database...')
       try {
-        const userAddress = await signer.getAddress()
+        // Sign authentication message
+        const address = await signer.getAddress()
+        const nonce = Date.now().toString()
+        const message = `Sign this message to authenticate with DappDrop\n\nWallet: ${address}\nNonce: ${nonce}`
+        const signature = await signer.signMessage(message)
+
         const imageResponse = await fetch(
           `/api/campaigns/${campaignId}/image`,
           {
@@ -814,7 +819,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               imageUrl: campaignData.imageUrl,
-              userAddress,
+              signature,
+              message,
             }),
           }
         )
@@ -1099,7 +1105,12 @@ export const createCampaign = async (campaignData: any) => {
     ) {
       console.log('💾 Saving image URL to database...')
       try {
-        const userAddress = await signer.getAddress()
+        // Sign authentication message
+        const address = await signer.getAddress()
+        const nonce = Date.now().toString()
+        const message = `Sign this message to authenticate with DappDrop\n\nWallet: ${address}\nNonce: ${nonce}`
+        const signature = await signer.signMessage(message)
+
         const imageResponse = await fetch(
           `/api/campaigns/${campaignId}/image`,
           {
@@ -1107,7 +1118,8 @@ export const createCampaign = async (campaignData: any) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               imageUrl: campaignData.imageUrl,
-              userAddress,
+              signature,
+              message,
             }),
           }
         )
