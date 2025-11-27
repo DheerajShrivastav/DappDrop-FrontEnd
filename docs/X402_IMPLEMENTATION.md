@@ -7,6 +7,7 @@ This implementation adds payment-required task support to DappDrop campaigns usi
 ## Architecture
 
 **Pattern:** Follows the same architecture as Humanity Protocol verification
+
 - Uses blockchain as source of truth
 - Minimal database caching (only verification results)
 - Task type: `ONCHAIN_TX` (will be updated to `PAYMENT_REQUIRED` in smart contract later)
@@ -26,7 +27,7 @@ model PaymentVerification {
   verified        Boolean  @default(false)
   verifiedAt      DateTime?
   createdAt       DateTime @default(now())
-  
+
   @@unique([campaignId, taskIndex, userAddress])
   @@index([transactionHash])
   @@index([userAddress])
@@ -44,6 +45,7 @@ model PaymentVerification {
 Verifies a blockchain transaction matches payment requirements.
 
 **Request Body:**
+
 ```json
 {
   "campaignId": 1,
@@ -54,6 +56,7 @@ Verifies a blockchain transaction matches payment requirements.
 ```
 
 **Response (Success):**
+
 ```json
 {
   "verified": true,
@@ -63,6 +66,7 @@ Verifies a blockchain transaction matches payment requirements.
 ```
 
 **Response (Error):**
+
 ```json
 {
   "verified": false,
@@ -77,6 +81,7 @@ Verifies a blockchain transaction matches payment requirements.
 Checks if a user has completed a payment task.
 
 **Response:**
+
 ```json
 {
   "verified": true,
@@ -111,12 +116,14 @@ Store payment requirements in the `metadata` JSON field of `CampaignTaskMetadata
 ```
 
 **Supported Networks:**
+
 - `sepolia` - Ethereum Sepolia Testnet (chainId: 11155111)
 - `ethereum` - Ethereum Mainnet (chainId: 1)
 - `base` - Base Mainnet (chainId: 8453)
 - `polygon` - Polygon Mainnet (chainId: 137)
 
 **Supported Tokens:**
+
 - Native tokens: ETH, MATIC, etc. (use `tokenAddress: "0x0"`)
 - ERC-20 tokens: USDC, DAI, etc. (use actual token contract address)
 
@@ -160,9 +167,9 @@ import { completePaymentTask } from '@/lib/payment-task-client'
 
 // Complete the full payment flow
 const txHash = await completePaymentTask(
-  provider,    // BrowserProvider from ethers
-  campaignId,  // Campaign ID
-  taskIndex    // Task index
+  provider, // BrowserProvider from ethers
+  campaignId, // Campaign ID
+  taskIndex // Task index
 )
 
 // After payment is verified, complete the task on-chain
@@ -175,7 +182,7 @@ await completeTask(campaignId, taskIndex)
 import {
   checkPaymentTaskStatus,
   sendPaymentTransaction,
-  verifyPaymentTransaction
+  verifyPaymentTransaction,
 } from '@/lib/payment-task-client'
 
 // 1. Check requirements
@@ -184,10 +191,10 @@ const status = await checkPaymentTaskStatus(campaignId, taskIndex, userAddress)
 if (status.paymentRequired && !status.verified) {
   // 2. Send payment
   const txHash = await sendPaymentTransaction(provider, status.paymentInfo)
-  
+
   // 3. Verify with server
   await verifyPaymentTransaction(campaignId, taskIndex, txHash, userAddress)
-  
+
   // 4. Complete task on-chain
   await completeTask(campaignId, taskIndex)
 }
@@ -198,6 +205,7 @@ if (status.paymentRequired && !status.verified) {
 ### Native Token (ETH, MATIC)
 
 The system verifies:
+
 1. ✅ Transaction succeeded (status === 1)
 2. ✅ Recipient address matches (`tx.to === paymentRecipient`)
 3. ✅ Amount matches exactly (`tx.value === amount`)
@@ -205,6 +213,7 @@ The system verifies:
 ### ERC-20 Token (USDC, DAI)
 
 The system verifies:
+
 1. ✅ Transaction succeeded
 2. ✅ Transfer event exists in logs
 3. ✅ Transfer recipient matches
@@ -213,30 +222,37 @@ The system verifies:
 ## Security Features
 
 ### Replay Attack Prevention
+
 - Each transaction hash can only be used once
 - Database enforces unique constraint on `transactionHash`
 - Attempts to reuse a transaction return 403 error
 
 ### Amount Verification
+
 - Exact amount matching in Wei (no tolerance)
 - Prevents overpayment or underpayment acceptance
 
 ### Address Verification
+
 - Server verifies recipient matches task metadata
 - Sender cannot manipulate recipient address
 
 ## Client Helper Functions
 
 ### `checkPaymentTaskStatus(campaignId, taskIndex, userAddress)`
+
 Checks if payment is required and if user has already paid.
 
 ### `sendPaymentTransaction(provider, paymentInfo)`
+
 Sends either native token or ERC-20 token payment transaction.
 
 ### `verifyPaymentTransaction(campaignId, taskIndex, txHash, userAddress)`
+
 Submits transaction hash to server for blockchain verification.
 
 ### `completePaymentTask(provider, campaignId, taskIndex)`
+
 Complete automated flow: check → pay → verify.
 
 ## Example: ERC-20 USDC Payment
@@ -245,13 +261,13 @@ Complete automated flow: check → pay → verify.
 // Task metadata for USDC payment on Base
 const usdcPaymentTask = {
   paymentRequired: true,
-  paymentRecipient: "0xHostWallet...",
+  paymentRecipient: '0xHostWallet...',
   chainId: 8453,
-  network: "base",
-  tokenAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC on Base
-  tokenSymbol: "USDC",
-  amount: "5000000", // 5 USDC (6 decimals)
-  amountDisplay: "5.00 USDC"
+  network: 'base',
+  tokenAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', // USDC on Base
+  tokenSymbol: 'USDC',
+  amount: '5000000', // 5 USDC (6 decimals)
+  amountDisplay: '5.00 USDC',
 }
 ```
 
@@ -261,6 +277,7 @@ Currently uses `ONCHAIN_TX` task type. When smart contract is updated:
 
 1. Add new task type: `PAYMENT_REQUIRED = 6`
 2. Update `taskTypeMap` in web3-service.ts:
+
 ```typescript
 const taskTypeMap: Record<TaskType, number> = {
   SOCIAL_FOLLOW: 0,
@@ -272,6 +289,7 @@ const taskTypeMap: Record<TaskType, number> = {
   PAYMENT_REQUIRED: 6, // New type
 }
 ```
+
 3. Update types.ts to include `PAYMENT_REQUIRED` in `TaskType` union
 
 ## Testing
@@ -282,6 +300,7 @@ const taskTypeMap: Record<TaskType, number> = {
 2. Send 0.001 ETH to recipient address
 3. Get transaction hash
 4. Call verify endpoint:
+
 ```bash
 curl -X POST http://localhost:3000/api/tasks/verify-payment \
   -H "Content-Type: application/json" \
@@ -302,6 +321,7 @@ curl "http://localhost:3000/api/tasks/check-payment?campaignId=1&taskIndex=0&use
 ## Migration
 
 Run the database migration:
+
 ```bash
 npx prisma migrate dev --name add_payment_verification
 npx prisma generate
@@ -312,22 +332,27 @@ npx prisma generate
 Common errors and solutions:
 
 **"Wrong amount"**
+
 - User sent incorrect payment amount
 - Solution: Send exact amount specified in task
 
 **"Wrong recipient"**
+
 - Payment went to wrong address
 - Solution: Double-check recipient address
 
 **"Transaction hash already used"**
+
 - Replay attack detected
 - Solution: Send a new transaction
 
 **"Transaction not found or still pending"**
+
 - Transaction not yet confirmed
 - Solution: Wait for confirmation and retry
 
 **"Insufficient balance"**
+
 - Not enough tokens to complete payment
 - Solution: Add funds to wallet
 

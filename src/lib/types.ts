@@ -13,6 +13,16 @@ export type Task = {
   verificationData?: string
   discordInviteLink?: string // For JOIN_DISCORD tasks: the actual invite link for participants to join
   telegramInviteLink?: string // For JOIN_TELEGRAM tasks: the actual invite link for participants to join
+  metadata?: {
+    paymentRequired?: boolean
+    paymentRecipient?: string
+    chainId?: number
+    network?: string
+    tokenAddress?: string | null
+    tokenSymbol?: string
+    amount?: string
+    amountDisplay?: string
+  }
 }
 
 export type UserTask = {

@@ -718,6 +718,43 @@ export const createAndActivateCampaign = async (campaignData: any) => {
         }
       }
 
+      // Store payment metadata in database for ONCHAIN_TX payment tasks
+      if (task.type === 'ONCHAIN_TX' && task.paymentRequired) {
+        try {
+          const taskIndex = campaignData.tasks.indexOf(task)
+          console.log(
+            '💰 Storing payment metadata for task in createAndActivateCampaign',
+            taskIndex
+          )
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              campaignId: campaignId,
+              taskIndex: taskIndex,
+              taskType: task.type,
+              metadata: {
+                paymentRequired: true,
+                paymentRecipient: task.paymentRecipient,
+                chainId: task.chainId,
+                network: task.network,
+                tokenAddress: task.tokenAddress || null,
+                tokenSymbol: task.tokenSymbol,
+                amount: task.amount,
+                amountDisplay: task.amountDisplay,
+              },
+            }),
+          })
+          console.log(
+            '✅ Payment metadata stored successfully in createAndActivateCampaign'
+          )
+        } catch (e) {
+          console.warn('Failed to store payment metadata in database:', e)
+        }
+      }
+
       if (
         task.type === 'JOIN_TELEGRAM' &&
         (task.verificationData || task.telegramInviteLink)
@@ -966,6 +1003,38 @@ export const createCampaign = async (campaignData: any) => {
           console.log('✅ Discord metadata stored successfully')
         } catch (e) {
           console.warn('Failed to store Discord invite link in database:', e)
+        }
+      }
+
+      // Store payment metadata in database for ONCHAIN_TX payment tasks
+      if (task.type === 'ONCHAIN_TX' && task.paymentRequired) {
+        try {
+          const taskIndex = campaignData.tasks.indexOf(task)
+          console.log('💰 Storing payment metadata for task', taskIndex)
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              campaignId: campaignId,
+              taskIndex: taskIndex,
+              taskType: task.type,
+              metadata: {
+                paymentRequired: true,
+                paymentRecipient: task.paymentRecipient,
+                chainId: task.chainId,
+                network: task.network,
+                tokenAddress: task.tokenAddress || null,
+                tokenSymbol: task.tokenSymbol,
+                amount: task.amount,
+                amountDisplay: task.amountDisplay,
+              },
+            }),
+          })
+          console.log('✅ Payment metadata stored successfully')
+        } catch (e) {
+          console.warn('Failed to store payment metadata in database:', e)
         }
       }
 

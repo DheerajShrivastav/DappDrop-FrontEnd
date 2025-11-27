@@ -48,7 +48,9 @@ export async function sendPaymentTransaction(
   })
 
   // Check if it's a native token payment (ETH, MATIC, etc.)
-  const isNative = paymentInfo.tokenAddress === '0x0' || paymentInfo.tokenAddress === ethers.ZeroAddress
+  const isNative =
+    paymentInfo.tokenAddress === '0x0' ||
+    paymentInfo.tokenAddress === ethers.ZeroAddress
 
   if (isNative) {
     // Send native token
@@ -66,14 +68,18 @@ export async function sendPaymentTransaction(
   } else {
     // Send ERC-20 token
     console.log('🪙 Sending ERC-20 token payment')
-    
+
     const erc20Abi = [
       'function transfer(address to, uint256 amount) returns (bool)',
       'function balanceOf(address owner) view returns (uint256)',
       'function decimals() view returns (uint8)',
     ]
 
-    const tokenContract = new ethers.Contract(paymentInfo.tokenAddress, erc20Abi, signer)
+    const tokenContract = new ethers.Contract(
+      paymentInfo.tokenAddress,
+      erc20Abi,
+      signer
+    )
 
     // Check balance
     const balance = await tokenContract.balanceOf(userAddress)
@@ -84,9 +90,12 @@ export async function sendPaymentTransaction(
     }
 
     // Send transfer transaction
-    const tx = await tokenContract.transfer(paymentInfo.recipient, paymentInfo.amount)
+    const tx = await tokenContract.transfer(
+      paymentInfo.recipient,
+      paymentInfo.amount
+    )
     console.log('📤 Transaction sent:', tx.hash)
-    
+
     await tx.wait()
     console.log('✅ Transaction confirmed:', tx.hash)
 
@@ -123,7 +132,7 @@ export async function verifyPaymentTransaction(
 
   const data = await response.json()
   console.log('✅ Payment verified:', data)
-  
+
   return data.verified
 }
 
@@ -142,7 +151,11 @@ export async function completePaymentTask(
   const userAddress = await signer.getAddress()
 
   // Check payment requirements
-  const status = await checkPaymentTaskStatus(campaignId, taskIndex, userAddress)
+  const status = await checkPaymentTaskStatus(
+    campaignId,
+    taskIndex,
+    userAddress
+  )
 
   if (!status.paymentRequired) {
     throw new Error('This task does not require payment')

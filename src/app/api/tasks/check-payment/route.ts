@@ -14,12 +14,19 @@ export async function GET(request: NextRequest) {
 
     if (!campaignId || !taskIndex || !userAddress) {
       return NextResponse.json(
-        { error: 'Missing required parameters: campaignId, taskIndex, userAddress' },
+        {
+          error:
+            'Missing required parameters: campaignId, taskIndex, userAddress',
+        },
         { status: 400 }
       )
     }
 
-    console.log('🔍 Checking payment status:', { campaignId, taskIndex, userAddress })
+    console.log('🔍 Checking payment status:', {
+      campaignId,
+      taskIndex,
+      userAddress,
+    })
 
     // Get task metadata
     const metadata = await prisma.campaignTaskMetadata.findUnique({
@@ -32,10 +39,7 @@ export async function GET(request: NextRequest) {
     })
 
     if (!metadata) {
-      return NextResponse.json(
-        { error: 'Task not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
 
     const paymentInfo = parsePaymentInfo(metadata.metadata)

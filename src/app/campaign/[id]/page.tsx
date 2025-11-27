@@ -139,6 +139,12 @@ export default function CampaignDetailsPage() {
     null
   )
 
+  // Payment Task State
+  const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
+  const [paymentTaskId, setPaymentTaskId] = useState<string | null>(null)
+  const [transactionHash, setTransactionHash] = useState('')
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
+
   const campaignId = id as string
 
   // Check user's Humanity verification status
@@ -848,16 +854,30 @@ export default function CampaignDetailsPage() {
                     className="flex flex-col p-4 rounded-md bg-secondary/50 gap-3"
                   >
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-4 flex-1">
                         <div className="p-2 bg-background rounded-full">
                           <TaskIcon type={task.type} />
                         </div>
-                        <label
-                          htmlFor={`task-${task.id}`}
-                          className="text-sm font-medium leading-none"
-                        >
-                          {task.description}
-                        </label>
+                        <div className="flex-1">
+                          <label
+                            htmlFor={`task-${task.id}`}
+                            className="text-sm font-medium leading-none"
+                          >
+                            {task.description}
+                          </label>
+                          {task.type === 'ONCHAIN_TX' &&
+                            task.metadata?.paymentRequired && (
+                              <div className="mt-2 flex items-center gap-2 text-xs text-purple-600">
+                                <Badge
+                                  variant="outline"
+                                  className="border-purple-300 bg-purple-50"
+                                >
+                                  💰 Payment: {task.metadata.amountDisplay} on{' '}
+                                  {task.metadata.network}
+                                </Badge>
+                              </div>
+                            )}
+                        </div>
                       </div>
                       {role === 'participant' && (
                         <div className="flex items-center gap-2">
@@ -870,6 +890,26 @@ export default function CampaignDetailsPage() {
                             >
                               <CheckCircle className="mr-2 h-4 w-4 text-green-500" />{' '}
                               Completed
+                            </Button>
+                          ) : task.type === 'ONCHAIN_TX' &&
+                            task.metadata?.paymentRequired ? (
+                            // Payment task UI
+                            <Button
+                              id={`task-${task.id}`}
+                              size="sm"
+                              variant="outline"
+                              disabled={isTaskDisabled}
+                              onClick={() => {
+                                setPaymentTaskId(task.id)
+                                setIsPaymentDialogOpen(true)
+                              }}
+                            >
+                              {userTask?.isCompleting ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <ShieldCheck className="mr-2 h-4 w-4" />
+                              )}
+                              Submit Payment
                             </Button>
                           ) : task.type === 'HUMANITY_VERIFICATION' ||
                             task.type === 'ONCHAIN_TX' ? (
@@ -1247,6 +1287,149 @@ export default function CampaignDetailsPage() {
               </div>
             ))}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Task Dialog */}
+      <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Complete Payment Task</DialogTitle>
+            <DialogDescription>
+              Submit your transaction hash after completing the payment
+            </DialogDescription>
+          </DialogHeader>
+          {paymentTaskId &&
+            campaign &&
+            (() => {
+              const task = campaign.tasks.find((t) => t.id === paymentTaskId)
+              const metadata = task?.metadata
+              return metadata?.paymentRequired ? (
+                <div className="space-y-4">
+                  <Alert className="border-purple-200 bg-purple-50">
+                    <Info className="h-4 w-4 text-purple-600" />
+                    <AlertTitle className="text-purple-800">
+                      Payment Requirements
+                    </AlertTitle>
+                    <AlertDescription className="text-purple-700 space-y-2">
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div className="font-semibold">Amount:</div>
+                        <div className="font-mono">
+                          {metadata.amountDisplay}
+                        </div>
+                        <div className="font-semibold">Token:</div>
+                        <div>{metadata.tokenSymbol}</div>
+                        <div className="font-semibold">Network:</div>
+                        <div className="capitalize">{metadata.network}</div>
+                        <div className="font-semibold">Recipient:</div>
+                        <div className="font-mono text-xs break-all">
+                          {metadata.paymentRecipient}
+                        </div>
+                      </div>
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="txHash">Transaction Hash</Label>
+                    <Input
+                      id="txHash"
+                      placeholder="0x..."
+                      value={transactionHash}
+                      onChange={(e) => setTransactionHash(e.target.value)}
+                      disabled={isVerifyingPayment}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Enter the transaction hash after sending the payment to
+                      the recipient address on {metadata.network}
+                    </p>
+                  </div>
+
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setIsPaymentDialogOpen(false)
+                        setTransactionHash('')
+                      }}
+                      disabled={isVerifyingPayment}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        if (!transactionHash || !address) return
+
+                        setIsVerifyingPayment(true)
+                        try {
+                          const response = await fetch(
+                            '/api/tasks/verify-payment',
+                            {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                campaignId,
+                                taskIndex: campaign.tasks.findIndex(
+                                  (t) => t.id === paymentTaskId
+                                ),
+                                userAddress: address,
+                                transactionHash,
+                              }),
+                            }
+                          )
+
+                          const data = await response.json()
+
+                          if (data.success && data.verified) {
+                            toast({
+                              title: 'Payment Verified!',
+                              description:
+                                'Your payment has been verified successfully.',
+                            })
+
+                            // Complete the task
+                            await handleCompleteTask(
+                              paymentTaskId,
+                              'ONCHAIN_TX'
+                            )
+
+                            setIsPaymentDialogOpen(false)
+                            setTransactionHash('')
+                          } else {
+                            toast({
+                              variant: 'destructive',
+                              title: 'Verification Failed',
+                              description:
+                                data.error ||
+                                'Payment verification failed. Please check your transaction hash.',
+                            })
+                          }
+                        } catch (error) {
+                          console.error('Payment verification error:', error)
+                          toast({
+                            variant: 'destructive',
+                            title: 'Error',
+                            description:
+                              'Failed to verify payment. Please try again.',
+                          })
+                        } finally {
+                          setIsVerifyingPayment(false)
+                        }
+                      }}
+                      disabled={!transactionHash || isVerifyingPayment}
+                    >
+                      {isVerifyingPayment ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        'Verify Payment'
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </div>
+              ) : null
+            })()}
         </DialogContent>
       </Dialog>
 

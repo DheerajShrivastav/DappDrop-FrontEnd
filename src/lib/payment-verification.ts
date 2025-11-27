@@ -30,7 +30,7 @@ export async function verifyPaymentTransaction(
 
   try {
     const provider = new ethers.JsonRpcProvider(rpcUrl)
-    
+
     console.log('🔍 Verifying payment transaction:', {
       txHash,
       network,
@@ -42,7 +42,10 @@ export async function verifyPaymentTransaction(
     // Get transaction receipt
     const receipt = await provider.getTransactionReceipt(txHash)
     if (!receipt) {
-      return { verified: false, error: 'Transaction not found or still pending' }
+      return {
+        verified: false,
+        error: 'Transaction not found or still pending',
+      }
     }
 
     if (receipt.status !== 1) {
@@ -56,12 +59,13 @@ export async function verifyPaymentTransaction(
     }
 
     // Check if native token (ETH/MATIC) or ERC-20
-    const isNative = tokenAddress === '0x0' || tokenAddress === ethers.ZeroAddress
+    const isNative =
+      tokenAddress === '0x0' || tokenAddress === ethers.ZeroAddress
 
     if (isNative) {
       // Verify native token payment (ETH, MATIC, etc.)
       console.log('💰 Verifying native token payment')
-      
+
       if (tx.to?.toLowerCase() !== expectedRecipient.toLowerCase()) {
         return {
           verified: false,
@@ -81,14 +85,15 @@ export async function verifyPaymentTransaction(
     } else {
       // Verify ERC-20 token payment
       console.log('🪙 Verifying ERC-20 token payment')
-      
+
       const erc20Interface = new ethers.Interface([
         'event Transfer(address indexed from, address indexed to, uint256 value)',
       ])
 
       // Find Transfer event in transaction logs
       const transferLog = receipt.logs.find((log) => {
-        if (log.address.toLowerCase() !== tokenAddress.toLowerCase()) return false
+        if (log.address.toLowerCase() !== tokenAddress.toLowerCase())
+          return false
         try {
           const parsed = erc20Interface.parseLog({
             topics: log.topics as string[],
@@ -101,7 +106,10 @@ export async function verifyPaymentTransaction(
       })
 
       if (!transferLog) {
-        return { verified: false, error: 'No Transfer event found in transaction' }
+        return {
+          verified: false,
+          error: 'No Transfer event found in transaction',
+        }
       }
 
       const parsed = erc20Interface.parseLog({
@@ -114,7 +122,7 @@ export async function verifyPaymentTransaction(
       }
 
       const [from, to, value] = parsed.args
-      
+
       if (to.toLowerCase() !== expectedRecipient.toLowerCase()) {
         return {
           verified: false,

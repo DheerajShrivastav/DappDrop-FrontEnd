@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { verifyPaymentTransaction, parsePaymentInfo } from '@/lib/payment-verification'
+import {
+  verifyPaymentTransaction,
+  parsePaymentInfo,
+} from '@/lib/payment-verification'
 
 /**
  * Verify payment transaction for a task
@@ -8,7 +11,8 @@ import { verifyPaymentTransaction, parsePaymentInfo } from '@/lib/payment-verifi
  */
 export async function POST(request: NextRequest) {
   try {
-    const { campaignId, taskIndex, transactionHash, userAddress } = await request.json()
+    const { campaignId, taskIndex, transactionHash, userAddress } =
+      await request.json()
 
     console.log('🔍 Payment verification request:', {
       campaignId,
@@ -18,7 +22,12 @@ export async function POST(request: NextRequest) {
     })
 
     // Validate inputs
-    if (!campaignId || taskIndex === undefined || !transactionHash || !userAddress) {
+    if (
+      !campaignId ||
+      taskIndex === undefined ||
+      !transactionHash ||
+      !userAddress
+    ) {
       return NextResponse.json(
         { error: 'Missing required parameters' },
         { status: 400 }
