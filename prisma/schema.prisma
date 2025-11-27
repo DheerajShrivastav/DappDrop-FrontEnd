@@ -144,3 +144,20 @@ model Analytics {
   data            Json
   timestamp       DateTime @default(now())
 }
+
+// x402 Payment Protocol - Minimal implementation (like Humanity Protocol)
+model PaymentVerification {
+  id              String   @id @default(cuid())
+  campaignId      String
+  taskIndex       Int
+  userAddress     String
+  transactionHash String   @unique
+  verified        Boolean  @default(false)
+  verifiedAt      DateTime?
+  
+  createdAt       DateTime @default(now())
+  
+  @@unique([campaignId, taskIndex, userAddress])
+  @@index([transactionHash])
+  @@index([userAddress])
+}
