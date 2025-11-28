@@ -956,13 +956,12 @@ export default function CampaignDetailsPage() {
                                   href={
                                     task.discordInviteLink
                                       ? task.discordInviteLink.startsWith(
-                                          'http'
-                                        )
+                                        'http'
+                                      )
                                         ? task.discordInviteLink
                                         : `https://discord.gg/${task.discordInviteLink}`
-                                      : `https://discord.gg/${
-                                          task.verificationData || 'placeholder'
-                                        }`
+                                      : `https://discord.gg/${task.verificationData || 'placeholder'
+                                      }`
                                   }
                                   target="_blank"
                                 >
@@ -994,13 +993,12 @@ export default function CampaignDetailsPage() {
                                   href={
                                     task.telegramInviteLink
                                       ? task.telegramInviteLink.startsWith(
-                                          'http'
-                                        )
+                                        'http'
+                                      )
                                         ? task.telegramInviteLink
                                         : `https://t.me/${task.telegramInviteLink}`
-                                      : `https://t.me/${
-                                          task.verificationData || 'placeholder'
-                                        }`
+                                      : `https://t.me/${task.verificationData || 'placeholder'
+                                      }`
                                   }
                                   target="_blank"
                                 >
@@ -1441,7 +1439,7 @@ export default function CampaignDetailsPage() {
         taskType={
           verifyingTaskId
             ? campaign.tasks.find((task) => task.id === verifyingTaskId)
-                ?.type || 'JOIN_DISCORD'
+              ?.type || 'JOIN_DISCORD'
             : 'JOIN_DISCORD'
         }
         campaignId={campaignId}

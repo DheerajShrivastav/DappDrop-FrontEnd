@@ -40,7 +40,7 @@ const initializeReadOnlyProvider = () => {
   }
 }
 
-const initializeProviderAndContract = (walletProvider?: Eip1193Provider) => {
+export const initializeProviderAndContract = (walletProvider?: Eip1193Provider) => {
   if (walletProvider) {
     provider = new ethers.BrowserProvider(walletProvider)
     if (config.campaignFactoryAddress) {
@@ -62,7 +62,7 @@ initializeReadOnlyProvider()
 // --- Helper Functions ---
 
 const getSigner = async () => {
-  if (!provider || !window.ethereum) {
+  if (!provider) {
     toast({
       variant: 'destructive',
       title: 'Wallet not connected',
@@ -879,8 +879,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       actualStartTime <= now + 60
         ? 'Your campaign has been created and is now active!'
         : `Your campaign has been created and will become active on ${new Date(
-            actualStartTime * 1000
-          ).toLocaleString()}.`
+          actualStartTime * 1000
+        ).toLocaleString()}.`
 
     toast({
       title: 'Success!',
@@ -1052,7 +1052,7 @@ export const createCampaign = async (campaignData: any) => {
       console.log(
         '🔍 Combined condition result:',
         task.type === 'JOIN_TELEGRAM' &&
-          (task.verificationData || task.telegramInviteLink)
+        (task.verificationData || task.telegramInviteLink)
       )
 
       if (
@@ -1375,9 +1375,8 @@ export const openCampaign = async (
     toast({
       variant: 'destructive',
       title: 'Transaction Failed',
-      description: `Failed to open campaign. ${
-        error.message || 'An unknown error occurred.'
-      }`,
+      description: `Failed to open campaign. ${error.message || 'An unknown error occurred.'
+        }`,
     })
     throw error
   }
