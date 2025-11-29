@@ -97,7 +97,7 @@ export function InteractiveHeroBackground() {
                 // Draw particle
                 ctx.beginPath()
                 ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2)
-                ctx.fillStyle = `rgba(14, 165, 233, ${particle.opacity})`
+                ctx.fillStyle = `rgba(23, 23, 23, ${particle.opacity})`
                 ctx.fill()
 
                 // Draw connections to nearby particles
@@ -113,7 +113,7 @@ export function InteractiveHeroBackground() {
                         ctx.moveTo(particle.x, particle.y)
                         ctx.lineTo(otherParticle.x, otherParticle.y)
                         const opacity = (1 - distance / 100) * 0.15
-                        ctx.strokeStyle = `rgba(14, 165, 233, ${opacity})`
+                        ctx.strokeStyle = `rgba(23, 23, 23, ${opacity})`
                         ctx.lineWidth = 0.5
                         ctx.stroke()
                     }

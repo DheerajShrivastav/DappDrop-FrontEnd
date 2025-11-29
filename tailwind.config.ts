@@ -72,7 +72,7 @@ export default {
                 'soft': '0 1px 2px 0 rgb(0 0 0 / 0.05)',
                 'card': '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
                 'card-hover': '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
-                'blue-glow': '0 0 0 1px rgb(14 165 233 / 0.1), 0 8px 16px rgb(14 165 233 / 0.12), 0 4px 8px rgb(14 165 233 / 0.08)',
+                'black-glow': '0 0 0 1px rgb(23 23 23 / 0.1), 0 8px 16px rgb(23 23 23 / 0.12), 0 4px 8px rgb(23 23 23 / 0.08)',
             },
             keyframes: {
                 'accordion-down': {

@@ -24,6 +24,7 @@ import { getAllCampaigns, hasParticipated } from '@/lib/web3-service'
 import type { Campaign } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InteractiveHeroBackground } from '@/components/interactive-hero-background'
+import { motion } from 'framer-motion'
 
 export default function Home() {
   const { role, address } = useWallet()
@@ -77,7 +78,12 @@ export default function Home() {
       <TestnetBanner />
 
       {/* Hero Section with Interactive Background */}
-      <section className="relative bg-white overflow-hidden border-b">
+      <motion.section
+        className="relative bg-white overflow-hidden border-b"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8 }}
+      >
         {/* Grid Pattern Background */}
         <div className="absolute inset-0 bg-grid-pattern opacity-40"></div>
 
@@ -89,36 +95,56 @@ export default function Home() {
 
         <div className="container mx-auto px-4 py-32 md:py-40 text-center relative z-10">
           {/* Pill Badge */}
-          <div className="inline-flex items-center gap-2 bg-sky-50 border border-sky-200 rounded-full px-6 py-2.5 text-sm font-medium text-sky-700 mb-8 shadow-soft">
+          <motion.div
+            className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full px-6 py-2.5 text-sm font-medium text-slate-700 mb-8 shadow-soft"
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.6 }}
+          >
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-500"></span>
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
             </span>
             Find The Next Billion Real Users For Your Project
-          </div>
+          </motion.div>
 
           {/* Main Heading */}
-          <h1 className="text-6xl md:text-8xl font-headline font-bold tracking-tight mb-8">
-            <span className="text-gradient-blue">
+          <motion.h1
+            className="text-6xl md:text-8xl font-headline font-bold tracking-tight mb-8"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3, duration: 0.6 }}
+          >
+            <span className="text-gradient-black">
               Community Building
             </span>
             <br />
             <span className="text-foreground">Reimagined</span>
-          </h1>
+          </motion.h1>
 
           {/* Subheading */}
-          <p className="mt-6 text-xl md:text-2xl text-slate-600 max-w-3xl mx-auto leading-relaxed font-medium">
+          <motion.p
+            className="mt-6 text-xl md:text-2xl text-slate-600 max-w-3xl mx-auto leading-relaxed font-medium"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.4, duration: 0.6 }}
+          >
             The ultimate platform to launch your project, engage real users, and
             build a thriving community on-chain.{' '}
             <span className="text-foreground font-semibold">Ditch the bots, find your tribe.</span>
-          </p>
+          </motion.p>
 
           {/* CTA Buttons */}
-          <div className="mt-12 flex flex-col sm:flex-row justify-center gap-4">
+          <motion.div
+            className="mt-12 flex flex-col sm:flex-row justify-center gap-4"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5, duration: 0.6 }}
+          >
             <Button
               size="lg"
               asChild
-              className="bg-primary hover:bg-primary/90 text-white shadow-blue-glow h-14 px-10 text-lg font-semibold rounded-xl interactive-lift"
+              className="bg-primary hover:bg-primary/90 text-white shadow-black-glow h-14 px-10 text-lg font-semibold rounded-xl interactive-lift shimmer"
             >
               <Link href="#campaigns">Explore Campaigns</Link>
             </Button>
@@ -126,17 +152,22 @@ export default function Home() {
               size="lg"
               variant="outline"
               asChild
-              className="h-14 px-10 text-lg font-semibold border-2 border-slate-200 hover:border-primary hover:bg-sky-50 rounded-xl interactive-lift"
+              className="h-14 px-10 text-lg font-semibold border-2 border-slate-200 hover:border-primary hover:bg-slate-50 rounded-xl interactive-lift"
             >
               <Link href="/create-campaign">
                 <PlusCircle className="mr-2 h-5 w-5" />
                 Create Campaign
               </Link>
             </Button>
-          </div>
+          </motion.div>
 
           {/* Stats/Social Proof */}
-          <div className="mt-20 grid grid-cols-3 gap-8 max-w-2xl mx-auto">
+          <motion.div
+            className="mt-20 grid grid-cols-3 gap-8 max-w-2xl mx-auto"
+            initial={{ y: 30, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.6, duration: 0.6 }}
+          >
             <div>
               <div className="text-4xl font-bold text-primary">10K+</div>
               <div className="text-sm text-slate-600 mt-1">Active Users</div>
@@ -149,9 +180,9 @@ export default function Home() {
               <div className="text-4xl font-bold text-primary">$2M+</div>
               <div className="text-sm text-slate-600 mt-1">Distributed</div>
             </div>
-          </div>
+          </motion.div>
         </div>
-      </section>
+      </motion.section>
 
       {/* Features Showcase Section */}
       <section className="py-24 bg-gradient-soft">

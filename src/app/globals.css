@@ -4,47 +4,47 @@
 
 @layer base {
     :root {
-        /* Light Theme - Clean White Base */
+        /* Light Theme - Clean White Base with Black Accents */
         --background: 0 0% 100%;
         /* Pure White */
-        --foreground: 222 47% 11%;
-        /* Deep Navy */
+        --foreground: 0 0% 9%;
+        /* Deep Black */
 
-        --card: 210 20% 98%;
+        --card: 0 0% 98%;
         /* Soft Gray */
-        --card-foreground: 222 47% 11%;
+        --card-foreground: 0 0% 9%;
 
         --popover: 0 0% 100%;
-        --popover-foreground: 222 47% 11%;
+        --popover-foreground: 0 0% 9%;
 
-        /* Electric Blue Primary */
-        --primary: 199 89% 48%;
-        /* Electric Blue #0EA5E9 */
+        /* Black/Charcoal Primary */
+        --primary: 0 0% 9%;
+        /* Deep Black #171717 */
         --primary-foreground: 0 0% 100%;
 
-        --secondary: 210 40% 96%;
+        --secondary: 0 0% 96%;
         /* Light Gray */
-        --secondary-foreground: 222 47% 11%;
+        --secondary-foreground: 0 0% 9%;
 
-        --muted: 210 40% 96%;
-        --muted-foreground: 215 16% 47%;
+        --muted: 0 0% 96%;
+        --muted-foreground: 0 0% 45%;
         /* Medium Gray */
 
-        --accent: 199 89% 48%;
+        --accent: 0 0% 9%;
         --accent-foreground: 0 0% 100%;
 
         --destructive: 0 84% 60%;
         --destructive-foreground: 0 0% 100%;
 
-        --border: 214 32% 91%;
+        --border: 0 0% 91%;
         /* Soft Border */
-        --input: 214 32% 91%;
-        --ring: 199 89% 48%;
+        --input: 0 0% 91%;
+        --ring: 0 0% 9%;
 
         --radius: 0.75rem;
         /* 12px default */
 
-        --chart-1: 199 89% 48%;
+        --chart-1: 0 0% 9%;
         --chart-2: 173 58% 39%;
         --chart-3: 197 37% 24%;
         --chart-4: 43 74% 66%;
@@ -78,10 +78,10 @@
         box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
     }
 
-    .shadow-blue-glow {
-        box-shadow: 0 0 0 1px rgb(14 165 233 / 0.1),
-            0 8px 16px rgb(14 165 233 / 0.12),
-            0 4px 8px rgb(14 165 233 / 0.08);
+    .shadow-black-glow {
+        box-shadow: 0 0 0 1px rgb(23 23 23 / 0.1),
+            0 8px 16px rgb(23 23 23 / 0.12),
+            0 4px 8px rgb(23 23 23 / 0.08);
     }
 
     /* Clean Card Style */
@@ -102,13 +102,13 @@
     .bg-gradient-soft {
         background: linear-gradient(180deg,
                 hsl(var(--background)) 0%,
-                hsl(210 40% 98%) 100%);
+                hsl(0 0% 98%) 100%);
     }
 
-    .bg-gradient-blue {
+    .bg-gradient-black {
         background: linear-gradient(135deg,
-                rgb(14 165 233 / 0.05) 0%,
-                rgb(6 182 212 / 0.05) 100%);
+                rgb(23 23 23 / 0.05) 0%,
+                rgb(64 64 64 / 0.05) 100%);
     }
 
     /* Grid Pattern */
@@ -130,11 +130,73 @@
         transform: translateY(0);
     }
 
-    /* Blue Accent Gradient */
-    .text-gradient-blue {
-        background: linear-gradient(135deg, #0EA5E9 0%, #06B6D4 100%);
+    /* Black Accent Gradient */
+    .text-gradient-black {
+        background: linear-gradient(135deg, #171717 0%, #404040 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
+    }
+
+    /* Micro-interaction: Pulse */
+    .pulse-subtle {
+        animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+
+    @keyframes pulse-subtle {
+
+        0%,
+        100% {
+            opacity: 1;
+        }
+
+        50% {
+            opacity: 0.8;
+        }
+    }
+
+    /* Micro-interaction: Bounce */
+    .bounce-subtle {
+        animation: bounce-subtle 1s ease-in-out infinite;
+    }
+
+    @keyframes bounce-subtle {
+
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-5px);
+        }
+    }
+
+    /* Micro-interaction: Shimmer */
+    .shimmer {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .shimmer::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        transform: translateX(-100%);
+        background: linear-gradient(90deg,
+                rgba(255, 255, 255, 0) 0,
+                rgba(255, 255, 255, 0.2) 20%,
+                rgba(255, 255, 255, 0.5) 60%,
+                rgba(255, 255, 255, 0));
+        animation: shimmer 2s infinite;
+    }
+
+    @keyframes shimmer {
+        100% {
+            transform: translateX(100%);
+        }
     }
 }
