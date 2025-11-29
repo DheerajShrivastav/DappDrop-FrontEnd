@@ -134,6 +134,7 @@ export default function CampaignDetailsPage() {
     discriminator?: string
   } | null>(null)
   const [verifyingTaskId, setVerifyingTaskId] = useState<string | null>(null)
+  const [verifyingTaskType, setVerifyingTaskType] = useState<TaskType | null>(null)
 
   // Humanity Protocol Verification State
   const [isHumanityModalOpen, setIsHumanityModalOpen] = useState(false)
@@ -150,8 +151,64 @@ export default function CampaignDetailsPage() {
 
   const campaignId = id as string
 
+  // Handler to open verification dialog
+  const handleOpenVerifyDialog = (taskId: string, taskType: TaskType) => {
+    console.log('Opening verify dialog for task:', taskId, taskType)
+    setVerifyingTaskId(taskId)
+    setVerifyingTaskType(taskType)
+
+    // Handle different task types
+    if (taskType === 'HUMANITY_VERIFICATION') {
+      setIsHumanityModalOpen(true)
+    } else if (taskType === 'ONCHAIN_TX') {
+      setPaymentTaskId(taskId)
+      setIsPaymentDialogOpen(true)
+    } else {
+      setIsVerifyDialogOpen(true)
+    }
+  }
+
+  // Handler for task verification
+  const handleTaskVerification = async (
+    taskId: string,
+    taskType: TaskType,
+    discordData?: any,
+    telegramData?: any
+  ) => {
+    if (!address || !campaign) return
+
+    try {
+      console.log('Verifying task:', { taskId, taskType, discordData, telegramData })
+
+      // Call the completeTask function from web3-service
+      await completeTask(
+        campaignId,
+        parseInt(taskId),
+        address,
+        discordData,
+        telegramData
+      )
+
+      toast({
+        title: 'Task Verified!',
+        description: 'Your task has been successfully verified.',
+      })
+
+      // Refresh campaign data to update task completion status
+      await fetchAllCampaignData(true)
+    } catch (error: any) {
+      console.error('Task verification error:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Verification Failed',
+        description: error.message || 'Failed to verify task. Please try again.',
+      })
+    }
+  }
+
   // [KEEPING ALL THE EXISTING FUNCTIONS - checkHumanityStatus, fetchAllCampaignData, etc.]
   // ... (I'll keep all the existing logic functions intact)
+
 
   const checkHumanityStatus = async () => {
     if (!address) return
@@ -325,6 +382,14 @@ export default function CampaignDetailsPage() {
   const progressPercentage = (completedTasksCount / campaign.tasks.length) * 100
   const allTasksCompleted = completedTasksCount === campaign.tasks.length
 
+  // Debug logging
+  console.log('Campaign data:', {
+    id: campaign.id,
+    title: campaign.title,
+    imageUrl: campaign.imageUrl,
+    hasImageUrl: !!campaign.imageUrl,
+  })
+
   return (
     <div className="min-h-screen bg-gradient-soft">
       {/* Hero Section */}
@@ -334,13 +399,21 @@ export default function CampaignDetailsPage() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.6 }}
       >
-        {campaign.imageUrl && (
+        {campaign.imageUrl && !campaign.imageUrl.includes('placehold.co') && (
           <Image
             src={campaign.imageUrl}
             alt={campaign.title}
             fill
             className="object-cover"
             priority
+            unoptimized={campaign.imageUrl.startsWith('http')}
+            onError={(e) => {
+              console.error('❌ Image failed to load:', campaign.imageUrl);
+              console.error('Error details:', e);
+            }}
+            onLoad={() => {
+              console.log('✅ Image loaded successfully:', campaign.imageUrl);
+            }}
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent" />
@@ -438,8 +511,8 @@ export default function CampaignDetailsPage() {
                         animate={{ x: 0, opacity: 1 }}
                         transition={{ delay: 0.5 + index * 0.1, duration: 0.4 }}
                         className={`p-4 rounded-xl border-2 transition-all ${isCompleted
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-white border-slate-200 hover:border-primary hover:shadow-card'
+                          ? 'bg-green-50 border-green-200'
+                          : 'bg-white border-slate-200 hover:border-primary hover:shadow-card'
                           }`}
                       >
                         <div className="flex items-start gap-4">
@@ -459,7 +532,11 @@ export default function CampaignDetailsPage() {
                             )}
                           </div>
                           {role === 'participant' && !isCompleted && campaign.status === 'Open' && (
-                            <Button size="sm" className="shimmer">
+                            <Button
+                              size="sm"
+                              className="shimmer"
+                              onClick={() => handleOpenVerifyDialog(task.id, task.type)}
+                            >
                               Verify
                             </Button>
                           )}
@@ -544,6 +621,30 @@ export default function CampaignDetailsPage() {
           </div>
         </div>
       </div>
+
+      {/* Task Verification Dialog */}
+      {verifyingTaskType && (
+        <TaskVerificationForm
+          isOpen={isVerifyDialogOpen}
+          onOpenChange={setIsVerifyDialogOpen}
+          taskId={verifyingTaskId}
+          taskType={verifyingTaskType}
+          campaignId={campaignId}
+          onVerify={handleTaskVerification}
+        />
+      )}
+
+      {/* Humanity Verification Modal */}
+      <HumanityVerificationModal
+        isOpen={isHumanityModalOpen}
+        onClose={() => setIsHumanityModalOpen(false)}
+        onVerificationComplete={async (success) => {
+          if (success && verifyingTaskId) {
+            await handleTaskVerification(verifyingTaskId, 'HUMANITY_VERIFICATION')
+          }
+          setIsHumanityModalOpen(false)
+        }}
+      />
     </div>
   )
 }

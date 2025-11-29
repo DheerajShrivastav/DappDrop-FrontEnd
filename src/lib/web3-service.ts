@@ -518,12 +518,19 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
     let imageUrl: string | undefined
     if (typeof window !== 'undefined') {
       try {
+        console.log(`🖼️ Fetching image for campaign ${id}...`)
         const imageResponse = await fetch(`/api/campaigns/${id}/image`)
+        console.log(`🖼️ Image API response status: ${imageResponse.status}`)
         if (imageResponse.ok) {
           const imageData = await imageResponse.json()
+          console.log(`🖼️ Image API response data:`, imageData)
           imageUrl = imageData.imageUrl
+          console.log(`🖼️ Extracted imageUrl:`, imageUrl)
+        } else {
+          console.warn(`⚠️ Image API returned non-OK status: ${imageResponse.status}`)
         }
       } catch (e) {
+        console.error('❌ Failed to fetch image:', e)
         // Silently fail if image fetch fails
       }
     }
