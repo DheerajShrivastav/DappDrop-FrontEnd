@@ -134,7 +134,7 @@ export default function CampaignDetailsPage() {
     discriminator?: string
   } | null>(null)
   const [verifyingTaskId, setVerifyingTaskId] = useState<string | null>(null)
-  const [verifyingTaskType, setVerifyingTaskType] = useState<TaskType | null>(null)
+  const [verifyingTaskType, setVerifyingTaskType] = useState<TaskType['type'] | null>(null)
 
   // Humanity Protocol Verification State
   const [isHumanityModalOpen, setIsHumanityModalOpen] = useState(false)
@@ -152,7 +152,7 @@ export default function CampaignDetailsPage() {
   const campaignId = id as string
 
   // Handler to open verification dialog
-  const handleOpenVerifyDialog = (taskId: string, taskType: TaskType) => {
+  const handleOpenVerifyDialog = (taskId: string, taskType: TaskType['type']) => {
     console.log('Opening verify dialog for task:', taskId, taskType)
     setVerifyingTaskId(taskId)
     setVerifyingTaskType(taskType)
@@ -168,47 +168,163 @@ export default function CampaignDetailsPage() {
     }
   }
 
-  // Handler for task verification
+  // Handler for task verification - Complete implementation from old file
   const handleTaskVerification = async (
     taskId: string,
-    taskType: TaskType,
+    taskType: TaskType['type'],
     discordData?: any,
     telegramData?: any
   ) => {
-    if (!address || !campaign) return
-
-    try {
-      console.log('Verifying task:', { taskId, taskType, discordData, telegramData })
-
-      // Call the completeTask function from web3-service
-      await completeTask(
-        campaignId,
-        parseInt(taskId),
-        address,
-        discordData,
-        telegramData
-      )
-
-      toast({
-        title: 'Task Verified!',
-        description: 'Your task has been successfully verified.',
-      })
-
-      // Refresh campaign data to update task completion status
-      await fetchAllCampaignData(true)
-    } catch (error: any) {
-      console.error('Task verification error:', error)
+    if (!isConnected || !address || !campaign) {
       toast({
         variant: 'destructive',
-        title: 'Verification Failed',
-        description: error.message || 'Failed to verify task. Please try again.',
+        title: 'Wallet Not Connected',
+        description: 'Please connect your wallet.',
       })
+      return
+    }
+
+    setUserTasks((prevTasks) =>
+      prevTasks.map((task) =>
+        task.taskId === taskId ? { ...task, isCompleting: true } : task
+      )
+    )
+
+    try {
+      // For Discord tasks, check if we have stored verification data if no discordData is provided
+      if (taskType === 'JOIN_DISCORD' && !discordData) {
+        const storedVerification = localStorage.getItem(
+          `discord_verification_${campaignId}_${taskId}`
+        )
+        if (storedVerification) {
+          try {
+            discordData = JSON.parse(storedVerification)
+            console.log('Using stored Discord verification data:', discordData)
+          } catch (e) {
+            console.error('Error parsing stored verification:', e)
+          }
+        }
+      }
+
+      // For Telegram tasks, check if we have stored verification data if no telegramData is provided
+      if (taskType === 'JOIN_TELEGRAM' && !telegramData) {
+        const storedVerification = localStorage.getItem(
+          `telegram_verification_${campaignId}_${taskId}`
+        )
+        if (storedVerification) {
+          try {
+            telegramData = JSON.parse(storedVerification)
+            console.log('Using stored Telegram verification data:', telegramData)
+          } catch (e) {
+            console.error('Error parsing stored verification:', e)
+          }
+        }
+      }
+
+      // Handle HUMANITY_VERIFICATION task type - check verification status before proceeding
+      if (taskType === 'HUMANITY_VERIFICATION') {
+        const humanityResponse = await fetch(
+          `/api/verify-humanity?walletAddress=${address}`
+        )
+        const humanityData = await humanityResponse.json()
+
+        if (!humanityData.success || !humanityData.isHuman) {
+          // User is not verified, show modal
+          setIsHumanityModalOpen(true)
+          throw new Error('Please complete Humanity Protocol verification first')
+        }
+        // If verified, continue with normal flow
+      }
+
+      // Format discord username with discriminator if available
+      const discordUsername =
+        discordData?.username && discordData?.discriminator
+          ? `${discordData.username}#${discordData.discriminator}`
+          : discordData?.username || null
+
+      // All tasks now call our backend API for verification/completion
+      const response = await fetch('/api/verify-task', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaignId,
+          taskId,
+          userAddress: address,
+          discordUsername,
+          discordId: discordData?.id || null,
+          telegramUsername: telegramData?.username || null,
+          telegramUserId: telegramData?.userId || null,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (!response.ok || !result.success || !result.verified) {
+        throw new Error(result.error || 'Verification failed.')
+      }
+
+      // Backend verification successful - now complete the task on blockchain
+      // Find the task index from the task ID
+      const taskIndex = campaign.tasks.findIndex((task) => task.id === taskId)
+      if (taskIndex === -1) {
+        throw new Error('Task not found in campaign')
+      }
+
+      await completeTask(campaignId, taskIndex)
+
+      toast({
+        title: 'Task Completed!',
+        description: 'Great job, one step closer to your reward.',
+      })
+
+      // Refresh campaign data to update participant count and other blockchain data
+      await fetchAllCampaignData()
+
+      // Store successful verification in localStorage for Discord tasks
+      if (taskType === 'JOIN_DISCORD' && discordData) {
+        localStorage.setItem(
+          `discord_verification_${campaignId}_${taskId}`,
+          JSON.stringify({
+            username: discordData.username,
+            id: discordData.id,
+            verified: true,
+            timestamp: new Date().toISOString(),
+          })
+        )
+      }
+
+      // Store successful verification in localStorage for Telegram tasks
+      if (taskType === 'JOIN_TELEGRAM' && telegramData) {
+        localStorage.setItem(
+          `telegram_verification_${campaignId}_${taskId}`,
+          JSON.stringify({
+            username: telegramData.username,
+            userId: telegramData.userId,
+            verified: true,
+            timestamp: new Date().toISOString(),
+          })
+        )
+      }
+
+      if (!isJoined) {
+        setIsJoined(true)
+      }
+    } catch (error: any) {
+      const description = error.message.includes('not in active period')
+        ? 'This campaign is not currently active.'
+        : error.message || 'Failed to complete task.'
+      toast({ variant: 'destructive', title: 'Error', description })
+    } finally {
+      setUserTasks((prevTasks) =>
+        prevTasks.map((task) =>
+          task.taskId === taskId ? { ...task, isCompleting: false } : task
+        )
+      )
+      setIsVerifyDialogOpen(false)
+      setVerifyingTaskId(null)
+      setDiscordUserData(null)
     }
   }
-
-  // [KEEPING ALL THE EXISTING FUNCTIONS - checkHumanityStatus, fetchAllCampaignData, etc.]
-  // ... (I'll keep all the existing logic functions intact)
-
 
   const checkHumanityStatus = async () => {
     if (!address) return
@@ -318,6 +434,65 @@ export default function CampaignDetailsPage() {
     }
   }, [address, isConnected, campaign, campaignId])
 
+  // Load any previously stored Discord and Telegram verifications on component mount
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      campaign?.id &&
+      campaign.tasks?.length > 0
+    ) {
+      // Check local storage for previous Discord and Telegram verifications
+      campaign.tasks.forEach((task) => {
+        if (task.type === 'JOIN_DISCORD') {
+          const storedVerification = localStorage.getItem(
+            `discord_verification_${campaign.id}_${task.id}`
+          )
+          if (storedVerification) {
+            try {
+              const verificationData = JSON.parse(storedVerification)
+              // Update completed tasks if we have a stored verification
+              if (verificationData.verified) {
+                setUserTasks((prevTasks) =>
+                  prevTasks.map((t) =>
+                    t.taskId === task.id ? { ...t, completed: true } : t
+                  )
+                )
+              }
+            } catch (e) {
+              console.error('Error parsing stored Discord verification:', e)
+            }
+          }
+        } else if (task.type === 'JOIN_TELEGRAM') {
+          const storedVerification = localStorage.getItem(
+            `telegram_verification_${campaign.id}_${task.id}`
+          )
+          if (storedVerification) {
+            try {
+              const verificationData = JSON.parse(storedVerification)
+              // Update completed tasks if we have a stored verification
+              if (verificationData.verified) {
+                setUserTasks((prevTasks) =>
+                  prevTasks.map((t) =>
+                    t.taskId === task.id ? { ...t, completed: true } : t
+                  )
+                )
+              }
+            } catch (e) {
+              console.error('Error parsing stored Telegram verification:', e)
+            }
+          }
+        }
+      })
+    }
+  }, [campaign?.id, campaign?.tasks])
+
+  // Check Humanity verification status when wallet connects
+  useEffect(() => {
+    if (address && isConnected) {
+      checkHumanityStatus()
+    }
+  }, [address, isConnected])
+
   // [KEEPING ALL OTHER EXISTING useEffects AND HANDLER FUNCTIONS]
   // ... (All the existing logic will remain)
 
@@ -346,6 +521,83 @@ export default function CampaignDetailsPage() {
       description: 'Campaign data has been updated.',
     })
   }
+
+  // Verify user with Humanity Protocol
+  const handleVerifyHumanity = async (walletAddress?: string) => {
+    console.log('🚀 handleVerifyHumanity called with:', walletAddress)
+    const addressToVerify = walletAddress || address
+    if (!addressToVerify) {
+      console.log('❌ No wallet address provided')
+      toast({
+        variant: 'destructive',
+        title: 'No Wallet Address',
+        description: 'Please provide a wallet address to verify.',
+      })
+      return
+    }
+
+    console.log('🔍 Verifying humanity for address:', addressToVerify)
+    setIsCheckingHumanity(true)
+    try {
+      const response = await fetch('/api/verify-humanity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ walletAddress: addressToVerify }),
+      })
+
+      console.log(
+        '📡 API response status:',
+        response.status,
+        response.statusText
+      )
+      const data = await response.json()
+      console.log('📄 Raw API Response:', JSON.stringify(data, null, 2))
+
+      if (data.success) {
+        console.log(
+          '✅ API success=true, isHuman value:',
+          data.isHuman,
+          typeof data.isHuman
+        )
+        setUserHumanityStatus(data.isHuman)
+
+        if (data.isHuman) {
+          console.log('🎉 SHOWING SUCCESS TOAST - data.isHuman is truthy')
+          toast({
+            title: 'Verification Successful!',
+            description: `Address ${addressToVerify.slice(
+              0,
+              6
+            )}...${addressToVerify.slice(
+              -4
+            )} is verified as human. You can now complete this task.`,
+          })
+          setIsHumanityModalOpen(false)
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Not Verified',
+            description: `Address ${addressToVerify.slice(
+              0,
+              6
+            )}...${addressToVerify.slice(
+              -4
+            )} is not verified. Please complete verification on Humanity Protocol first.`,
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error verifying Humanity:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Verification Failed',
+        description: 'Could not verify Humanity status. Please try again.',
+      })
+    } finally {
+      setIsCheckingHumanity(false)
+    }
+  }
+
 
   if (isLoading) {
     return (
@@ -637,13 +889,9 @@ export default function CampaignDetailsPage() {
       {/* Humanity Verification Modal */}
       <HumanityVerificationModal
         isOpen={isHumanityModalOpen}
-        onClose={() => setIsHumanityModalOpen(false)}
-        onVerificationComplete={async (success) => {
-          if (success && verifyingTaskId) {
-            await handleTaskVerification(verifyingTaskId, 'HUMANITY_VERIFICATION')
-          }
-          setIsHumanityModalOpen(false)
-        }}
+        onOpenChange={setIsHumanityModalOpen}
+        onVerify={handleVerifyHumanity}
+        isVerifying={isCheckingHumanity}
       />
     </div>
   )
