@@ -14,8 +14,6 @@ export const ourFileRouter = {
     })
     .onUploadComplete(async ({ file }) => {
       // This runs on your server after upload
-      console.log('Upload complete for file:', file.name)
-      console.log('File URL:', file.url)
 
       // Return data to be sent to client
       return { url: file.url }

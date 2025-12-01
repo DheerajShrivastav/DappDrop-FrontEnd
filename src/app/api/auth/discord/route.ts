@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
 
   // Make sure we have the client ID
   if (!DISCORD_CLIENT_ID) {
-    console.error('Discord client ID is not set')
     return NextResponse.json(
       { error: 'Discord client ID is not configured' },
       { status: 500 }

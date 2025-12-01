@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 // Discord OAuth2 configuration
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET
-// Use a hard-coded redirect URI to ensure consistency
-const DISCORD_REDIRECT_URI = 'http://localhost:3000/api/auth/discord/callback'
+// Use environment variable for redirect URI, fallback to localhost for development
+const DISCORD_REDIRECT_URI = process.env.NEXTAUTH_URL
+  ? `${process.env.NEXTAUTH_URL}/api/auth/discord/callback`
+  : 'http://localhost:3000/api/auth/discord/callback'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -40,10 +42,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Log details for debugging
-    console.log('Starting Discord auth with these parameters:')
-    console.log('Client ID:', DISCORD_CLIENT_ID)
-    console.log('Redirect URI:', DISCORD_REDIRECT_URI)
-    console.log('Code length:', code?.length || 0)
 
     // Exchange the code for an access token
     const tokenResponse = await fetch('https://discord.com/api/oauth2/token', {
@@ -62,10 +60,8 @@ export async function GET(request: NextRequest) {
 
     if (!tokenResponse.ok) {
       const errorData = await tokenResponse.text()
-      console.error('Token exchange error:', errorData)
       try {
         const jsonError = JSON.parse(errorData)
-        console.error('Error details:', jsonError)
       } catch (e) {
         // Text isn't JSON, that's fine
       }
@@ -96,7 +92,6 @@ export async function GET(request: NextRequest) {
       redirectUrl,
     })
   } catch (error: any) {
-    console.error('Discord auth error:', error)
     return generateCallbackPage({
       success: false,
       error: error.message || 'Failed to authenticate with Discord',
@@ -152,64 +147,53 @@ function generateCallbackPage({
       </head>
       <body>
         <div class="container">
-          <h1>${
-            success ? 'Authentication Successful' : 'Authentication Failed'
-          }</h1>
-          <p>${
-            success
-              ? 'You have successfully connected your Discord account. You can close this window now.'
-              : `Error: ${error}`
-          }</p>
+          <h1>${success ? 'Authentication Successful' : 'Authentication Failed'
+    }</h1>
+          <p>${success
+      ? 'You have successfully connected your Discord account. You can close this window now.'
+      : `Error: ${error}`
+    }</p>
           <script>
             // Pass the data back to the opener window
             (function() {
-              console.log("Auth callback page loaded, preparing to send message to opener");
               
               // Store the auth result in localStorage as a fallback
               const authResult = {
                 success: ${success},
-                ${
-                  success
-                    ? `user: ${JSON.stringify(user)}`
-                    : `error: "${error}"`
-                },
+                ${success
+      ? `user: ${JSON.stringify(user)}`
+      : `error: "${error}"`
+    },
                 timestamp: new Date().toISOString()
               };
               localStorage.setItem('discord_auth_fallback', JSON.stringify(authResult));
               
               if (window.opener) {
                 const message = { 
-                  type: ${
-                    success ? '"discord-auth-success"' : '"discord-auth-error"'
-                  }, 
-                  ${
-                    success
-                      ? `user: ${JSON.stringify(user)}`
-                      : `error: "${error}"`
-                  }
+                  type: ${success ? '"discord-auth-success"' : '"discord-auth-error"'
+    }, 
+                  ${success
+      ? `user: ${JSON.stringify(user)}`
+      : `error: "${error}"`
+    }
                 };
                 const targetOrigin = "${new URL(redirectUrl).origin}";
                 
-                console.log("Sending message to opener:", message);
-                console.log("Target origin:", targetOrigin);
                 
                 try {
                   window.opener.postMessage(message, targetOrigin);
                   
                   // Also try with * as a fallback
                   if (targetOrigin !== window.location.origin) {
-                    console.log("Trying fallback with window.location.origin:", window.location.origin);
                     window.opener.postMessage(message, window.location.origin);
                   }
                 } catch (e) {
-                  console.error("Error posting message:", e);
                 }
                 
                 setTimeout(() => {
                   window.close();
                 }, 5000); // Give it a bit more time
               } else {
-                console.error("No opener window found");
               }
             })();
           </script>

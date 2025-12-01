@@ -4,11 +4,16 @@ import { UploadButton } from '@uploadthing/react'
 import type { OurFileRouter } from '@/app/api/uploadthing/core'
 import { useState } from 'react'
 import { useToast } from '@/hooks/use-toast'
+import type { Eip1193Provider } from 'ethers'
 
-// Extend window with ethereum property
+// Extend window with ethereum property - matches web3-service.ts
 declare global {
   interface Window {
-    ethereum?: any
+    ethereum?: Eip1193Provider & {
+      isMetaMask?: boolean
+      request: (...args: any[]) => Promise<any>
+      providers?: (Eip1193Provider & { isMetaMask?: boolean })[]
+    }
   }
 }
 
