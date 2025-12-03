@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const existing = await prisma.paymentVerification.findUnique({
       where: {
         campaignId_taskIndex_userAddress: {
-          campaignId: campaignId.toString(),
+          campaignId: campaignId,
           taskIndex: parseInt(taskIndex),
           userAddress: userAddress.toLowerCase(),
         },
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     const metadata = await prisma.campaignTaskMetadata.findUnique({
       where: {
         campaignId_taskIndex: {
-          campaignId: campaignId.toString(),
+          campaignId: campaignId,
           taskIndex: parseInt(taskIndex),
         },
       },
@@ -122,13 +122,13 @@ export async function POST(request: NextRequest) {
     await prisma.paymentVerification.upsert({
       where: {
         campaignId_taskIndex_userAddress: {
-          campaignId: campaignId.toString(),
+          campaignId: campaignId,
           taskIndex: parseInt(taskIndex),
           userAddress: userAddress.toLowerCase(),
         },
       },
       create: {
-        campaignId: campaignId.toString(),
+        campaignId: campaignId,
         taskIndex: parseInt(taskIndex),
         userAddress: userAddress.toLowerCase(),
         transactionHash,
