@@ -2,78 +2,47 @@
 'use client';
 
 import Link from 'next/link';
-import { useWallet } from '@/context/wallet-provider';
-import { Button } from './ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from './ui/dropdown-menu';
-import { Rocket, LogOut, User, Wallet, LayoutDashboard } from 'lucide-react';
-import { truncateAddress } from '@/lib/utils';
-import { Badge } from './ui/badge';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { Rocket } from 'lucide-react';
+import { useRole } from '@/hooks/use-role';
 
 export default function Header() {
-  const { isConnected, address, connectWallet, disconnectWallet, role } = useWallet();
+    const { role } = useRole();
 
-  return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center">
-        <Link href="/" className="flex items-center gap-2 mr-8">
-          <Rocket className="h-6 w-6 text-primary" />
-          <span className="font-bold text-lg">DApp Drop Zone</span>
-        </Link>
-        <nav className="flex items-center gap-6 text-sm flex-1">
-           <Link href="/about" className='text-muted-foreground hover:text-foreground transition-colors'>
-                About
-            </Link>
-            <Link href="/changelog" className='text-muted-foreground hover:text-foreground transition-colors'>
-                Changelog
-            </Link>
-          {role === 'host' && (
-            <Link href="/dashboard" className='text-muted-foreground hover:text-foreground transition-colors'>
-                Dashboard
-            </Link>
-          )}
-        </nav>
-        <div className="flex items-center gap-4">
-          {isConnected && address ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline">
-                  <Wallet className="mr-2 h-4 w-4" />
-                  {truncateAddress(address)}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <DropdownMenuLabel className="flex items-center justify-between">
-                  My Wallet
-                  <Badge variant="secondary">{role}</Badge>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                 {role === 'host' && (
-                  <DropdownMenuItem asChild className='cursor-pointer'>
-                    <Link href="/dashboard"><LayoutDashboard className="mr-2 h-4 w-4"/>Dashboard</Link>
-                  </DropdownMenuItem>
-                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={disconnectWallet} className="cursor-pointer text-red-500 focus:text-red-500">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Disconnect</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <Button onClick={connectWallet} className='bg-primary text-primary-foreground hover:bg-primary/90'>
-              <Wallet className="mr-2 h-4 w-4" />
-              Connect Wallet
-            </Button>
-          )}
-        </div>
-      </div>
-    </header>
-  );
+    return (
+        <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md shadow-soft">
+            <div className="container flex h-16 items-center">
+                <Link href="/" className="flex items-center gap-2.5 mr-8">
+                    <div className="bg-gradient-to-br from-slate-700 to-slate-900 p-2 rounded-xl shadow-black-glow">
+                        <Rocket className="h-5 w-5 text-white" />
+                    </div>
+                    <span className="font-headline font-bold text-xl bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
+                        DappDrop
+                    </span>
+                </Link>
+                <nav className="flex items-center gap-8 text-sm font-medium flex-1">
+                    <Link href="/about" className='text-slate-600 hover:text-primary transition-colors'>
+                        About
+                    </Link>
+                    <Link href="/changelog" className='text-slate-600 hover:text-primary transition-colors'>
+                        Changelog
+                    </Link>
+                    {role === 'host' && (
+                        <Link href="/dashboard" className='text-slate-600 hover:text-primary transition-colors'>
+                            Dashboard
+                        </Link>
+                    )}
+                </nav>
+                <div className="flex items-center gap-4">
+                    <ConnectButton
+                        showBalance={false}
+                        accountStatus={{
+                            smallScreen: 'avatar',
+                            largeScreen: 'full',
+                        }}
+                    />
+                </div>
+            </div>
+        </header>
+    );
 }

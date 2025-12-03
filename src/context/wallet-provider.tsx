@@ -1,8 +1,11 @@
-
 'use client';
 
-import React, { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
-import { connectWallet as web3Connect, isHost as web3IsHost } from '@/lib/web3-service';
+import React, { createContext, useContext, useEffect, ReactNode, useCallback } from 'react';
+import { useAccount, useDisconnect, useWalletClient } from 'wagmi';
+import { useConnectModal } from '@rainbow-me/rainbowkit';
+import { useRole } from '@/hooks/use-role';
+import { initializeProviderAndContract } from '@/lib/web3-service';
+import type { Eip1193Provider } from 'ethers';
 
 type Role = 'host' | 'participant' | null;
 
@@ -25,64 +28,45 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 export const WalletProvider = ({ children }: { children: ReactNode }) => {
-  const [isConnected, setIsConnected] = useState(false);
-  const [address, setAddress] = useState<string | null>(null);
-  const [role, setRole] = useState<Role>(null);
+  const { address, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
+  const { openConnectModal } = useConnectModal();
+  const { role, checkRole } = useRole();
+  const { data: walletClient } = useWalletClient();
 
-  const checkRoles = useCallback(async (currentAddress: string) => {
-      const isHost = await web3IsHost(currentAddress);
-      setRole(isHost ? 'host' : 'participant');
-  }, []);
+  // Initialize web3-service with the Wagmi provider
+  useEffect(() => {
+    if (walletClient) {
+      // walletClient.transport is not directly an Eip1193Provider, but for BrowserProvider it usually works 
+      // if we pass the window.ethereum or similar. 
+      // However, ethers.BrowserProvider expects an object with request method.
+      // walletClient has a request method.
+      initializeProviderAndContract(walletClient as unknown as Eip1193Provider);
+    }
+  }, [walletClient]);
+
+  const connectWallet = useCallback(() => {
+    if (openConnectModal) {
+      openConnectModal();
+    }
+  }, [openConnectModal]);
 
   const disconnectWallet = useCallback(() => {
-    setAddress(null);
-    setIsConnected(false);
-    setRole(null);
-  }, []);
-  
-  const connectWallet = useCallback(async () => {
-    const account = await web3Connect();
-    if(account) {
-        setAddress(account);
-        setIsConnected(true);
-        await checkRoles(account);
-    } else {
-        disconnectWallet();
-    }
-  }, [checkRoles, disconnectWallet]);
-  
-  const handleAccountsChanged = useCallback(async (accounts: string[]) => {
-    if (accounts.length === 0) {
-      disconnectWallet();
-    } else if (accounts[0] !== address) {
-      await connectWallet();
-    }
-  }, [address, connectWallet, disconnectWallet]);
+    disconnect();
+  }, [disconnect]);
 
-  useEffect(() => {
-    if (typeof window.ethereum === 'undefined') {
-      return;
-    }
-    
-    // Type assertion for ethereum event listeners
-    const ethereum = window.ethereum as unknown as EthereumProvider;
-    
-    // Wrapper to handle the type conversion from unknown[] to string[]
-    const accountsChangedHandler = (...args: unknown[]) => {
-      handleAccountsChanged(args[0] as string[]);
-    };
-    
-    ethereum.on('accountsChanged', accountsChangedHandler);
+  const checkRoles = useCallback(async (addr: string) => {
+    await checkRole(addr);
+  }, [checkRole]);
 
-    return () => {
-      if (ethereum?.removeListener) {
-        ethereum.removeListener('accountsChanged', accountsChangedHandler);
-      }
-    };
-  }, [handleAccountsChanged]);
-
-
-  const value = { isConnected, address, role, connectWallet, disconnectWallet, checkRoles };
+  const value = {
+    isConnected,
+    address: address || null,
+    role,
+    connectWallet,
+    disconnectWallet,
+    checkRoles
+  };
 
   return (
     <WalletContext.Provider value={value}>

@@ -13,6 +13,11 @@ export async function verifyAuthentication(
   message: string
 ): Promise<string | null> {
   try {
+    // Validate message freshness first
+    if (!validateAuthMessage(message)) {
+      console.error('❌ Message validation failed: Message expired or invalid')
+      return null
+    }
     // Verify the signature and recover the address
     const recoveredAddress = ethers.verifyMessage(message, signature)
 

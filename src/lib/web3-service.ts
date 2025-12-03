@@ -40,7 +40,7 @@ const initializeReadOnlyProvider = () => {
   }
 }
 
-const initializeProviderAndContract = (walletProvider?: Eip1193Provider) => {
+export const initializeProviderAndContract = (walletProvider?: Eip1193Provider) => {
   if (walletProvider) {
     provider = new ethers.BrowserProvider(walletProvider)
     if (config.campaignFactoryAddress) {
@@ -62,7 +62,7 @@ initializeReadOnlyProvider()
 // --- Helper Functions ---
 
 const getSigner = async () => {
-  if (!provider || !window.ethereum) {
+  if (!provider) {
     toast({
       variant: 'destructive',
       title: 'Wallet not connected',
@@ -518,12 +518,17 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
     let imageUrl: string | undefined
     if (typeof window !== 'undefined') {
       try {
+        
         const imageResponse = await fetch(`/api/campaigns/${id}/image`)
+        
         if (imageResponse.ok) {
           const imageData = await imageResponse.json()
           imageUrl = imageData.imageUrl
+        } else {
+          console.warn(`⚠️ Image API returned non-OK status: ${imageResponse.status}`)
         }
       } catch (e) {
+        console.error('❌ Failed to fetch image:', e)
         // Silently fail if image fetch fails
       }
     }
@@ -718,6 +723,43 @@ export const createAndActivateCampaign = async (campaignData: any) => {
         }
       }
 
+      // Store payment metadata in database for ONCHAIN_TX payment tasks
+      if (task.type === 'ONCHAIN_TX' && task.paymentRequired) {
+        try {
+          const taskIndex = campaignData.tasks.indexOf(task)
+          console.log(
+            '💰 Storing payment metadata for task in createAndActivateCampaign',
+            taskIndex
+          )
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              campaignId: campaignId,
+              taskIndex: taskIndex,
+              taskType: task.type,
+              metadata: {
+                paymentRequired: true,
+                paymentRecipient: task.paymentRecipient,
+                chainId: task.chainId,
+                network: task.network,
+                tokenAddress: task.tokenAddress || null,
+                tokenSymbol: task.tokenSymbol,
+                amount: task.amount,
+                amountDisplay: task.amountDisplay,
+              },
+            }),
+          })
+          console.log(
+            '✅ Payment metadata stored successfully in createAndActivateCampaign'
+          )
+        } catch (e) {
+          console.warn('Failed to store payment metadata in database:', e)
+        }
+      }
+
       if (
         task.type === 'JOIN_TELEGRAM' &&
         (task.verificationData || task.telegramInviteLink)
@@ -842,8 +884,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       actualStartTime <= now + 60
         ? 'Your campaign has been created and is now active!'
         : `Your campaign has been created and will become active on ${new Date(
-            actualStartTime * 1000
-          ).toLocaleString()}.`
+          actualStartTime * 1000
+        ).toLocaleString()}.`
 
     toast({
       title: 'Success!',
@@ -969,6 +1011,38 @@ export const createCampaign = async (campaignData: any) => {
         }
       }
 
+      // Store payment metadata in database for ONCHAIN_TX payment tasks
+      if (task.type === 'ONCHAIN_TX' && task.paymentRequired) {
+        try {
+          const taskIndex = campaignData.tasks.indexOf(task)
+          console.log('💰 Storing payment metadata for task', taskIndex)
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              campaignId: campaignId,
+              taskIndex: taskIndex,
+              taskType: task.type,
+              metadata: {
+                paymentRequired: true,
+                paymentRecipient: task.paymentRecipient,
+                chainId: task.chainId,
+                network: task.network,
+                tokenAddress: task.tokenAddress || null,
+                tokenSymbol: task.tokenSymbol,
+                amount: task.amount,
+                amountDisplay: task.amountDisplay,
+              },
+            }),
+          })
+          console.log('✅ Payment metadata stored successfully')
+        } catch (e) {
+          console.warn('Failed to store payment metadata in database:', e)
+        }
+      }
+
       // Store Telegram metadata in database for this campaign
       console.log(
         '🔍 Checking Telegram task conditions for task type:',
@@ -983,7 +1057,7 @@ export const createCampaign = async (campaignData: any) => {
       console.log(
         '🔍 Combined condition result:',
         task.type === 'JOIN_TELEGRAM' &&
-          (task.verificationData || task.telegramInviteLink)
+        (task.verificationData || task.telegramInviteLink)
       )
 
       if (
@@ -1306,9 +1380,8 @@ export const openCampaign = async (
     toast({
       variant: 'destructive',
       title: 'Transaction Failed',
-      description: `Failed to open campaign. ${
-        error.message || 'An unknown error occurred.'
-      }`,
+      description: `Failed to open campaign. ${error.message || 'An unknown error occurred.'
+        }`,
     })
     throw error
   }

@@ -14,7 +14,6 @@ export async function GET(request: Request) {
       )
     }
 
-    console.log('🔍 Checking database for campaign:', campaignId)
 
     // Get all metadata for this campaign
     const allMetadata = await prisma.campaignTaskMetadata.findMany({
@@ -26,7 +25,6 @@ export async function GET(request: Request) {
       },
     })
 
-    console.log('📦 Found metadata entries:', allMetadata)
 
     return NextResponse.json({
       success: true,
@@ -35,7 +33,6 @@ export async function GET(request: Request) {
       metadata: allMetadata,
     })
   } catch (error: any) {
-    console.error('❌ Error checking metadata:', error)
     return NextResponse.json(
       { error: 'Database error', details: error.message },
       { status: 500 }

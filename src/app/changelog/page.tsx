@@ -19,9 +19,102 @@ import {
   MessageSquare,
   Send,
   Users,
+  CreditCard,
+  DollarSign,
+  Palette,
+  Sparkles,
+  Layout,
 } from 'lucide-react'
 
 const changelogData = [
+  {
+    date: new Date('2025-12-01T18:00:00Z'),
+    version: 'Design Overhaul',
+    title: 'Complete UI/UX Redesign',
+    description:
+      'Major visual redesign of the entire platform with modern aesthetics, enhanced animations, and improved user experience. Transformed the interface with premium design elements, better visual hierarchy, and responsive layouts across all pages.',
+    changes: [
+      {
+        type: 'Improvement',
+        icon: Palette,
+        text: 'Redesigned dashboard with modern card layouts, enhanced visual hierarchy, and improved spacing for better readability.',
+      },
+      {
+        type: 'Improvement',
+        icon: Sparkles,
+        text: 'Added smooth animations and transitions throughout the platform using Framer Motion for enhanced user engagement.',
+      },
+      {
+        type: 'Improvement',
+        icon: Layout,
+        text: 'Improved campaign card design with hover effects, better status indicators, and responsive button layouts.',
+      },
+      {
+        type: 'Improvement',
+        icon: Zap,
+        text: 'Enhanced campaign details page with hero image sections, sticky sidebars, and improved task completion progress tracking.',
+      },
+      {
+        type: 'Feature',
+        icon: Sparkles,
+        text: 'Implemented glassmorphism effects, gradient backgrounds, and modern color schemes for a premium Web3 aesthetic.',
+      },
+      {
+        type: 'Improvement',
+        icon: GitCommit,
+        text: 'Optimized responsive design for all screen sizes with mobile-first approach and improved touch interactions.',
+      },
+      {
+        type: 'Improvement',
+        icon: Layout,
+        text: 'Refined typography system with better font hierarchy, improved line heights, and enhanced readability across all components.',
+      },
+    ],
+  },
+  {
+    date: new Date('2025-11-29T12:00:00Z'),
+    version: 'Payment Integration',
+    title: 'X402 Payment Protocol Integration',
+    description:
+      'Revolutionary payment task integration with X402 Payment Protocol, enabling campaigns to require on-chain payment verification for task completion with comprehensive status tracking and user-friendly UI.',
+    changes: [
+      {
+        type: 'Feature',
+        icon: CreditCard,
+        text: 'Integrated X402 Payment Protocol for secure on-chain payment verification and task completion.',
+      },
+      {
+        type: 'Feature',
+        icon: DollarSign,
+        text: 'Added ONCHAIN_TX task type with payment amount, network, and recipient address configuration.',
+      },
+      {
+        type: 'Feature',
+        icon: Zap,
+        text: 'Implemented payment verification API endpoints with transaction hash validation and status checking.',
+      },
+      {
+        type: 'Feature',
+        icon: Bot,
+        text: 'Created payment task UI with transaction hash input, verification status, and real-time feedback.',
+      },
+      {
+        type: 'Improvement',
+        icon: GitCommit,
+        text: 'Enhanced campaign creation flow with payment task metadata including amount, network, and recipient fields.',
+      },
+      {
+        type: 'Improvement',
+        icon: ShieldCheck,
+        text: 'Added comprehensive error handling for payment verification failures and network-specific validation.',
+      },
+      {
+        type: 'Security',
+        icon: ShieldCheck,
+        text: 'Implemented secure payment verification with blockchain transaction validation and amount verification.',
+      },
+    ],
+  },
   {
     date: new Date('2025-11-20T16:00:00Z'),
     version: 'Identity & Trust',

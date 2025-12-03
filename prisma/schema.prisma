@@ -100,7 +100,7 @@ model CampaignCache {
 
 model CampaignTaskMetadata {
   id              String   @id @default(cuid())
-  campaignId      String   // On-chain campaign ID
+  campaignId      Int   // On-chain campaign ID
   taskIndex       Int      // Task index in the campaign
   taskType        String   // JOIN_DISCORD, JOIN_TELEGRAM, SOCIAL_FOLLOW, etc.
   
@@ -143,4 +143,20 @@ model Analytics {
   
   data            Json
   timestamp       DateTime @default(now())
+}
+
+// x402 Payment Protocol - Minimal implementation (like Humanity Protocol)
+model PaymentVerification {
+  id              String   @id @default(cuid())
+  campaignId      String
+  taskIndex       Int
+  userAddress     String
+  transactionHash String   @unique
+  verified        Boolean  @default(false)
+  verifiedAt      DateTime?
+  
+  createdAt       DateTime @default(now())
+  
+  @@unique([campaignId, taskIndex, userAddress])
+  @@index([userAddress])
 }

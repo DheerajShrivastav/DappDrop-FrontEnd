@@ -59,6 +59,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useWallet } from '@/context/wallet-provider'
@@ -87,6 +94,15 @@ const taskSchema = z.object({
   verificationData: z.string().optional(),
   discordInviteLink: z.string().optional(),
   telegramInviteLink: z.string().optional(),
+  // Payment metadata fields for ONCHAIN_TX tasks
+  paymentRequired: z.boolean().optional(),
+  paymentRecipient: z.string().optional(),
+  chainId: z.number().optional(),
+  network: z.string().optional(),
+  tokenAddress: z.string().optional(),
+  tokenSymbol: z.string().optional(),
+  amount: z.string().optional(),
+  amountDisplay: z.string().optional(),
 })
 
 const campaignSchema = z.object({
@@ -233,14 +249,17 @@ export default function CreateCampaignPage() {
     } catch (e) {
       // Error toast is handled in the service
       // Cleanup uploaded image if campaign creation failed
-      if (uploadedImageUrl && uploadedImageUrl !== 'https://placehold.co/600x400') {
+      if (
+        uploadedImageUrl &&
+        uploadedImageUrl !== 'https://placehold.co/600x400'
+      ) {
         cleanupOrphanedImage(uploadedImageUrl)
       }
     } finally {
       setIsLoading(false)
     }
   }
-   useEffect(() => {
+  useEffect(() => {
     uploadedImageUrlRef.current = uploadedImageUrl
   }, [uploadedImageUrl])
 
@@ -1094,6 +1113,267 @@ export default function CreateCampaignPage() {
                               </div>
                             </div>
                           </div>
+                        </div>
+                      )}
+
+                      {tasks[index].type === 'ONCHAIN_TX' && (
+                        <div className="space-y-4">
+                          <FormField
+                            control={form.control}
+                            name={`tasks.${index}.paymentRequired`}
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                  <FormLabel>Payment Required</FormLabel>
+                                  <FormDescription>
+                                    Check this box if this task requires a
+                                    crypto payment to complete
+                                  </FormDescription>
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+
+                          {tasks[index].paymentRequired && (
+                            <TooltipProvider>
+                              <div className="space-y-3 p-5 bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200/60 rounded-xl shadow-sm">
+                                <div className="flex items-center justify-between mb-1">
+                                  <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                                    💰 Payment Configuration
+                                  </h4>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="text-purple-600 hover:text-purple-800 transition-colors"
+                                      >
+                                        <Info className="h-4 w-4" />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs">
+                                      <p className="text-sm">
+                                        Payments are verified automatically via
+                                        blockchain transaction scan. Users
+                                        submit their transaction hash after
+                                        payment.
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </div>
+
+                                <FormField
+                                  control={form.control}
+                                  name={`tasks.${index}.paymentRecipient`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-sm font-medium text-gray-900">
+                                        Recipient Wallet
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+                                          className="font-mono text-sm"
+                                          {...field}
+                                          value={field.value ?? ''}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <div className="grid grid-cols-2 gap-3">
+                                  <FormField
+                                    control={form.control}
+                                    name={`tasks.${index}.network`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-sm font-medium text-gray-900">
+                                          Network
+                                        </FormLabel>
+                                        <Select
+                                          onValueChange={(value) => {
+                                            field.onChange(value)
+                                            // Set chainId based on network
+                                            const chainIds: Record<
+                                              string,
+                                              number
+                                            > = {
+                                              sepolia: 11155111,
+                                              ethereum: 1,
+                                              base: 8453,
+                                              polygon: 137,
+                                            }
+                                            form.setValue(
+                                              `tasks.${index}.chainId`,
+                                              chainIds[value]
+                                            )
+                                          }}
+                                          value={field.value || 'ethereum'}
+                                          defaultValue="ethereum"
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger>
+                                              <SelectValue placeholder="Ethereum" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            <SelectItem value="ethereum">
+                                              🔷 Ethereum
+                                            </SelectItem>
+                                            <SelectItem value="base">
+                                              🔵 Base
+                                            </SelectItem>
+                                            <SelectItem value="polygon">
+                                              🟣 Polygon
+                                            </SelectItem>
+                                            <SelectItem value="sepolia">
+                                              🧪 Sepolia
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name={`tasks.${index}.tokenSymbol`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-sm font-medium text-gray-900">
+                                          Token
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="ETH, USDC, DAI..."
+                                            className="uppercase"
+                                            {...field}
+                                            value={field.value ?? ''}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+
+                                <FormField
+                                  control={form.control}
+                                  name={`tasks.${index}.tokenAddress`}
+                                  render={({ field }) => (
+                                    <FormItem>
+                                      <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                        Token Contract
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <span className="text-xs text-purple-600 cursor-help">
+                                              (optional)
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p className="text-sm max-w-xs">
+                                              Leave empty for native tokens
+                                              (ETH, MATIC). For ERC-20 tokens,
+                                              enter the contract address.
+                                            </p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </FormLabel>
+                                      <FormControl>
+                                        <Input
+                                          placeholder="0x... or leave empty for native token"
+                                          className="font-mono text-sm"
+                                          {...field}
+                                          value={field.value ?? ''}
+                                        />
+                                      </FormControl>
+                                      <FormMessage />
+                                    </FormItem>
+                                  )}
+                                />
+
+                                <div className="grid grid-cols-2 gap-3">
+                                  <FormField
+                                    control={form.control}
+                                    name={`tasks.${index}.amount`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                          Amount (Wei)
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p className="text-sm">
+                                                Smallest unit: 1 ETH = 10¹⁸ wei
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="1000000000000000000"
+                                            className="font-mono text-sm"
+                                            {...field}
+                                            value={field.value ?? ''}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name={`tasks.${index}.amountDisplay`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                          Display Format
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p className="text-sm">
+                                                Human-readable format shown to
+                                                users
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="0.001 ETH"
+                                            {...field}
+                                            value={field.value ?? ''}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-1 text-xs text-purple-700 bg-purple-100/50 px-3 py-2 rounded-md border border-purple-200/50">
+                                  <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span>
+                                    Payments verified automatically via
+                                    blockchain scan
+                                  </span>
+                                </div>
+                              </div>
+                            </TooltipProvider>
+                          )}
                         </div>
                       )}
                     </div>
