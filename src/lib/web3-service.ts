@@ -518,9 +518,9 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
     let imageUrl: string | undefined
     if (typeof window !== 'undefined') {
       try {
-        
+
         const imageResponse = await fetch(`/api/campaigns/${id}/image`)
-        
+
         if (imageResponse.ok) {
           const imageData = await imageResponse.json()
           imageUrl = imageData.imageUrl
@@ -661,7 +661,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       .find((e: any) => e && e.name === 'CampaignCreated')
 
     if (!event) throw new Error('CampaignCreated event not found')
-    const campaignId = event.args.campaignId.toString()
+    const campaignId = event.args.campaignId
 
     // 2. Add Tasks
     console.log(
@@ -957,7 +957,7 @@ export const createCampaign = async (campaignData: any) => {
       .find((e: any) => e && e.name === 'CampaignCreated')
 
     if (!event) throw new Error('CampaignCreated event not found')
-    const campaignId = event.args.campaignId.toString()
+    const campaignId = event.args.campaignId
 
     // 2. Add Tasks
     console.log('🔄 Processing tasks:', campaignData.tasks.length)
@@ -1777,7 +1777,7 @@ export const getCampaignParticipants = async (
     const participantTaskCompletion = new Map<string, Set<string>>()
     for (const event of events) {
       const [_, participant, taskId] = event.args
-      const taskIdStr = taskId.toString()
+      const taskIdStr = taskId
       if (!participantTaskCompletion.has(participant)) {
         participantTaskCompletion.set(participant, new Set<string>())
       }

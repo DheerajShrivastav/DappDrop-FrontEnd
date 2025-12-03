@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const taskMetadata = await prisma.campaignTaskMetadata.findUnique({
       where: {
         campaignId_taskIndex: {
-          campaignId: campaignId.toString(),
+          campaignId: campaignId(),
           taskIndex: taskIndex,
         },
       },
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
       let requiresHumanityVerification = false
 
       try {
-        const campaign = await getCampaignById(campaignId.toString())
+        const campaign = await getCampaignById(campaignId)
         if (campaign && campaign.tasks && campaign.tasks[taskIndex]) {
           canonicalTaskType = campaign.tasks[taskIndex].type
           requiresHumanityVerification =

@@ -521,7 +521,7 @@ export const createCampaign = async (campaignData: any) => {
       .find((e: any) => e && e.name === 'CampaignCreated')
 
     if (!event) throw new Error('CampaignCreated event not found')
-    const campaignId = event.args.campaignId.toString()
+    const campaignId = event.args.campaignId
 
     // Store the actual user-selected dates in localStorage if available
     if (hasLocalStorage) {
@@ -819,7 +819,7 @@ export const getCampaignParticipants = async (
     const participantTaskCompletion = new Map<string, Set<string>>()
     for (const event of events) {
       const [_, participant, taskId] = event.args
-      const taskIdStr = taskId.toString()
+      const taskIdStr = taskId
       if (!participantTaskCompletion.has(participant)) {
         participantTaskCompletion.set(participant, new Set<string>())
       }
