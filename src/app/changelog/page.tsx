@@ -1,5 +1,5 @@
 'use client'
-import type { ElementType } from 'react'
+import type {ElementType} from 'react'
 import { format } from 'date-fns'
 import {
   Card,
