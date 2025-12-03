@@ -9,7 +9,7 @@ import { ReactNode } from 'react';
 
 const config = getDefaultConfig({
     appName: 'DApp Drop',
-    projectId: '04309ed1007e77d1f119b85205bb779d', // Public testing ID, user should replace this later
+    projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
     chains: [mainnet, sepolia],
     ssr: true,
 });

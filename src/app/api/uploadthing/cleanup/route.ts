@@ -62,7 +62,10 @@ export async function POST(request: NextRequest) {
     const campaign = await prisma.campaignCache.findFirst({
       where: {
         imageUrl: imageUrl,
-        hostAddress: authenticatedAddress,
+        hostAddress: {
+          equals: authenticatedAddress,
+          mode: 'insensitive',
+        },
       },
     })
 

@@ -100,6 +100,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Helper function to escape HTML entities to prevent XSS
+function escapeHtml(unsafe: string | null): string {
+  if (!unsafe) return '';
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // Helper function to generate the HTML page for the callback
 function generateCallbackPage({
   success,
@@ -151,7 +162,7 @@ function generateCallbackPage({
     }</h1>
           <p>${success
       ? 'You have successfully connected your Discord account. You can close this window now.'
-      : `Error: ${error}`
+      : `Error: ${escapeHtml(error)}`
     }</p>
           <script>
             // Pass the data back to the opener window
@@ -162,7 +173,7 @@ function generateCallbackPage({
                 success: ${success},
                 ${success
       ? `user: ${JSON.stringify(user)}`
-      : `error: "${error}"`
+      : `error: ${JSON.stringify(error)}`
     },
                 timestamp: new Date().toISOString()
               };
@@ -174,7 +185,7 @@ function generateCallbackPage({
     }, 
                   ${success
       ? `user: ${JSON.stringify(user)}`
-      : `error: "${error}"`
+      : `error: ${JSON.stringify(error)}`
     }
                 };
                 const targetOrigin = "${new URL(redirectUrl).origin}";

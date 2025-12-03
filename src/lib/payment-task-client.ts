@@ -40,6 +40,11 @@ export async function sendPaymentTransaction(
   const signer = await provider.getSigner()
   const userAddress = await signer.getAddress()
 
+  const network = await provider.getNetwork()
+  if (Number(network.chainId) !== Number(paymentInfo.chainId)) {
+    throw new Error(`Wrong network. Please switch to chain ID ${paymentInfo.chainId}`)
+  }
+
   console.log('💳 Sending payment:', {
     from: userAddress,
     to: paymentInfo.recipient,
