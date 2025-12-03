@@ -148,7 +148,7 @@ model Analytics {
 // x402 Payment Protocol - Minimal implementation (like Humanity Protocol)
 model PaymentVerification {
   id              String   @id @default(cuid())
-  campaignId      String
+  campaignId      Int
   taskIndex       Int
   userAddress     String
   transactionHash String   @unique

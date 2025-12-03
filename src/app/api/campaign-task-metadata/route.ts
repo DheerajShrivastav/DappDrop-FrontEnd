@@ -4,11 +4,11 @@ import { prisma } from '@/lib/prisma'
 
 export async function POST(request: Request) {
   console.log('🌐 === CAMPAIGN TASK METADATA API CALLED ===')
-  
+
   try {
     const body = await request.json()
     console.log('📥 Received request body:', JSON.stringify(body, null, 2))
-    
+
     const {
       campaignId,
       taskIndex,
@@ -42,8 +42,8 @@ export async function POST(request: Request) {
     const data = await prisma.campaignTaskMetadata.upsert({
       where: {
         campaignId_taskIndex: {
-          campaignId: campaignId.toString(),
-          taskIndex: parseInt(taskIndex.toString()),
+          campaignId: campaignId,
+          taskIndex: parseInt(taskIndex),
         },
       },
       update: {
