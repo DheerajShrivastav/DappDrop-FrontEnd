@@ -11,8 +11,12 @@ import {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { campaignId, taskIndex, transactionHash, userAddress } =
+    const { campaignId: campaignIdRaw, taskIndex: taskIndexRaw, transactionHash, userAddress } =
       await request.json()
+
+    // Normalize to numbers
+    const campaignId = typeof campaignIdRaw === 'number' ? campaignIdRaw : parseInt(campaignIdRaw, 10)
+    const taskIndex = typeof taskIndexRaw === 'number' ? taskIndexRaw : parseInt(taskIndexRaw, 10)
 
     console.log('🔍 Payment verification request:', {
       campaignId,
@@ -24,12 +28,14 @@ export async function POST(request: NextRequest) {
     // Validate inputs
     if (
       !campaignId ||
+      isNaN(campaignId) ||
       taskIndex === undefined ||
+      isNaN(taskIndex) ||
       !transactionHash ||
       !userAddress
     ) {
       return NextResponse.json(
-        { error: 'Missing required parameters' },
+        { error: 'Missing required parameters or invalid campaignId/taskIndex' },
         { status: 400 }
       )
     }
@@ -38,8 +44,8 @@ export async function POST(request: NextRequest) {
     const existing = await prisma.paymentVerification.findUnique({
       where: {
         campaignId_taskIndex_userAddress: {
-          campaignId: campaignId,
-          taskIndex: parseInt(taskIndex),
+          campaignId,
+          taskIndex,
           userAddress: userAddress.toLowerCase(),
         },
       },
@@ -71,8 +77,8 @@ export async function POST(request: NextRequest) {
     const metadata = await prisma.campaignTaskMetadata.findUnique({
       where: {
         campaignId_taskIndex: {
-          campaignId: campaignId,
-          taskIndex: parseInt(taskIndex),
+          campaignId,
+          taskIndex,
         },
       },
     })
@@ -122,14 +128,14 @@ export async function POST(request: NextRequest) {
     await prisma.paymentVerification.upsert({
       where: {
         campaignId_taskIndex_userAddress: {
-          campaignId: campaignId,
-          taskIndex: parseInt(taskIndex),
+          campaignId,
+          taskIndex,
           userAddress: userAddress.toLowerCase(),
         },
       },
       create: {
-        campaignId: campaignId,
-        taskIndex: parseInt(taskIndex),
+        campaignId,
+        taskIndex,
         userAddress: userAddress.toLowerCase(),
         transactionHash,
         verified: true,

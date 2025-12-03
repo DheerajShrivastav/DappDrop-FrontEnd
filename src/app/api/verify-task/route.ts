@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   try {
     const body = await request.json()
     const {
-      campaignId,
+      campaignId: campaignIdRaw,
       taskId,
       userAddress,
       discordUsername,
@@ -21,15 +21,25 @@ export async function POST(request: Request) {
       telegramUserId,
     } = body
 
+    // Normalize to numbers
+    const campaignId = typeof campaignIdRaw === 'number' ? campaignIdRaw : parseInt(campaignIdRaw, 10)
     const taskIndex = parseInt(taskId, 10)
+
+    if (isNaN(campaignId) || isNaN(taskIndex)) {
+      return NextResponse.json(
+        { error: 'Invalid campaignId or taskId' },
+        { status: 400 }
+      )
+    }
+
     let isVerified = false
 
     // Get task metadata for Discord/Telegram
     const taskMetadata = await prisma.campaignTaskMetadata.findUnique({
       where: {
         campaignId_taskIndex: {
-          campaignId: campaignId(),
-          taskIndex: taskIndex,
+          campaignId,
+          taskIndex,
         },
       },
     })
@@ -137,7 +147,7 @@ export async function POST(request: Request) {
       let requiresHumanityVerification = false
 
       try {
-        const campaign = await getCampaignById(campaignId)
+        const campaign = await getCampaignById(campaignId.toString())
         if (campaign && campaign.tasks && campaign.tasks[taskIndex]) {
           canonicalTaskType = campaign.tasks[taskIndex].type
           requiresHumanityVerification =

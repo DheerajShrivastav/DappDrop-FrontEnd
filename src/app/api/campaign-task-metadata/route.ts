@@ -10,8 +10,8 @@ export async function POST(request: Request) {
     console.log('📥 Received request body:', JSON.stringify(body, null, 2))
 
     const {
-      campaignId,
-      taskIndex,
+      campaignId: campaignIdRaw,
+      taskIndex: taskIndexRaw,
       taskType,
       discordInviteLink,
       telegramInviteLink,
@@ -19,6 +19,10 @@ export async function POST(request: Request) {
       requiresHumanityVerification,
       metadata,
     } = body
+
+    // Normalize campaignId and taskIndex to numbers (they might come as strings or numbers)
+    const campaignId = typeof campaignIdRaw === 'number' ? campaignIdRaw : parseInt(campaignIdRaw, 10)
+    const taskIndex = typeof taskIndexRaw === 'number' ? taskIndexRaw : parseInt(taskIndexRaw, 10)
 
     console.log('📝 Extracted fields:', {
       campaignId,
@@ -31,9 +35,9 @@ export async function POST(request: Request) {
       metadata,
     })
 
-    if (!campaignId || taskIndex === undefined || !taskType) {
+    if (!campaignId || isNaN(campaignId) || taskIndex === undefined || isNaN(taskIndex) || !taskType) {
       return NextResponse.json(
-        { error: 'Missing required parameters' },
+        { error: 'Missing required parameters or invalid campaignId/taskIndex' },
         { status: 400 }
       )
     }
@@ -42,8 +46,8 @@ export async function POST(request: Request) {
     const data = await prisma.campaignTaskMetadata.upsert({
       where: {
         campaignId_taskIndex: {
-          campaignId: campaignId,
-          taskIndex: parseInt(taskIndex),
+          campaignId,
+          taskIndex,
         },
       },
       update: {
@@ -55,8 +59,8 @@ export async function POST(request: Request) {
         metadata,
       },
       create: {
-        campaignId: campaignId,
-        taskIndex: parseInt(taskIndex),
+        campaignId,
+        taskIndex,
         taskType,
         discordInviteLink,
         telegramInviteLink,
@@ -83,11 +87,20 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const campaignId = searchParams.get('campaignId')
+    const campaignIdParam = searchParams.get('campaignId')
 
-    if (!campaignId) {
+    if (!campaignIdParam) {
       return NextResponse.json(
         { error: 'campaignId is required' },
+        { status: 400 }
+      )
+    }
+
+    const campaignId = parseInt(campaignIdParam, 10)
+
+    if (isNaN(campaignId)) {
+      return NextResponse.json(
+        { error: 'campaignId must be a valid number' },
         { status: 400 }
       )
     }
@@ -95,7 +108,7 @@ export async function GET(request: Request) {
     // Get all task metadata for a campaign
     const taskMetadata = await prisma.campaignTaskMetadata.findMany({
       where: {
-        campaignId: campaignId,
+        campaignId,
       },
       orderBy: {
         taskIndex: 'asc',

@@ -8,16 +8,26 @@ import { parsePaymentInfo } from '@/lib/payment-verification'
  */
 export async function GET(request: NextRequest) {
   try {
-    const campaignId = request.nextUrl.searchParams.get('campaignId')
-    const taskIndex = request.nextUrl.searchParams.get('taskIndex')
+    const campaignIdParam = request.nextUrl.searchParams.get('campaignId')
+    const taskIndexParam = request.nextUrl.searchParams.get('taskIndex')
     const userAddress = request.nextUrl.searchParams.get('userAddress')
 
-    if (!campaignId || !taskIndex || !userAddress) {
+    if (!campaignIdParam || !taskIndexParam || !userAddress) {
       return NextResponse.json(
         {
           error:
             'Missing required parameters: campaignId, taskIndex, userAddress',
         },
+        { status: 400 }
+      )
+    }
+
+    const campaignId = parseInt(campaignIdParam, 10)
+    const taskIndex = parseInt(taskIndexParam, 10)
+
+    if (isNaN(campaignId) || isNaN(taskIndex)) {
+      return NextResponse.json(
+        { error: 'campaignId and taskIndex must be valid numbers' },
         { status: 400 }
       )
     }
@@ -33,7 +43,7 @@ export async function GET(request: NextRequest) {
       where: {
         campaignId_taskIndex: {
           campaignId,
-          taskIndex: parseInt(taskIndex),
+          taskIndex,
         },
       },
     })
@@ -49,7 +59,7 @@ export async function GET(request: NextRequest) {
       where: {
         campaignId_taskIndex_userAddress: {
           campaignId,
-          taskIndex: parseInt(taskIndex),
+          taskIndex,
           userAddress: userAddress.toLowerCase(),
         },
       },
@@ -62,12 +72,12 @@ export async function GET(request: NextRequest) {
       paymentRequired: paymentInfo?.paymentRequired || false,
       paymentInfo: paymentInfo
         ? {
-            recipient: paymentInfo.paymentRecipient,
-            amount: paymentInfo.amountDisplay,
-            token: paymentInfo.tokenSymbol,
-            network: paymentInfo.network,
-            chainId: paymentInfo.chainId,
-          }
+          recipient: paymentInfo.paymentRecipient,
+          amount: paymentInfo.amountDisplay,
+          token: paymentInfo.tokenSymbol,
+          network: paymentInfo.network,
+          chainId: paymentInfo.chainId,
+        }
         : null,
     }
 
