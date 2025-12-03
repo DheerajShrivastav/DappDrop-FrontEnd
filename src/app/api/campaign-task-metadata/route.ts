@@ -55,8 +55,8 @@ export async function POST(request: Request) {
         metadata,
       },
       create: {
-        campaignId: campaignId.toString(),
-        taskIndex: parseInt(taskIndex.toString()),
+        campaignId: campaignId,
+        taskIndex: parseInt(taskIndex),
         taskType,
         discordInviteLink,
         telegramInviteLink,
@@ -95,7 +95,7 @@ export async function GET(request: Request) {
     // Get all task metadata for a campaign
     const taskMetadata = await prisma.campaignTaskMetadata.findMany({
       where: {
-        campaignId: campaignId.toString(),
+        campaignId: campaignId,
       },
       orderBy: {
         taskIndex: 'asc',

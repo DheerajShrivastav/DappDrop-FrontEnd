@@ -19,8 +19,7 @@ export const verifyDiscordJoin = async (
   discordId?: string
 ): Promise<boolean> => {
   console.log(
-    `Verifying if user "${discordUsername}" (ID: ${
-      discordId || 'unknown'
+    `Verifying if user "${discordUsername}" (ID: ${discordId || 'unknown'
     }) joined Discord server ${discordServerId}`
   )
 
@@ -99,8 +98,7 @@ export const verifyDiscordJoin = async (
     })
 
     console.log(
-      `Username verification result: ${
-        usernameMatch ? 'User found in server' : 'User not found in server'
+      `Username verification result: ${usernameMatch ? 'User found in server' : 'User not found in server'
       }`
     )
     return usernameMatch
@@ -131,8 +129,7 @@ export const verifyTelegramJoin = async (
   telegramUserId?: string
 ): Promise<boolean> => {
   console.log(
-    `Verifying if user "${telegramUsername}" (ID: ${
-      telegramUserId || 'unknown'
+    `Verifying if user "${telegramUsername}" (ID: ${telegramUserId || 'unknown'
     }) joined Telegram channel/group ${telegramChatId}`
   )
 
@@ -163,7 +160,7 @@ export const verifyTelegramJoin = async (
           {
             method: 'GET',
             signal: controller.signal,
-            
+
           }
         )
 
@@ -284,8 +281,7 @@ export const verifyTelegramJoin = async (
   // We can only check administrators list for username verification
   try {
     const adminResponse = await fetch(
-      `https://api.telegram.org/bot${
-        process.env.TELEGRAM_BOT_TOKEN
+      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN
       }/getChatAdministrators?chat_id=${encodeURIComponent(telegramChatId)}`,
       {
         method: 'GET',
@@ -346,8 +342,7 @@ export const getTelegramUserIdFromUsername = async (
   try {
     // Try to get user info by checking recent messages or members
     const adminResponse = await fetch(
-      `https://api.telegram.org/bot${
-        process.env.TELEGRAM_BOT_TOKEN
+      `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN
       }/getChatAdministrators?chat_id=${encodeURIComponent(telegramChatId)}`,
       {
         method: 'GET',
