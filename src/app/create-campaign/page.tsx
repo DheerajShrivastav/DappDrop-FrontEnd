@@ -79,6 +79,9 @@ import {
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
 
+// Ethereum address regex: 0x followed by 40 hex characters
+const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
+
 const taskSchema = z.object({
   type: z.enum([
     'SOCIAL_FOLLOW',
@@ -101,8 +104,44 @@ const taskSchema = z.object({
   network: z.string().optional(),
   tokenAddress: z.string().optional(),
   tokenSymbol: z.string().optional(),
-  amount: z.string().optional(),
+  amount: z.string().optional(), // Amount in ETH (will be converted to Wei)
   amountDisplay: z.string().optional(),
+}).superRefine((data, ctx) => {
+  // Validate payment fields when paymentRequired is true
+  if (data.paymentRequired) {
+    // Validate paymentRecipient
+    if (!data.paymentRecipient || data.paymentRecipient.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Payment recipient wallet address is required when payment is enabled.',
+        path: ['paymentRecipient'],
+      })
+    } else if (!ETH_ADDRESS_REGEX.test(data.paymentRecipient)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Invalid Ethereum address. Must be 0x followed by 40 hexadecimal characters.',
+        path: ['paymentRecipient'],
+      })
+    }
+
+    // Validate amount
+    if (!data.amount || data.amount.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Payment amount is required when payment is enabled.',
+        path: ['amount'],
+      })
+    } else {
+      const amountNum = parseFloat(data.amount)
+      if (isNaN(amountNum) || amountNum <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Amount must be a valid positive number.',
+          path: ['amount'],
+        })
+      }
+    }
+  }
 })
 
 const campaignSchema = z.object({
@@ -464,8 +503,8 @@ export default function CreateCampaignPage() {
                         step > s.id
                           ? 'bg-primary text-primary-foreground'
                           : step === s.id
-                          ? 'bg-primary/20 border-2 border-primary text-primary'
-                          : 'bg-secondary'
+                            ? 'bg-primary/20 border-2 border-primary text-primary'
+                            : 'bg-secondary'
                       )}
                     >
                       {step > s.id ? <Check className="w-6 h-6" /> : s.id}
@@ -1307,24 +1346,35 @@ export default function CreateCampaignPage() {
                                     render={({ field }) => (
                                       <FormItem>
                                         <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
-                                          Amount (Wei)
+                                          Amount (ETH)
                                           <Tooltip>
                                             <TooltipTrigger asChild>
                                               <Info className="h-3 w-3 text-gray-400 cursor-help" />
                                             </TooltipTrigger>
                                             <TooltipContent>
                                               <p className="text-sm">
-                                                Smallest unit: 1 ETH = 10¹⁸ wei
+                                                Enter amount in ETH (e.g., 0.001 ETH)
                                               </p>
                                             </TooltipContent>
                                           </Tooltip>
                                         </FormLabel>
                                         <FormControl>
                                           <Input
-                                            placeholder="1000000000000000000"
+                                            type="number"
+                                            step="any"
+                                            min="0"
+                                            placeholder="0.001"
                                             className="font-mono text-sm"
                                             {...field}
                                             value={field.value ?? ''}
+                                            onChange={(e) => {
+                                              field.onChange(e)
+                                              // Auto-populate display format
+                                              const tokenSymbol = form.getValues(`tasks.${index}.tokenSymbol`) || 'ETH'
+                                              if (e.target.value) {
+                                                form.setValue(`tasks.${index}.amountDisplay`, `${e.target.value} ${tokenSymbol}`)
+                                              }
+                                            }}
                                           />
                                         </FormControl>
                                         <FormMessage />
@@ -1346,7 +1396,7 @@ export default function CreateCampaignPage() {
                                             <TooltipContent>
                                               <p className="text-sm">
                                                 Human-readable format shown to
-                                                users
+                                                users (auto-filled)
                                               </p>
                                             </TooltipContent>
                                           </Tooltip>
@@ -1515,11 +1565,11 @@ export default function CreateCampaignPage() {
                       <strong>Reward:</strong>{' '}
                       {form.getValues('reward.type') === 'ERC20'
                         ? `${form.getValues(
-                            'reward.amount'
-                          )} tokens from contract `
+                          'reward.amount'
+                        )} tokens from contract `
                         : form.getValues('reward.type') === 'ERC721'
-                        ? `1 NFT from contract `
-                        : `${(form.getValues('reward') as any).name}`}
+                          ? `1 NFT from contract `
+                          : `${(form.getValues('reward') as any).name}`}
                       {form.getValues('reward.type') !== 'None' && (
                         <code className="text-xs bg-muted p-1 rounded">
                           {(form.getValues('reward') as any).tokenAddress}
