@@ -4,8 +4,8 @@ import { UploadButton } from '@uploadthing/react'
 import type { OurFileRouter } from '@/app/api/uploadthing/core'
 import { useState } from 'react'
 import { useToast } from '@/hooks/use-toast'
-import type { Eip1193Provider } from 'ethers'
-
+import { BrowserProvider, Eip1193Provider } from 'ethers'
+import { signAuthMessage } from '@/lib/wallet-auth'
 // Extend window with ethereum property - matches web3-service.ts
 declare global {
   interface Window {
@@ -17,10 +17,36 @@ declare global {
   }
 }
 
+
 interface CampaignImageUploadProps {
   onUploadComplete?: (url: string) => void
   campaignId?: number
   userAddress?: string
+}
+
+/**
+ * Set wallet authentication cookies for UploadThing middleware
+ * Cookies are used because UploadThing handles its own request headers
+ */
+async function setWalletAuthCookies(): Promise<void> {
+  const AUTH_COOKIE_MAX_AGE = 3600;
+  if (typeof window.ethereum === 'undefined') {
+    throw new Error('Wallet not connected')
+  }
+
+  const provider = new BrowserProvider(window.ethereum)
+  const { signature, message } = await signAuthMessage(provider)
+  // Set cookies that will be sent with the upload request
+  document.cookie = `wallet-signature=${encodeURIComponent(signature)}; path=/; max-age=${AUTH_COOKIE_MAX_AGE}; SameSite=Strict`
+  document.cookie = `wallet-message=${encodeURIComponent(message)}; path=/; max-age=${AUTH_COOKIE_MAX_AGE}; SameSite=Strict`
+}
+
+/**
+ * Clear wallet authentication cookies after upload completes or fails
+ */
+function clearWalletAuthCookies(): void {
+  document.cookie = 'wallet-signature=; path=/; max-age=0'
+  document.cookie = 'wallet-message=; path=/; max-age=0'
 }
 
 export function CampaignImageUpload({
@@ -35,8 +61,24 @@ export function CampaignImageUpload({
     <div className="space-y-2">
       <UploadButton<OurFileRouter, 'campaignImage'>
         endpoint="campaignImage"
+        onBeforeUploadBegin={async (files) => {
+          // Sign message and set wallet auth cookies before upload starts
+          try {
+            await setWalletAuthCookies()
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Failed to sign authentication message'
+            toast({
+              title: 'Authentication failed',
+              description: errorMessage,
+              variant: 'destructive',
+            })
+            throw error // Prevent upload from starting
+          }
+          return files
+        }}
         onClientUploadComplete={async (res) => {
           setIsUploading(false)
+          clearWalletAuthCookies()
 
           if (!res?.[0]?.url) {
             toast({
@@ -52,7 +94,7 @@ export function CampaignImageUpload({
           // If campaignId and userAddress are provided, save directly to database
           if (campaignId != null && userAddress) {
             try {
-              // Sign authentication message
+              // Sign authentication message for the save operation
               if (typeof window.ethereum === 'undefined') {
                 throw new Error('Wallet not connected')
               }
@@ -121,6 +163,7 @@ export function CampaignImageUpload({
         }}
         onUploadError={(error: Error) => {
           setIsUploading(false)
+          clearWalletAuthCookies()
           toast({
             title: 'Upload failed',
             description: error.message,
