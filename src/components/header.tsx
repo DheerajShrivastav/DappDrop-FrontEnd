@@ -21,6 +21,9 @@ export default function Header() {
                     </span>
                 </Link>
                 <nav className="flex items-center gap-8 text-sm font-medium flex-1">
+                    <Link href="/campaigns" className='text-slate-600 hover:text-primary transition-colors font-semibold'>
+                        Campaigns
+                    </Link>
                     <Link href="/about" className='text-slate-600 hover:text-primary transition-colors'>
                         About
                     </Link>

@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import {
   PlusCircle,
-  Loader2,
   Rocket,
   Zap,
   Award,
@@ -15,63 +14,13 @@ import {
   Image as ImageIcon,
   CheckCircle,
 } from 'lucide-react'
-import { CampaignCard } from '@/components/campaign-card'
 import { TestnetBanner } from '@/components/testnet-banner'
-import { useWallet } from '@/context/wallet-provider'
 import { Button } from '@/components/ui/button'
-import { useEffect, useState } from 'react'
-import { getAllCampaigns, hasParticipated } from '@/lib/web3-service'
-import type { Campaign } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InteractiveHeroBackground } from '@/components/interactive-hero-background'
 import { motion } from 'framer-motion'
 
 export default function Home() {
-  const { role, address } = useWallet()
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [participantCampaigns, setParticipantCampaigns] = useState<Campaign[]>(
-    []
-  )
-  const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingParticipant, setIsLoadingParticipant] = useState(false)
-
-  const fetchAllCampaigns = async () => {
-    setIsLoading(true)
-    const fetchedCampaigns = await getAllCampaigns()
-    setCampaigns(fetchedCampaigns)
-    setIsLoading(false)
-  }
-
-  const fetchParticipantCampaigns = async () => {
-    if (role === 'participant' && address) {
-      setIsLoadingParticipant(true)
-      const allCampaigns = await getAllCampaigns()
-      const joinedCampaigns = []
-      for (const campaign of allCampaigns) {
-        const joined = await hasParticipated(campaign.id, address)
-        if (joined) {
-          joinedCampaigns.push(campaign)
-        }
-      }
-      setParticipantCampaigns(joinedCampaigns)
-      setIsLoadingParticipant(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchAllCampaigns()
-  }, [])
-
-  useEffect(() => {
-    if (role === 'participant' && address) {
-      fetchParticipantCampaigns()
-    }
-    // Clear participant campaigns if wallet disconnects or role changes
-    if (role !== 'participant') {
-      setParticipantCampaigns([])
-    }
-  }, [role, address])
-
   return (
     <>
       {/* Testnet Warning Banner */}
@@ -146,7 +95,7 @@ export default function Home() {
               asChild
               className="bg-primary hover:bg-primary/90 text-white shadow-black-glow h-14 px-10 text-lg font-semibold rounded-xl interactive-lift shimmer"
             >
-              <Link href="#campaigns">Explore Campaigns</Link>
+              <Link href="/campaigns">Explore Campaigns</Link>
             </Button>
             <Button
               size="lg"
@@ -415,55 +364,7 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      {role === 'participant' && participantCampaigns.length > 0 && (
-        <section id="participant-campaigns" className="py-20 bg-card border-t">
-          <div className="container mx-auto px-4">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-3xl font-bold tracking-tight">
-                Your Joined Campaigns
-              </h2>
-            </div>
-            {isLoadingParticipant ? (
-              <div className="flex justify-center items-center h-64">
-                <Loader2 className="h-16 w-16 animate-spin text-primary" />
-              </div>
-            ) : (
-              <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-                {participantCampaigns.map((campaign) => (
-                  <CampaignCard key={campaign.id} campaign={campaign} />
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      <div id="campaigns" className="container mx-auto px-4 py-20">
-        <div className="flex justify-between items-center mb-8">
-          <h2 className="text-3xl font-bold tracking-tight">
-            Active Campaigns
-          </h2>
-        </div>
-        {isLoading ? (
-          <div className="flex justify-center items-center h-64">
-            <Loader2 className="h-16 w-16 animate-spin text-primary" />
-          </div>
-        ) : campaigns.length > 0 ? (
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {campaigns.map((campaign) => (
-              <CampaignCard key={campaign.id} campaign={campaign} />
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-16 bg-card rounded-lg border-2 border-dashed">
-            <h3 className="text-xl font-semibold">No Active Campaigns</h3>
-            <p className="text-muted-foreground mt-2">
-              Check back later for new opportunities to engage!
-            </p>
-          </div>
-        )}
-      </div>
     </>
   )
 }
+
