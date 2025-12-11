@@ -63,7 +63,7 @@ export default function Home() {
               Community Building
             </span>
             <br />
-            <span className="text-foreground">Reimagined</span>
+            <span className="bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-indigo-600">Reimagined</span>
           </motion.h1>
 
           {/* Subheading */}
@@ -105,13 +105,17 @@ export default function Home() {
             </Button>
           </motion.div>
 
+
           {/* Stats/Social Proof */}
           <motion.div
-            className="mt-20 grid grid-cols-3 gap-8 max-w-2xl mx-auto"
+            className="mt-20 grid grid-cols-3 gap-8 max-w-2xl mx-auto relative"
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.6, duration: 0.6 }}
           >
+            {/* Aurora Background */}
+            <div className="absolute inset-0 -z-10 bg-purple-200/30 blur-3xl rounded-full scale-150 transform translate-y-4"></div>
+
             <div>
               <div className="text-4xl font-extrabold text-primary">10K+</div>
               <div className="text-sm text-slate-600 mt-1">Active Users</div>
@@ -145,7 +149,7 @@ export default function Home() {
 
           <div className="relative grid md:grid-cols-3 gap-12 max-w-6xl mx-auto">
             {/* Connecting Line (Desktop) */}
-            <div className="hidden md:block absolute top-[4.5rem] left-[16%] right-[16%] h-0.5 border-t-2 border-dashed border-slate-200 z-0"></div>
+            <div className="hidden md:block absolute top-[4.5rem] left-[16%] right-[16%] h-0.5 border-t-2 border-dashed border-slate-300 z-0 opacity-60"></div>
 
             {/* Step 1 */}
             <div className="relative z-10 text-center group">

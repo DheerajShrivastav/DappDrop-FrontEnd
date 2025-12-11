@@ -87,7 +87,7 @@ export function UseCasesTabs() {
                 <div className="bg-slate-100/80 p-1.5 rounded-full inline-flex relative">
                     {/* Slider Background */}
                     <motion.div
-                        className="absolute bg-white rounded-full shadow-sm top-1.5 bottom-1.5"
+                        className="absolute bg-slate-900 rounded-full shadow-md top-1.5 bottom-1.5 z-0"
                         initial={false}
                         animate={{
                             left: activeTab === 'users' ? '6px' : '50%',
@@ -100,7 +100,7 @@ export function UseCasesTabs() {
                         onClick={() => setActiveTab('users')}
                         className={cn(
                             "relative px-8 py-3 rounded-full text-sm font-semibold transition-colors duration-200 z-10 min-w-[140px]",
-                            activeTab === 'users' ? "text-slate-900" : "text-slate-500 hover:text-slate-700"
+                            activeTab === 'users' ? "text-white" : "text-slate-500 hover:text-slate-900"
                         )}
                     >
                         Tasks for Users
@@ -109,7 +109,7 @@ export function UseCasesTabs() {
                         onClick={() => setActiveTab('projects')}
                         className={cn(
                             "relative px-8 py-3 rounded-full text-sm font-semibold transition-colors duration-200 z-10 min-w-[140px]",
-                            activeTab === 'projects' ? "text-slate-900" : "text-slate-500 hover:text-slate-700"
+                            activeTab === 'projects' ? "text-white" : "text-slate-500 hover:text-slate-900"
                         )}
                     >
                         Rewards for Projects
@@ -127,7 +127,7 @@ export function UseCasesTabs() {
                         exit={{ opacity: 0, y: -10 }}
                         transition={{ duration: 0.3 }}
                     >
-                        <Card className="border-slate-200 shadow-lg bg-white overflow-hidden">
+                        <Card className="border border-gray-100 shadow-xl shadow-purple-900/5 bg-white overflow-hidden">
                             <CardContent className="p-8">
                                 <div className="grid md:grid-cols-2 gap-x-12 gap-y-8">
                                     {(activeTab === 'users' ? userUseCases : projectUseCases).map((item, index) => (

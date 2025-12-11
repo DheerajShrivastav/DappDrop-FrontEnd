@@ -11,6 +11,8 @@ export function CallToAction() {
         <section className="relative py-24 overflow-hidden">
             {/* Background with Gradient */}
             <div className="absolute inset-0 bg-gradient-to-br from-indigo-900 via-slate-900 to-black z-0"></div>
+            {/* Texture Overlay */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] z-0 pointer-events-none"></div>
 
             {/* Abstract Shapes/Glow */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 opacity-40">
@@ -46,7 +48,7 @@ export function CallToAction() {
                     <Button
                         size="lg"
                         asChild
-                        className="bg-white text-slate-900 hover:bg-slate-100 hover:text-primary shadow-lg hover:shadow-xl h-14 px-10 text-lg font-bold rounded-xl transition-all duration-300 transform hover:scale-105"
+                        className="bg-white text-slate-900 hover:bg-slate-100 hover:text-primary shadow-lg hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] h-14 px-10 text-lg font-bold rounded-xl transition-all duration-300 transform hover:scale-105"
                     >
                         <Link href="/create-campaign">
                             <PlusCircle className="mr-2 h-5 w-5" />
