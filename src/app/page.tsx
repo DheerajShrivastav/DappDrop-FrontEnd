@@ -6,18 +6,13 @@ import {
   Rocket,
   Zap,
   Award,
-  Twitter,
-  Github,
-  Bot,
-  ShieldCheck,
-  DollarSign,
-  Image as ImageIcon,
-  CheckCircle,
 } from 'lucide-react'
 import { TestnetBanner } from '@/components/testnet-banner'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { InteractiveHeroBackground } from '@/components/interactive-hero-background'
+import { BentoGrid } from '@/components/BentoGrid'
+import { CallToAction } from '@/components/CallToAction'
+import { UseCasesTabs } from '@/components/UseCasesTabs'
 import { motion } from 'framer-motion'
 
 export default function Home() {
@@ -118,253 +113,105 @@ export default function Home() {
             transition={{ delay: 0.6, duration: 0.6 }}
           >
             <div>
-              <div className="text-4xl font-bold text-primary">10K+</div>
+              <div className="text-4xl font-extrabold text-primary">10K+</div>
               <div className="text-sm text-slate-600 mt-1">Active Users</div>
             </div>
             <div>
-              <div className="text-4xl font-bold text-primary">500+</div>
+              <div className="text-4xl font-extrabold text-primary">500+</div>
               <div className="text-sm text-slate-600 mt-1">Campaigns</div>
             </div>
             <div>
-              <div className="text-4xl font-bold text-primary">$2M+</div>
+              <div className="text-4xl font-extrabold text-primary">$2M+</div>
               <div className="text-sm text-slate-600 mt-1">Distributed</div>
             </div>
           </motion.div>
         </div>
       </motion.section>
 
-      {/* Features Showcase Section */}
-      <section className="py-24 bg-gradient-soft">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
+      {/* Features Showcase Section (Bento Grid) */}
+      <BentoGrid />
+
+      {/* How It Works Section */}
+      <section className="py-24 bg-white border-b relative overflow-hidden">
+        <div className="container mx-auto px-4 relative z-10">
+          <div className="text-center mb-20">
             <h2 className="text-4xl md:text-5xl font-headline font-bold tracking-tight mb-4">
-              Powerful Verification Tools
+              How It Works
             </h2>
             <p className="text-xl text-slate-600 max-w-2xl mx-auto">
-              Built-in automation for seamless user verification and engagement tracking
+              Three simple steps to launch your community journey
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-            {/* Discord Auto-Verification */}
-            <div className="card-modern p-8 group bg-white">
-              <div className="bg-indigo-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-                <Bot className="h-8 w-8 text-indigo-600" />
-              </div>
-              <h3 className="text-2xl font-headline font-semibold mb-4">Discord Auto-Verification</h3>
-              <p className="text-slate-600 leading-relaxed mb-6">
-                Automatically verify Discord server membership with our intelligent bot. Track joins and engagement in real-time.
-              </p>
-              <div className="flex items-center gap-2 text-sm text-primary font-medium">
-                <CheckCircle className="h-4 w-4" />
-                <span>Instant verification</span>
-              </div>
-            </div>
+          <div className="relative grid md:grid-cols-3 gap-12 max-w-6xl mx-auto">
+            {/* Connecting Line (Desktop) */}
+            <div className="hidden md:block absolute top-[4.5rem] left-[16%] right-[16%] h-0.5 border-t-2 border-dashed border-slate-200 z-0"></div>
 
-            {/* Telegram Auto-Verification */}
-            <div className="card-modern p-8 group bg-white">
-              <div className="bg-blue-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-                <Bot className="h-8 w-8 text-blue-600" />
+            {/* Step 1 */}
+            <div className="relative z-10 text-center group">
+              <div className="inline-block bg-white px-4 pb-4">
+                <span className="inline-block py-1 px-3 rounded-full bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider mb-4 border border-slate-200">Step 1</span>
+                <div className="bg-gradient-to-br from-sky-50 to-blue-50 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-slate-100 group-hover:scale-105 transition-transform duration-300">
+                  <Rocket className="h-10 w-10 text-primary" />
+                </div>
               </div>
-              <h3 className="text-2xl font-headline font-semibold mb-4">Telegram Auto-Verification</h3>
-              <p className="text-slate-600 leading-relaxed mb-6">
-                Seamlessly verify Telegram channel membership. Our bot handles everything from user ID verification to join confirmation.
-              </p>
-              <div className="flex items-center gap-2 text-sm text-primary font-medium">
-                <CheckCircle className="h-4 w-4" />
-                <span>Real-time tracking</span>
-              </div>
-            </div>
-
-            {/* Humanity Protocol Verification */}
-            <div className="card-modern p-8 group bg-white">
-              <div className="bg-sky-50 w-16 h-16 rounded-2xl flex items-center justify-center mb-6">
-                <ShieldCheck className="h-8 w-8 text-primary" />
-              </div>
-              <h3 className="text-2xl font-headline font-semibold mb-4">Humanity Protocol</h3>
-              <p className="text-slate-600 leading-relaxed mb-6">
-                Ensure genuine human participation with integrated Humanity Protocol verification. Say goodbye to bots and sybil attacks.
-              </p>
-              <div className="flex items-center gap-2 text-sm text-primary font-medium">
-                <CheckCircle className="h-4 w-4" />
-                <span>Sybil-resistant</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* How It Works Section */}
-      <section className="py-20 bg-white border-b">
-        <div className="container mx-auto px-4">
-          <h2 className="text-4xl md:text-5xl font-headline font-bold tracking-tight text-center mb-16">
-            How It Works
-          </h2>
-          <div className="grid md:grid-cols-3 gap-12">
-            <div className="text-center">
-              <div className="bg-gradient-to-br from-sky-50 to-blue-50 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-card">
-                <Rocket className="h-10 w-10 text-primary" />
-              </div>
-              <h3 className="text-2xl font-headline font-semibold mb-4">
-                Launch Your Campaign
+              <h3 className="text-2xl font-headline font-bold mb-3 text-slate-900">
+                Launch Campaign
               </h3>
-              <p className="text-slate-600 leading-relaxed">
-                Easily create and customize campaigns to attract and onboard
-                your ideal users.
+              <p className="text-slate-600 leading-relaxed max-w-xs mx-auto">
+                Create and customize campaigns in minutes. Set requirements, rewards, and goals.
               </p>
             </div>
-            <div className="text-center">
-              <div className="bg-gradient-to-br from-sky-50 to-blue-50 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-card">
-                <Zap className="h-10 w-10 text-primary" />
+
+            {/* Step 2 */}
+            <div className="relative z-10 text-center group">
+              <div className="inline-block bg-white px-4 pb-4">
+                <span className="inline-block py-1 px-3 rounded-full bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider mb-4 border border-slate-200">Step 2</span>
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-slate-100 group-hover:scale-105 transition-transform duration-300">
+                  <Zap className="h-10 w-10 text-indigo-600" />
+                </div>
               </div>
-              <h3 className="text-2xl font-headline font-semibold mb-4">Engage Real Users</h3>
-              <p className="text-slate-600 leading-relaxed">
-                Participants discover new projects, complete meaningful tasks,
-                and prove their engagement.
+              <h3 className="text-2xl font-headline font-bold mb-3 text-slate-900">Engage Users</h3>
+              <p className="text-slate-600 leading-relaxed max-w-xs mx-auto">
+                Users discover your project and complete meaningful tasks to verify their interest.
               </p>
             </div>
-            <div className="text-center">
-              <div className="bg-gradient-to-br from-sky-50 to-blue-50 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-card">
-                <Award className="h-10 w-10 text-primary" />
+
+            {/* Step 3 */}
+            <div className="relative z-10 text-center group">
+              <div className="inline-block bg-white px-4 pb-4">
+                <span className="inline-block py-1 px-3 rounded-full bg-slate-100 text-slate-600 text-xs font-bold uppercase tracking-wider mb-4 border border-slate-200">Step 3</span>
+                <div className="bg-gradient-to-br from-emerald-50 to-teal-50 w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-sm border border-slate-100 group-hover:scale-105 transition-transform duration-300">
+                  <Award className="h-10 w-10 text-emerald-600" />
+                </div>
               </div>
-              <h3 className="text-2xl font-headline font-semibold mb-4">
-                Grow Your Community
+              <h3 className="text-2xl font-headline font-bold mb-3 text-slate-900">
+                Grow Community
               </h3>
-              <p className="text-slate-600 leading-relaxed">
-                Reward genuine participation and turn new users into a valuable,
-                long-term community.
+              <p className="text-slate-600 leading-relaxed max-w-xs mx-auto">
+                Reward verified users with tokens, NFTs, or roles. Build a loyal user base.
               </p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="py-20 bg-background">
+      <section className="py-24 bg-slate-50 border-b">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold tracking-tight text-center mb-4">
-            Engage Your Way
-          </h2>
-          <p className="text-muted-foreground text-center max-w-2xl mx-auto mb-12">
-            From simple social tasks to complex on-chain actions, design
-            campaigns that create genuine engagement and reward users with
-            valuable digital assets.
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            <Card className="bg-card border-primary/20">
-              <CardHeader>
-                <CardTitle className="text-2xl">
-                  Tasks for Real Engagement
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="bg-primary/10 p-2 rounded-lg mt-1">
-                    <Twitter className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Social Follows</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Grow your community on platforms like X (formerly
-                      Twitter).
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="bg-primary/10 p-2 rounded-lg mt-1">
-                    <Github className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">GitHub Repo Stars</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Encourage developers to engage with your open-source code.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="bg-primary/10 p-2 rounded-lg mt-1">
-                    <Bot className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Join Discord / Telegram</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Funnel engaged users directly into your community
-                      channels.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="bg-primary/10 p-2 rounded-lg mt-1">
-                    <ShieldCheck className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">On-Chain Actions</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Verify wallet balances, token holds, or specific contract
-                      interactions.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-card border-primary/20">
-              <CardHeader>
-                <CardTitle className="text-2xl">Rewards That Matter</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-start gap-4">
-                  <div className="bg-primary/10 p-2 rounded-lg mt-1">
-                    <ImageIcon className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">On-Chain NFTs</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Reward loyal users with unique, verifiable digital
-                      collectibles (ERC721).
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="bg-primary/10 p-2 rounded-lg mt-1">
-                    <DollarSign className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Cryptocurrency</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Distribute your project's native token or other popular
-                      tokens (ERC20).
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="bg-primary/10 p-2 rounded-lg mt-1">
-                    <Award className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">Exclusive Roles & Access</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Grant special Discord roles or access to token-gated
-                      content.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-4">
-                  <div className="bg-primary/10 p-2 rounded-lg mt-1">
-                    <Zap className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-semibold">And More...</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Our flexible system allows for a wide range of creative
-                      reward structures.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-headline font-bold tracking-tight mb-4 text-slate-900">
+              Engage Your Way
+            </h2>
+            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+              Design campaigns that reward genuine engagement your way
+            </p>
           </div>
+          <UseCasesTabs />
         </div>
       </section>
+
+      {/* Final CTA Section */}
+      <CallToAction />
     </>
   )
 }
-
