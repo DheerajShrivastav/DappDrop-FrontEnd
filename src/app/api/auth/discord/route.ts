@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 // Discord OAuth2 configuration
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET
-// Use a hard-coded redirect URI to ensure consistency
-const DISCORD_REDIRECT_URI = 'http://localhost:3000/api/auth/discord/callback'
+// Use environment variable for redirect URI, fallback to localhost for development
+const DISCORD_REDIRECT_URI = process.env.NEXTAUTH_URL
+  ? `${process.env.NEXTAUTH_URL}/api/auth/discord/callback`
+  : 'http://localhost:3000/api/auth/discord/callback'
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
