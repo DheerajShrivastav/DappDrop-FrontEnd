@@ -396,15 +396,17 @@ export default function CampaignDetailsPage() {
 
         setUserTasks(initialUserTasks)
 
+        // Fetch participant count for all users
+        const addresses = await getCampaignParticipantAddresses(campaignId)
+        setParticipantAddresses(addresses)
+
+        // Fetch detailed participant data only for hosts (used in analytics)
         if (
           role === 'host' &&
           address?.toLowerCase() === fetchedCampaign.host.toLowerCase()
         ) {
           const data = await getCampaignParticipants(fetchedCampaign)
           setParticipants(data)
-
-          const addresses = await getCampaignParticipantAddresses(campaignId)
-          setParticipantAddresses(addresses)
         }
       } else {
         toast({
