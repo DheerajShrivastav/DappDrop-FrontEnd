@@ -17,7 +17,6 @@ declare global {
   }
 }
 
-
 interface CampaignImageUploadProps {
   onUploadComplete?: (url: string) => void
   campaignId?: number
@@ -29,7 +28,7 @@ interface CampaignImageUploadProps {
  * Cookies are used because UploadThing handles its own request headers
  */
 async function setWalletAuthCookies(): Promise<void> {
-  const AUTH_COOKIE_MAX_AGE = 3600;
+  const AUTH_COOKIE_MAX_AGE = 3600
   if (typeof window.ethereum === 'undefined') {
     throw new Error('Wallet not connected')
   }
@@ -66,7 +65,10 @@ export function CampaignImageUpload({
           try {
             await setWalletAuthCookies()
           } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to sign authentication message'
+            const errorMessage =
+              error instanceof Error
+                ? error.message
+                : 'Failed to sign authentication message'
             toast({
               title: 'Authentication failed',
               description: errorMessage,
@@ -80,7 +82,17 @@ export function CampaignImageUpload({
           setIsUploading(false)
           clearWalletAuthCookies()
 
-          if (!res?.[0]?.url) {
+          // UploadThing v7: URL can be in res[0].url (auto-populated) or res[0].serverData?.url (from onUploadComplete)
+          const fileData = res?.[0]
+          const imageUrl = fileData?.url || fileData?.serverData?.url
+
+          console.log('📁 Upload response:', {
+            url: fileData?.url,
+            serverData: fileData?.serverData,
+            key: fileData?.key,
+          })
+
+          if (!imageUrl) {
             toast({
               title: 'Upload failed',
               description: 'No file URL returned',
@@ -88,8 +100,6 @@ export function CampaignImageUpload({
             })
             return
           }
-
-          const imageUrl = res[0].url
 
           // If campaignId and userAddress are provided, save directly to database
           if (campaignId != null && userAddress) {
@@ -100,7 +110,7 @@ export function CampaignImageUpload({
               }
 
               const provider = new (await import('ethers')).BrowserProvider(
-                window.ethereum
+                window.ethereum,
               )
               const signer = await provider.getSigner()
               const address = await signer.getAddress()
@@ -120,7 +130,7 @@ export function CampaignImageUpload({
                     signature,
                     message,
                   }),
-                }
+                },
               )
 
               if (!response.ok) {

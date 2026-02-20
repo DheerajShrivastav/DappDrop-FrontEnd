@@ -1,21 +1,22 @@
-
-'use server';
+'use server'
 /**
  * @fileOverview An AI flow for generating a complete Web3 airdrop campaign draft.
  *
  * - generateCampaign - A function that handles the campaign generation process.
  */
 
-import { ai } from '@/ai/genkit';
+import { ai } from '@/ai/genkit'
 import {
   GenerateCampaignInputSchema,
   type GenerateCampaignInput,
   GenerateCampaignOutputSchema,
   type GenerateCampaignOutput,
-} from './generate-campaign.schema';
+} from './generate-campaign.schema'
 
-export async function generateCampaign(input: GenerateCampaignInput): Promise<GenerateCampaignOutput> {
-  return generateCampaignFlow(input);
+export async function generateCampaign(
+  input: GenerateCampaignInput,
+): Promise<GenerateCampaignOutput> {
+  return generateCampaignFlow(input)
 }
 
 const prompt = ai.definePrompt({
@@ -63,7 +64,7 @@ Project Description:
 {{{input}}}
 
 IMPORTANT: Generate tasks that are SPECIFIC to this project. Match the task descriptions to what the project actually does.`,
-});
+})
 
 const generateCampaignFlow = ai.defineFlow(
   {
@@ -73,22 +74,60 @@ const generateCampaignFlow = ai.defineFlow(
   },
   async (input) => {
     // Additional runtime validation
-    const trimmedInput = input.trim();
+    const trimmedInput = input.trim()
 
     if (trimmedInput.length < 20) {
-      throw new Error('Project description must be at least 20 characters. Please provide more details about your project.');
+      throw new Error(
+        'Project description must be at least 20 characters. Please provide more details about your project.',
+      )
     }
 
     if (trimmedInput.length > 1000) {
-      throw new Error('Project description is too long (max 1000 characters). Please be more concise.');
+      throw new Error(
+        'Project description is too long (max 1000 characters). Please be more concise.',
+      )
     }
 
-    const { output } = await prompt(trimmedInput);
+    const { output } = await prompt(trimmedInput)
 
     if (!output) {
-      throw new Error('AI failed to generate campaign. Please try again with a clearer project description.');
+      throw new Error(
+        'AI failed to generate campaign. Please try again with a clearer project description.',
+      )
     }
 
-    return output;
+    // Post-process AI output to ensure it meets character limits
+    // (LLMs don't always respect character limits in prompts)
+    const sanitizedOutput = {
+      title: truncateText(output.title, 50),
+      shortDescription: truncateText(output.shortDescription, 100),
+      description:
+        output.description.length > 500
+          ? output.description.slice(0, 497) + '...'
+          : output.description,
+      tasks: output.tasks.slice(0, 4).map((task) => ({
+        type: task.type,
+        description: truncateText(task.description, 200),
+      })),
+    }
+
+    return sanitizedOutput
+  },
+)
+
+/**
+ * Truncate text to a maximum length, trying to break at a word boundary
+ */
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text
+
+  // Try to find a good break point (space, comma, etc.)
+  const truncated = text.slice(0, maxLength - 3)
+  const lastSpace = truncated.lastIndexOf(' ')
+
+  if (lastSpace > maxLength * 0.7) {
+    return truncated.slice(0, lastSpace) + '...'
   }
-);
+
+  return truncated + '...'
+}

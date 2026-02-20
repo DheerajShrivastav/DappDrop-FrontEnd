@@ -24,8 +24,9 @@ export const ourFileRouter = {
     .onUploadComplete(async ({ metadata, file }) => {
       console.log('✅ Upload complete for wallet:', metadata.walletAddress)
       console.log('📁 File URL:', file.ufsUrl)
+      console.log('📁 File key:', file.key)
 
-      return { url: file.url, uploadedBy: metadata.walletAddress }
+      return { url: file.ufsUrl, uploadedBy: metadata.walletAddress }
     }),
 } satisfies FileRouter
 

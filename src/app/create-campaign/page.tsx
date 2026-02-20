@@ -82,67 +82,71 @@ import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
 // Ethereum address regex: 0x followed by 40 hex characters
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
 
-const taskSchema = z.object({
-  type: z.enum([
-    'SOCIAL_FOLLOW',
-    'JOIN_DISCORD',
-    'JOIN_TELEGRAM',
-    'RETWEET',
-    'ONCHAIN_TX',
-    'HUMANITY_VERIFICATION',
-  ]),
-  description: z
-    .string()
-    .min(3, 'Task description must be at least 3 characters long.'),
-  verificationData: z.string().optional(),
-  discordInviteLink: z.string().optional(),
-  telegramInviteLink: z.string().optional(),
-  // Payment metadata fields for ONCHAIN_TX tasks
-  paymentRequired: z.boolean().optional(),
-  paymentRecipient: z.string().optional(),
-  chainId: z.number().optional(),
-  network: z.string().optional(),
-  tokenAddress: z.string().optional(),
-  tokenSymbol: z.string().optional(),
-  amount: z.string().optional(), // Amount in ETH (will be converted to Wei)
-  amountDisplay: z.string().optional(),
-}).superRefine((data, ctx) => {
-  // Validate payment fields when paymentRequired is true
-  if (data.paymentRequired) {
-    // Validate paymentRecipient
-    if (!data.paymentRecipient || data.paymentRecipient.trim() === '') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Payment recipient wallet address is required when payment is enabled.',
-        path: ['paymentRecipient'],
-      })
-    } else if (!ETH_ADDRESS_REGEX.test(data.paymentRecipient)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Invalid Ethereum address. Must be 0x followed by 40 hexadecimal characters.',
-        path: ['paymentRecipient'],
-      })
-    }
-
-    // Validate amount
-    if (!data.amount || data.amount.trim() === '') {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Payment amount is required when payment is enabled.',
-        path: ['amount'],
-      })
-    } else {
-      const amountNum = parseFloat(data.amount)
-      if (isNaN(amountNum) || amountNum <= 0) {
+const taskSchema = z
+  .object({
+    type: z.enum([
+      'SOCIAL_FOLLOW',
+      'JOIN_DISCORD',
+      'JOIN_TELEGRAM',
+      'RETWEET',
+      'ONCHAIN_TX',
+      'HUMANITY_VERIFICATION',
+    ]),
+    description: z
+      .string()
+      .min(3, 'Task description must be at least 3 characters long.'),
+    verificationData: z.string().optional(),
+    discordInviteLink: z.string().optional(),
+    telegramInviteLink: z.string().optional(),
+    // Payment metadata fields for ONCHAIN_TX tasks
+    paymentRequired: z.boolean().optional(),
+    paymentRecipient: z.string().optional(),
+    chainId: z.number().optional(),
+    network: z.string().optional(),
+    tokenAddress: z.string().optional(),
+    tokenSymbol: z.string().optional(),
+    amount: z.string().optional(), // Amount in ETH (will be converted to Wei)
+    amountDisplay: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    // Validate payment fields when paymentRequired is true
+    if (data.paymentRequired) {
+      // Validate paymentRecipient
+      if (!data.paymentRecipient || data.paymentRecipient.trim() === '') {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'Amount must be a valid positive number.',
-          path: ['amount'],
+          message:
+            'Payment recipient wallet address is required when payment is enabled.',
+          path: ['paymentRecipient'],
+        })
+      } else if (!ETH_ADDRESS_REGEX.test(data.paymentRecipient)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'Invalid Ethereum address. Must be 0x followed by 40 hexadecimal characters.',
+          path: ['paymentRecipient'],
         })
       }
+
+      // Validate amount
+      if (!data.amount || data.amount.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Payment amount is required when payment is enabled.',
+          path: ['amount'],
+        })
+      } else {
+        const amountNum = parseFloat(data.amount)
+        if (isNaN(amountNum) || amountNum <= 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Amount must be a valid positive number.',
+            path: ['amount'],
+          })
+        }
+      }
     }
-  }
-})
+  })
 
 const campaignSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters long.'),
@@ -310,7 +314,11 @@ export default function CreateCampaignPage() {
   useEffect(() => {
     return () => {
       // Only cleanup if campaign was NOT successfully created
-      if (campaignCreated) {
+      // IMPORTANT: Use ref to get the latest value, not the stale closure value
+      if (campaignCreatedRef.current) {
+        console.log(
+          '✅ Campaign was created successfully, skipping image cleanup',
+        )
         return
       }
 
@@ -322,6 +330,7 @@ export default function CreateCampaignPage() {
         imageUrl.includes('utfs.io')
       ) {
         // Only cleanup if it's an UploadThing URL (not external URL)
+        console.log('🗑️ Cleaning up orphaned image on unmount:', imageUrl)
         cleanupOrphanedImage(imageUrl)
       }
     }
@@ -410,12 +419,17 @@ export default function CreateCampaignPage() {
         description: 'The campaign details have been filled in for you.',
       })
       setStep(1) // Move to the first step of the form
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error generating campaign:', e)
+      // Extract user-friendly error message
+      const errorMessage =
+        e?.message ||
+        e?.originalMessage ||
+        'Could not generate the campaign. Please try again.'
       toast({
         variant: 'destructive',
         title: 'AI Generation Failed',
-        description: 'Could not generate the campaign. Please try again.',
+        description: errorMessage,
       })
     } finally {
       setIsGenerating(false)
@@ -504,7 +518,7 @@ export default function CreateCampaignPage() {
                           ? 'bg-primary text-primary-foreground'
                           : step === s.id
                             ? 'bg-primary/20 border-2 border-primary text-primary'
-                            : 'bg-secondary'
+                            : 'bg-secondary',
                       )}
                     >
                       {step > s.id ? <Check className="w-6 h-6" /> : s.id}
@@ -626,7 +640,7 @@ export default function CreateCampaignPage() {
                                 variant={'outline'}
                                 className={cn(
                                   'w-full justify-start text-left font-normal',
-                                  !field.value?.from && 'text-muted-foreground'
+                                  !field.value?.from && 'text-muted-foreground',
                                 )}
                               >
                                 <CalendarIcon className="mr-2 h-4 w-4" />
@@ -635,12 +649,12 @@ export default function CreateCampaignPage() {
                                     <>
                                       {format(
                                         field.value.from,
-                                        'LLL dd, y HH:mm'
+                                        'LLL dd, y HH:mm',
                                       )}{' '}
                                       -{' '}
                                       {format(
                                         field.value.to,
-                                        'LLL dd, y HH:mm'
+                                        'LLL dd, y HH:mm',
                                       )}
                                     </>
                                   ) : (
@@ -675,14 +689,14 @@ export default function CreateCampaignPage() {
                                     onChange={(e) => {
                                       const newHour = parseInt(
                                         e.target.value,
-                                        10
+                                        10,
                                       )
                                       if (!isNaN(newHour))
                                         field.onChange({
                                           ...dates,
                                           from: setHours(
                                             dates.from ?? new Date(),
-                                            newHour
+                                            newHour,
                                           ),
                                         })
                                     }}
@@ -698,14 +712,14 @@ export default function CreateCampaignPage() {
                                     onChange={(e) => {
                                       const newMin = parseInt(
                                         e.target.value,
-                                        10
+                                        10,
                                       )
                                       if (!isNaN(newMin))
                                         field.onChange({
                                           ...dates,
                                           from: setMinutes(
                                             dates.from ?? new Date(),
-                                            newMin
+                                            newMin,
                                           ),
                                         })
                                     }}
@@ -726,14 +740,14 @@ export default function CreateCampaignPage() {
                                     onChange={(e) => {
                                       const newHour = parseInt(
                                         e.target.value,
-                                        10
+                                        10,
                                       )
                                       if (!isNaN(newHour))
                                         field.onChange({
                                           ...dates,
                                           to: setHours(
                                             dates.to ?? new Date(),
-                                            newHour
+                                            newHour,
                                           ),
                                         })
                                     }}
@@ -749,14 +763,14 @@ export default function CreateCampaignPage() {
                                     onChange={(e) => {
                                       const newMin = parseInt(
                                         e.target.value,
-                                        10
+                                        10,
                                       )
                                       if (!isNaN(newMin))
                                         field.onChange({
                                           ...dates,
                                           to: setMinutes(
                                             dates.to ?? new Date(),
-                                            newMin
+                                            newMin,
                                           ),
                                         })
                                     }}
@@ -1004,7 +1018,7 @@ export default function CreateCampaignPage() {
                                   onClick={() =>
                                     window.open(
                                       config.discordBotInviteUrl!,
-                                      '_blank'
+                                      '_blank',
                                     )
                                   }
                                 >
@@ -1122,7 +1136,7 @@ export default function CreateCampaignPage() {
                                   onClick={() =>
                                     window.open(
                                       `https://t.me/${config.telegramBotUsername}`,
-                                      '_blank'
+                                      '_blank',
                                     )
                                   }
                                 >
@@ -1251,7 +1265,7 @@ export default function CreateCampaignPage() {
                                             }
                                             form.setValue(
                                               `tasks.${index}.chainId`,
-                                              chainIds[value]
+                                              chainIds[value],
                                             )
                                           }}
                                           value={field.value || 'ethereum'}
@@ -1353,7 +1367,8 @@ export default function CreateCampaignPage() {
                                             </TooltipTrigger>
                                             <TooltipContent>
                                               <p className="text-sm">
-                                                Enter amount in ETH (e.g., 0.001 ETH)
+                                                Enter amount in ETH (e.g., 0.001
+                                                ETH)
                                               </p>
                                             </TooltipContent>
                                           </Tooltip>
@@ -1370,9 +1385,15 @@ export default function CreateCampaignPage() {
                                             onChange={(e) => {
                                               field.onChange(e)
                                               // Auto-populate display format
-                                              const tokenSymbol = form.getValues(`tasks.${index}.tokenSymbol`) || 'ETH'
+                                              const tokenSymbol =
+                                                form.getValues(
+                                                  `tasks.${index}.tokenSymbol`,
+                                                ) || 'ETH'
                                               if (e.target.value) {
-                                                form.setValue(`tasks.${index}.amountDisplay`, `${e.target.value} ${tokenSymbol}`)
+                                                form.setValue(
+                                                  `tasks.${index}.amountDisplay`,
+                                                  `${e.target.value} ${tokenSymbol}`,
+                                                )
                                               }
                                             }}
                                           />
@@ -1565,8 +1586,8 @@ export default function CreateCampaignPage() {
                       <strong>Reward:</strong>{' '}
                       {form.getValues('reward.type') === 'ERC20'
                         ? `${form.getValues(
-                          'reward.amount'
-                        )} tokens from contract `
+                            'reward.amount',
+                          )} tokens from contract `
                         : form.getValues('reward.type') === 'ERC721'
                           ? `1 NFT from contract `
                           : `${(form.getValues('reward') as any).name}`}
@@ -1584,7 +1605,7 @@ export default function CreateCampaignPage() {
                             [
                             {
                               TASK_TYPE_OPTIONS.find(
-                                (t) => t.value === task.type
+                                (t) => t.value === task.type,
                               )?.label
                             }
                             ] {task.description}
