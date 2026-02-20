@@ -713,6 +713,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               taskIndex: taskIndex,
               taskType: task.type,
               discordInviteLink: task.discordInviteLink,
+              discordServerId: task.verificationData,
             }),
           })
           console.log(
@@ -1003,6 +1004,7 @@ export const createCampaign = async (campaignData: any) => {
               taskIndex: taskIndex,
               taskType: task.type,
               discordInviteLink: task.discordInviteLink,
+              discordServerId: task.verificationData,
             }),
           })
           console.log('✅ Discord metadata stored successfully')
@@ -1241,7 +1243,9 @@ export const hasParticipated = async (
   const contractToUse = contract ?? readOnlyContract
   if (!contractToUse || !participantAddress) return false
   try {
-    return await contractToUse.hasParticipated(campaignId, participantAddress)
+    // Convert campaignId from string to number for smart contract calls
+    const campaignIdNumber = parseInt(campaignId, 10)
+    return await contractToUse.hasParticipated(campaignIdNumber, participantAddress)
   } catch (error) {
     console.error(
       `Error checking participation for ${participantAddress} in campaign ${campaignId}:`,
@@ -1296,10 +1300,12 @@ export const openCampaign = async (
   const contractWithSigner = contract.connect(signer) as Contract
 
   try {
-    console.log(`Opening campaign ${campaignId}...`)
+    // Convert campaignId from string to number for smart contract calls
+    const campaignIdNumber = parseInt(campaignId, 10)
+    console.log(`Opening campaign ${campaignIdNumber}...`)
 
     // Get the current campaign data to check its status and times
-    const campaignData = await contractWithSigner.getCampaign(campaignId)
+    const campaignData = await contractWithSigner.getCampaign(campaignIdNumber)
 
     // Check if the campaign is already open (status 1 = Open)
     if (Number(campaignData.status) === 1) {
@@ -1323,7 +1329,7 @@ export const openCampaign = async (
 
     try {
       // Try to open the campaign
-      const tx = await contractWithSigner.openCampaign(campaignId)
+      const tx = await contractWithSigner.openCampaign(campaignIdNumber)
       await tx.wait()
 
       toast({
@@ -1392,7 +1398,9 @@ export const endCampaign = async (campaignId: string) => {
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
   try {
-    const tx = await contractWithSigner.endCampaign(campaignId)
+    // Convert campaignId from string to number for smart contract calls
+    const campaignIdNumber = parseInt(campaignId, 10)
+    const tx = await contractWithSigner.endCampaign(campaignIdNumber)
     await tx.wait()
     toast({
       title: 'Campaign Ended',
@@ -1419,14 +1427,17 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
   const contractWithSigner = contract.connect(signer) as Contract
 
   try {
+    // Convert campaignId from string to number for all smart contract calls
+    const campaignIdNumber = parseInt(campaignId, 10)
+
     console.log('Attempting to complete task:', {
-      campaignId,
+      campaignId: campaignIdNumber,
       taskIndex,
       userAddress: await signer.getAddress(),
     })
 
     // First, let's check the campaign status and other details
-    const campaignData = await contractWithSigner.getCampaign(campaignId)
+    const campaignData = await contractWithSigner.getCampaign(campaignIdNumber)
     console.log('Campaign data before task completion:', {
       id: campaignData.id.toString(),
       status: campaignData.status.toString(),
@@ -1450,8 +1461,8 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
 
     // The smart contract completeTask function only takes campaignId and taskIndex
     // It automatically uses msg.sender (the connected wallet) as the participant
-    console.log('Calling smart contract completeTask...')
-    const tx = await contractWithSigner.completeTask(campaignId, taskIndex)
+    console.log('Calling smart contract completeTask...', { campaignIdNumber, taskIndex })
+    const tx = await contractWithSigner.completeTask(campaignIdNumber, taskIndex)
 
     console.log('Transaction sent:', tx.hash)
     await tx.wait()

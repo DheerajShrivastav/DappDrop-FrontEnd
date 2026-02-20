@@ -134,13 +134,15 @@ export default function CampaignDetailsPage() {
     discriminator?: string
   } | null>(null)
   const [verifyingTaskId, setVerifyingTaskId] = useState<string | null>(null)
-  const [verifyingTaskType, setVerifyingTaskType] = useState<TaskType['type'] | null>(null)
+  const [verifyingTaskType, setVerifyingTaskType] = useState<
+    TaskType['type'] | null
+  >(null)
 
   // Humanity Protocol Verification State
   const [isHumanityModalOpen, setIsHumanityModalOpen] = useState(false)
   const [isCheckingHumanity, setIsCheckingHumanity] = useState(false)
   const [userHumanityStatus, setUserHumanityStatus] = useState<boolean | null>(
-    null
+    null,
   )
 
   // Payment Task State
@@ -152,7 +154,10 @@ export default function CampaignDetailsPage() {
   const campaignId = id as string
 
   // Handler to open verification dialog
-  const handleOpenVerifyDialog = (taskId: string, taskType: TaskType['type']) => {
+  const handleOpenVerifyDialog = (
+    taskId: string,
+    taskType: TaskType['type'],
+  ) => {
     console.log('Opening verify dialog for task:', taskId, taskType)
     setVerifyingTaskId(taskId)
     setVerifyingTaskType(taskType)
@@ -173,7 +178,7 @@ export default function CampaignDetailsPage() {
     taskId: string,
     taskType: TaskType['type'],
     discordData?: any,
-    telegramData?: any
+    telegramData?: any,
   ) => {
     if (!isConnected || !address || !campaign) {
       toast({
@@ -186,15 +191,15 @@ export default function CampaignDetailsPage() {
 
     setUserTasks((prevTasks) =>
       prevTasks.map((task) =>
-        task.taskId === taskId ? { ...task, isCompleting: true } : task
-      )
+        task.taskId === taskId ? { ...task, isCompleting: true } : task,
+      ),
     )
 
     try {
       // For Discord tasks, check if we have stored verification data if no discordData is provided
       if (taskType === 'JOIN_DISCORD' && !discordData) {
         const storedVerification = localStorage.getItem(
-          `discord_verification_${campaignId}_${taskId}`
+          `discord_verification_${campaignId}_${taskId}`,
         )
         if (storedVerification) {
           try {
@@ -209,12 +214,15 @@ export default function CampaignDetailsPage() {
       // For Telegram tasks, check if we have stored verification data if no telegramData is provided
       if (taskType === 'JOIN_TELEGRAM' && !telegramData) {
         const storedVerification = localStorage.getItem(
-          `telegram_verification_${campaignId}_${taskId}`
+          `telegram_verification_${campaignId}_${taskId}`,
         )
         if (storedVerification) {
           try {
             telegramData = JSON.parse(storedVerification)
-            console.log('Using stored Telegram verification data:', telegramData)
+            console.log(
+              'Using stored Telegram verification data:',
+              telegramData,
+            )
           } catch (e) {
             console.error('Error parsing stored verification:', e)
           }
@@ -224,16 +232,21 @@ export default function CampaignDetailsPage() {
       // Handle HUMANITY_VERIFICATION task type - check verification status before proceeding
       if (taskType === 'HUMANITY_VERIFICATION') {
         const humanityResponse = await fetch(
-          `/api/verify-humanity?walletAddress=${address}`
+          `/api/verify-humanity?walletAddress=${address}`,
         )
         const humanityData = await humanityResponse.json()
 
         if (!humanityData.success || !humanityData.isHuman) {
           // User is not verified, show modal
           setIsHumanityModalOpen(true)
-          throw new Error('Please complete Humanity Protocol verification first')
+          throw new Error(
+            'Please complete Humanity Protocol verification first',
+          )
         }
         // If verified, continue with normal flow
+        if (humanityData.isHuman) {
+          setUserHumanityStatus(true)
+        }
       }
 
       // Format discord username with discriminator if available
@@ -247,6 +260,7 @@ export default function CampaignDetailsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          taskType: taskType,
           campaignId,
           taskId,
           userAddress: address,
@@ -289,7 +303,7 @@ export default function CampaignDetailsPage() {
             id: discordData.id,
             verified: true,
             timestamp: new Date().toISOString(),
-          })
+          }),
         )
       }
 
@@ -302,7 +316,7 @@ export default function CampaignDetailsPage() {
             userId: telegramData.userId,
             verified: true,
             timestamp: new Date().toISOString(),
-          })
+          }),
         )
       }
 
@@ -317,8 +331,8 @@ export default function CampaignDetailsPage() {
     } finally {
       setUserTasks((prevTasks) =>
         prevTasks.map((task) =>
-          task.taskId === taskId ? { ...task, isCompleting: false } : task
-        )
+          task.taskId === taskId ? { ...task, isCompleting: false } : task,
+        ),
       )
       setIsVerifyDialogOpen(false)
       setVerifyingTaskId(null)
@@ -332,7 +346,7 @@ export default function CampaignDetailsPage() {
     setIsCheckingHumanity(true)
     try {
       const response = await fetch(
-        `/api/verify-humanity?walletAddress=${address}`
+        `/api/verify-humanity?walletAddress=${address}`,
       )
       const data = await response.json()
 
@@ -353,7 +367,7 @@ export default function CampaignDetailsPage() {
       setIsLoading(true)
       const fetchedCampaign = await getCampaignByIdWithMetadata(
         campaignId,
-        forceRefresh
+        forceRefresh,
       )
 
       if (fetchedCampaign) {
@@ -368,7 +382,7 @@ export default function CampaignDetailsPage() {
           const taskCompletionStatus = await getUserTaskCompletionStatus(
             campaignId,
             address,
-            fetchedCampaign.tasks
+            fetchedCampaign.tasks,
           )
 
           initialUserTasks = fetchedCampaign.tasks.map((task) => ({
@@ -401,7 +415,7 @@ export default function CampaignDetailsPage() {
       }
       setIsLoading(false)
     },
-    [campaignId, address, isConnected, role, toast]
+    [campaignId, address, isConnected, role, toast],
   )
 
   useEffect(() => {
@@ -415,7 +429,7 @@ export default function CampaignDetailsPage() {
           const taskCompletionStatus = await getUserTaskCompletionStatus(
             campaignId,
             address,
-            campaign.tasks
+            campaign.tasks,
           )
 
           const updatedUserTasks = campaign.tasks.map((task) => ({
@@ -445,7 +459,7 @@ export default function CampaignDetailsPage() {
       campaign.tasks.forEach((task) => {
         if (task.type === 'JOIN_DISCORD') {
           const storedVerification = localStorage.getItem(
-            `discord_verification_${campaign.id}_${task.id}`
+            `discord_verification_${campaign.id}_${task.id}`,
           )
           if (storedVerification) {
             try {
@@ -454,8 +468,8 @@ export default function CampaignDetailsPage() {
               if (verificationData.verified) {
                 setUserTasks((prevTasks) =>
                   prevTasks.map((t) =>
-                    t.taskId === task.id ? { ...t, completed: true } : t
-                  )
+                    t.taskId === task.id ? { ...t, completed: true } : t,
+                  ),
                 )
               }
             } catch (e) {
@@ -464,7 +478,7 @@ export default function CampaignDetailsPage() {
           }
         } else if (task.type === 'JOIN_TELEGRAM') {
           const storedVerification = localStorage.getItem(
-            `telegram_verification_${campaign.id}_${task.id}`
+            `telegram_verification_${campaign.id}_${task.id}`,
           )
           if (storedVerification) {
             try {
@@ -473,8 +487,8 @@ export default function CampaignDetailsPage() {
               if (verificationData.verified) {
                 setUserTasks((prevTasks) =>
                   prevTasks.map((t) =>
-                    t.taskId === task.id ? { ...t, completed: true } : t
-                  )
+                    t.taskId === task.id ? { ...t, completed: true } : t,
+                  ),
                 )
               }
             } catch (e) {
@@ -548,7 +562,7 @@ export default function CampaignDetailsPage() {
       console.log(
         '📡 API response status:',
         response.status,
-        response.statusText
+        response.statusText,
       )
       const data = await response.json()
       console.log('📄 Raw API Response:', JSON.stringify(data, null, 2))
@@ -557,31 +571,100 @@ export default function CampaignDetailsPage() {
         console.log(
           '✅ API success=true, isHuman value:',
           data.isHuman,
-          typeof data.isHuman
+          typeof data.isHuman,
         )
         setUserHumanityStatus(data.isHuman)
 
         if (data.isHuman) {
           console.log('🎉 SHOWING SUCCESS TOAST - data.isHuman is truthy')
-          toast({
-            title: 'Verification Successful!',
-            description: `Address ${addressToVerify.slice(
-              0,
-              6
-            )}...${addressToVerify.slice(
-              -4
-            )} is verified as human. You can now complete this task.`,
-          })
+
+          // Complete the task on blockchain if we have a verifying task ID
+          if (verifyingTaskId && campaign) {
+            try {
+              const taskIndex = campaign.tasks.findIndex(
+                (task) => task.id === verifyingTaskId,
+              )
+              if (taskIndex !== -1) {
+                console.log(
+                  '🔗 Completing humanity verification task on blockchain...',
+                  { campaignId, taskIndex },
+                )
+                await completeTask(campaignId, taskIndex)
+
+                // Update local state to mark task as completed
+                setUserTasks((prevTasks) =>
+                  prevTasks.map((task) =>
+                    task.taskId === verifyingTaskId
+                      ? { ...task, completed: true }
+                      : task,
+                  ),
+                )
+
+                // Refresh campaign data to update participant count and other blockchain data
+                await fetchAllCampaignData()
+
+                if (!isJoined) {
+                  setIsJoined(true)
+                }
+
+                toast({
+                  title: 'Task Completed!',
+                  description: `Address ${addressToVerify.slice(
+                    0,
+                    6,
+                  )}...${addressToVerify.slice(
+                    -4,
+                  )} is verified as human and task has been marked complete.`,
+                })
+              } else {
+                console.error(
+                  '❌ Could not find task index for verifyingTaskId:',
+                  verifyingTaskId,
+                )
+                toast({
+                  title: 'Verification Successful!',
+                  description: `Address ${addressToVerify.slice(
+                    0,
+                    6,
+                  )}...${addressToVerify.slice(-4)} is verified as human.`,
+                })
+              }
+            } catch (taskError: any) {
+              console.error(
+                '❌ Error completing task on blockchain:',
+                taskError,
+              )
+              toast({
+                variant: 'destructive',
+                title: 'Task Completion Failed',
+                description:
+                  taskError.message ||
+                  'Could not complete task on blockchain. Please try again.',
+              })
+            }
+          } else {
+            toast({
+              title: 'Verification Successful!',
+              description: `Address ${addressToVerify.slice(
+                0,
+                6,
+              )}...${addressToVerify.slice(-4)} is verified as human.`,
+            })
+          }
+
           setIsHumanityModalOpen(false)
+          // Reset verifying task state
+          setVerifyingTaskId(null)
+          setVerifyingTaskType(null)
         } else {
           toast({
             variant: 'destructive',
             title: 'Not Verified',
             description: `Address ${addressToVerify.slice(
               0,
-              6
+              6,
             )}...${addressToVerify.slice(
-              -4
+              -4,
             )} is not verified. Please complete verification on Humanity Protocol first.`,
           })
         }
@@ -597,7 +680,6 @@ export default function CampaignDetailsPage() {
       setIsCheckingHumanity(false)
     }
   }
-
 
   if (isLoading) {
     return (
@@ -660,11 +742,11 @@ export default function CampaignDetailsPage() {
             priority
             unoptimized={campaign.imageUrl.startsWith('http')}
             onError={(e) => {
-              console.error('❌ Image failed to load:', campaign.imageUrl);
-              console.error('Error details:', e);
+              console.error('❌ Image failed to load:', campaign.imageUrl)
+              console.error('Error details:', e)
             }}
             onLoad={() => {
-              console.log('✅ Image loaded successfully:', campaign.imageUrl);
+              console.log('✅ Image loaded successfully:', campaign.imageUrl)
             }}
           />
         )}
@@ -723,9 +805,12 @@ export default function CampaignDetailsPage() {
                   <CardContent className="pt-6">
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <h3 className="font-headline font-semibold text-lg">Your Progress</h3>
+                        <h3 className="font-headline font-semibold text-lg">
+                          Your Progress
+                        </h3>
                         <p className="text-sm text-muted-foreground">
-                          {completedTasksCount} of {campaign.tasks.length} tasks completed
+                          {completedTasksCount} of {campaign.tasks.length} tasks
+                          completed
                         </p>
                       </div>
                       <div className="text-3xl font-bold text-primary">
@@ -746,14 +831,18 @@ export default function CampaignDetailsPage() {
             >
               <Card className="card-modern">
                 <CardHeader>
-                  <CardTitle className="font-headline">Tasks to Complete</CardTitle>
+                  <CardTitle className="font-headline">
+                    Tasks to Complete
+                  </CardTitle>
                   <CardDescription>
                     Complete all tasks to be eligible for rewards
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {campaign.tasks.map((task, index) => {
-                    const userTask = userTasks.find((ut) => ut.taskId === task.id)
+                    const userTask = userTasks.find(
+                      (ut) => ut.taskId === task.id,
+                    )
                     const isCompleted = userTask?.completed
 
                     return (
@@ -762,13 +851,16 @@ export default function CampaignDetailsPage() {
                         initial={{ x: -20, opacity: 0 }}
                         animate={{ x: 0, opacity: 1 }}
                         transition={{ delay: 0.5 + index * 0.1, duration: 0.4 }}
-                        className={`p-4 rounded-xl border-2 transition-all ${isCompleted
-                          ? 'bg-green-50 border-green-200'
-                          : 'bg-white border-slate-200 hover:border-primary hover:shadow-card'
-                          }`}
+                        className={`p-4 rounded-xl border-2 transition-all ${
+                          isCompleted
+                            ? 'bg-green-50 border-green-200'
+                            : 'bg-white border-slate-200 hover:border-primary hover:shadow-card'
+                        }`}
                       >
                         <div className="flex items-start gap-4">
-                          <div className={`p-3 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-slate-100'}`}>
+                          <div
+                            className={`p-3 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-slate-100'}`}
+                          >
                             {isCompleted ? (
                               <CheckCircle className="h-5 w-5 text-green-600" />
                             ) : (
@@ -776,22 +868,30 @@ export default function CampaignDetailsPage() {
                             )}
                           </div>
                           <div className="flex-1">
-                            <h4 className="font-semibold mb-1">{task.description}</h4>
-                            {task.type === 'ONCHAIN_TX' && task.metadata?.paymentRequired && (
-                              <Badge variant="outline" className="text-xs">
-                                💰 {task.metadata.amountDisplay} on {task.metadata.network}
-                              </Badge>
-                            )}
+                            <h4 className="font-semibold mb-1">
+                              {task.description}
+                            </h4>
+                            {task.type === 'ONCHAIN_TX' &&
+                              task.metadata?.paymentRequired && (
+                                <Badge variant="outline" className="text-xs">
+                                  💰 {task.metadata.amountDisplay} on{' '}
+                                  {task.metadata.network}
+                                </Badge>
+                              )}
                           </div>
-                          {role === 'participant' && !isCompleted && campaign.status === 'Open' && (
-                            <Button
-                              size="sm"
-                              className="shimmer"
-                              onClick={() => handleOpenVerifyDialog(task.id, task.type)}
-                            >
-                              Verify
-                            </Button>
-                          )}
+                          {role === 'participant' &&
+                            !isCompleted &&
+                            campaign.status === 'Open' && (
+                              <Button
+                                size="sm"
+                                className="shimmer"
+                                onClick={() =>
+                                  handleOpenVerifyDialog(task.id, task.type)
+                                }
+                              >
+                                Verify
+                              </Button>
+                            )}
                           {isCompleted && (
                             <Badge className="bg-green-600">
                               <CheckCircle className="h-3 w-3 mr-1" />
@@ -817,14 +917,18 @@ export default function CampaignDetailsPage() {
               <Card className="card-modern sticky top-6">
                 <CardHeader>
                   <div className="flex items-center justify-between">
-                    <CardTitle className="font-headline">Campaign Info</CardTitle>
+                    <CardTitle className="font-headline">
+                      Campaign Info
+                    </CardTitle>
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={handleRefresh}
                       disabled={isRefreshing}
                     >
-                      <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                      <RefreshCw
+                        className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+                      />
                     </Button>
                   </div>
                 </CardHeader>
@@ -834,7 +938,9 @@ export default function CampaignDetailsPage() {
                     <Users className="h-5 w-5 text-primary" />
                     <div>
                       <p className="text-sm font-medium">Participants</p>
-                      <p className="text-2xl font-bold">{participantAddresses.length}</p>
+                      <p className="text-2xl font-bold">
+                        {participantAddresses.length}
+                      </p>
                     </div>
                   </div>
 

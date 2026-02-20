@@ -53,20 +53,22 @@ export async function POST(request: Request) {
       update: {
         taskType,
         discordInviteLink,
+        discordServerId: body.discordServerId || null,
         telegramInviteLink,
         telegramChatId,
         requiresHumanityVerification: requiresHumanityVerification || false,
-        metadata,
+        metadata: metadata && typeof metadata === 'object' ? metadata : undefined,
       },
       create: {
         campaignId,
         taskIndex,
         taskType,
         discordInviteLink,
+        discordServerId: body.discordServerId || null,
         telegramInviteLink,
         telegramChatId,
         requiresHumanityVerification: requiresHumanityVerification || false,
-        metadata,
+        metadata: metadata && typeof metadata === 'object' ? metadata : undefined,
       },
     })
 

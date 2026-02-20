@@ -12,7 +12,7 @@
 
 # testing
 /coverage
-
+/docs/performance-optimization
 # next.js
 /.next/
 /out/
