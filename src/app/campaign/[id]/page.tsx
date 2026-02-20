@@ -22,6 +22,7 @@ import {
   getCampaignParticipants,
   getCampaignParticipantAddresses,
   openCampaign,
+  endCampaign,
   completeTask,
   getUserTaskCompletionStatus,
 } from '@/lib/web3-service'
@@ -56,6 +57,8 @@ import {
   ImageIcon,
   ArrowLeft,
   ExternalLink,
+  Rocket,
+  XCircle,
 } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { CampaignAnalytics } from '@/components/campaign-analytics'
@@ -82,6 +85,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 const TaskIcon = ({ type }: { type: TaskType['type'] }) => {
   switch (type) {
@@ -150,6 +163,14 @@ export default function CampaignDetailsPage() {
   const [paymentTaskId, setPaymentTaskId] = useState<string | null>(null)
   const [transactionHash, setTransactionHash] = useState('')
   const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
+
+  // Campaign Action State (Launch/End) for hosts
+  const [isCampaignActionDialogOpen, setIsCampaignActionDialogOpen] =
+    useState(false)
+  const [campaignActionToConfirm, setCampaignActionToConfirm] = useState<
+    'launch' | 'end' | null
+  >(null)
+  const [isUpdatingCampaign, setIsUpdatingCampaign] = useState(false)
 
   const campaignId = id as string
 
@@ -537,6 +558,59 @@ export default function CampaignDetailsPage() {
       description: 'Campaign data has been updated.',
     })
   }
+
+  // Handler to open campaign action confirmation dialog
+  const openCampaignActionDialog = (action: 'launch' | 'end') => {
+    setCampaignActionToConfirm(action)
+    setIsCampaignActionDialogOpen(true)
+  }
+
+  // Handler to confirm and execute campaign action (launch/end)
+  const handleConfirmCampaignAction = async () => {
+    if (!campaignActionToConfirm || !campaign) return
+
+    setIsUpdatingCampaign(true)
+    try {
+      if (campaignActionToConfirm === 'launch') {
+        if (campaign.status !== 'Draft') {
+          toast({
+            variant: 'destructive',
+            title: 'Already Launched',
+            description: 'This campaign is already open.',
+          })
+          return
+        }
+        const resultCampaignId = await openCampaign(campaignId, toast)
+        if (resultCampaignId !== campaignId) {
+          window.location.href = `/campaign/${resultCampaignId}`
+          return
+        }
+        toast({
+          title: 'Campaign Launched!',
+          description: 'Your campaign is now live and accepting participants.',
+        })
+      } else if (campaignActionToConfirm === 'end') {
+        await endCampaign(campaignId)
+        toast({
+          title: 'Campaign Ended',
+          description: 'Your campaign has been closed.',
+        })
+      }
+      await fetchAllCampaignData(true)
+    } catch (error) {
+      // Error toast is shown in the service
+    } finally {
+      setIsUpdatingCampaign(false)
+      setIsCampaignActionDialogOpen(false)
+      setCampaignActionToConfirm(null)
+    }
+  }
+
+  // Check if current user is the host of this campaign
+  const isHostOfCampaign =
+    role === 'host' &&
+    campaign &&
+    address?.toLowerCase() === campaign.host.toLowerCase()
 
   // Verify user with Humanity Protocol
   const handleVerifyHumanity = async (walletAddress?: string) => {
@@ -975,6 +1049,46 @@ export default function CampaignDetailsPage() {
                     <Share2 className="h-4 w-4 mr-2" />
                     Share Campaign
                   </Button>
+
+                  {/* Host Controls - Launch/End Campaign */}
+                  {isHostOfCampaign && (
+                    <div className="pt-4 border-t space-y-2">
+                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
+                        Host Controls
+                      </p>
+                      {campaign.status === 'Draft' && (
+                        <Button
+                          className="w-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors"
+                          onClick={() => openCampaignActionDialog('launch')}
+                          disabled={isUpdatingCampaign}
+                        >
+                          {isUpdatingCampaign &&
+                          campaignActionToConfirm === 'launch' ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Rocket className="h-4 w-4 mr-2" />
+                          )}
+                          Launch Campaign
+                        </Button>
+                      )}
+                      {campaign.status === 'Open' && (
+                        <Button
+                          variant="destructive"
+                          className="w-full"
+                          onClick={() => openCampaignActionDialog('end')}
+                          disabled={isUpdatingCampaign}
+                        >
+                          {isUpdatingCampaign &&
+                          campaignActionToConfirm === 'end' ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <XCircle className="h-4 w-4 mr-2" />
+                          )}
+                          End Campaign
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
@@ -1001,6 +1115,46 @@ export default function CampaignDetailsPage() {
         onVerify={handleVerifyHumanity}
         isVerifying={isCheckingHumanity}
       />
+
+      {/* Campaign Action Confirmation Dialog */}
+      <AlertDialog
+        open={isCampaignActionDialogOpen}
+        onOpenChange={setIsCampaignActionDialogOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {campaignActionToConfirm === 'launch'
+                ? 'Launch Campaign?'
+                : 'End Campaign?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {campaignActionToConfirm === 'launch'
+                ? 'This will make your campaign live and allow participants to join and complete tasks. This action cannot be undone.'
+                : 'This will close your campaign and stop accepting new participants. Completed tasks will remain recorded. This action cannot be undone.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUpdatingCampaign}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCampaignAction}
+              disabled={isUpdatingCampaign}
+              className={
+                campaignActionToConfirm === 'end'
+                  ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
+                  : ''
+              }
+            >
+              {isUpdatingCampaign ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              {campaignActionToConfirm === 'launch' ? 'Launch' : 'End Campaign'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
