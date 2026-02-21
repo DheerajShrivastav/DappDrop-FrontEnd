@@ -16,30 +16,30 @@ datasource db {
 // Simplified schema focusing on enhancements, not duplicating on-chain data
 
 model User {
-  id              String   @id @default(cuid())
-  walletAddress   String   @unique
-  
-  // OFF-CHAIN ONLY enhancements
-  username        String?
-  email           String?
-  notificationSettings Json?
-  preferences     Json?
-  
-   // NEW: NextAuth + Discord fields
-  name            String?   // NextAuth standard field
-  emailVerified   DateTime?
-  image           String?
-  discordId       String?  @unique  // Store Discord user ID
-  
-  // Humanity Protocol verification
-  humanityVerified    Boolean  @default(false)
-  lastHumanityCheck   DateTime?
-  
-  // NextAuth relations
-  accounts        Account[]
-  sessions        Session[]
+  id            String @id @default(cuid())
+  walletAddress String @unique
 
-  createdAt       DateTime @default(now())
+  // OFF-CHAIN ONLY enhancements
+  username             String?
+  email                String?
+  notificationSettings Json?
+  preferences          Json?
+
+  // NEW: NextAuth + Discord fields
+  name          String? // NextAuth standard field
+  emailVerified DateTime?
+  image         String?
+  discordId     String?   @unique // Store Discord user ID
+
+  // Humanity Protocol verification
+  humanityVerified  Boolean   @default(false)
+  lastHumanityCheck DateTime?
+
+  // NextAuth relations
+  accounts Account[]
+  sessions Session[]
+
+  createdAt DateTime @default(now())
 }
 
 model Account {
@@ -47,7 +47,7 @@ model Account {
   userId            String
   type              String
   provider          String
-  providerAccountId String  // This will store the Discord user ID
+  providerAccountId String // This will store the Discord user ID
   refresh_token     String? @db.Text
   access_token      String? @db.Text
   expires_at        Int?
@@ -80,83 +80,84 @@ model VerificationToken {
 }
 
 model CampaignCache {
-  id              String   @id @default(cuid())
-  campaignId      Int      // Reference to on-chain campaign ID
+  id              String @id @default(cuid())
+  campaignId      Int // Reference to on-chain campaign ID
   contractAddress String
-  
+
   // CACHED data for performance (synced from blockchain)
-  title           String
-  description     String
-  hostAddress     String
-  isActive        Boolean
-  
+  title       String
+  description String
+  hostAddress String
+  isActive    Boolean
+
   // OFF-CHAIN enhancements
-  imageUrl        String?
-  tags            String[]
-  featuredUntil   DateTime?
-  
-  lastSyncedAt    DateTime @default(now())
+  imageUrl      String?
+  tags          String[]
+  featuredUntil DateTime?
+
+  lastSyncedAt DateTime @default(now())
 }
 
 model CampaignTaskMetadata {
-  id              String   @id @default(cuid())
-  campaignId      Int   // On-chain campaign ID
-  taskIndex       Int      // Task index in the campaign
-  taskType        String   // JOIN_DISCORD, JOIN_TELEGRAM, SOCIAL_FOLLOW, etc.
-  
+  id         String @id @default(cuid())
+  campaignId Int // On-chain campaign ID
+  taskIndex  Int // Task index in the campaign
+  taskType   String // JOIN_DISCORD, JOIN_TELEGRAM, SOCIAL_FOLLOW, etc.
+
   // Discord-specific metadata
   discordInviteLink String?
-  
+  discordServerId   String? // Discord server ID for verification
+
   // Telegram-specific metadata
   telegramInviteLink String?
   telegramChatId     String?
-  
+
   // Humanity Protocol verification requirement
   requiresHumanityVerification Boolean @default(false)
-  
+
   // Other task metadata can be added here in the future
-  metadata        Json?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([campaignId, taskIndex])
 }
 
 model SocialVerification {
-  id              String   @id @default(cuid())
-  userAddress     String
-  taskId          String   // On-chain task reference
-  platform        String   // twitter, discord, etc.
-  
+  id          String @id @default(cuid())
+  userAddress String
+  taskId      String // On-chain task reference
+  platform    String // twitter, discord, etc.
+
   // Verification proof (off-chain)
-  proofData       Json
-  verifiedAt      DateTime?
-  isValid         Boolean  @default(false)
+  proofData  Json
+  verifiedAt DateTime?
+  isValid    Boolean   @default(false)
 }
 
 model Analytics {
-  id              String   @id @default(cuid())
-  eventType       String
-  userAddress     String?
-  campaignId      Int?     // On-chain campaign ID reference
-  
-  data            Json
-  timestamp       DateTime @default(now())
+  id          String  @id @default(cuid())
+  eventType   String
+  userAddress String?
+  campaignId  Int? // On-chain campaign ID reference
+
+  data      Json
+  timestamp DateTime @default(now())
 }
 
 // x402 Payment Protocol - Minimal implementation (like Humanity Protocol)
 model PaymentVerification {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   campaignId      Int
   taskIndex       Int
   userAddress     String
-  transactionHash String   @unique
-  verified        Boolean  @default(false)
+  transactionHash String    @unique
+  verified        Boolean   @default(false)
   verifiedAt      DateTime?
-  
-  createdAt       DateTime @default(now())
-  
+
+  createdAt DateTime @default(now())
+
   @@unique([campaignId, taskIndex, userAddress])
   @@index([userAddress])
 }
