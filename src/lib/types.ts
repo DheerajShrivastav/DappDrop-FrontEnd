@@ -135,9 +135,11 @@ export interface CampaignSyncRequest {
   campaignId?: string
 }
 
-// Humanity Protocol types
+// Humanity Protocol types (v2 - OAuth SDK based)
 export interface HumanityVerificationRequest {
   walletAddress: string
+  accessToken?: string
+  isHuman?: boolean
 }
 
 export interface HumanityVerificationResponse {
@@ -152,4 +154,18 @@ export interface HumanityCachedVerification {
   isHuman: boolean
   verifiedAt: Date
   expiresAt: Date
+}
+
+export interface HumanityPresetResult {
+  preset: string
+  status: 'valid' | 'invalid'
+  value: boolean | string | null
+  expiresAt?: string
+}
+
+export interface HumanityOAuthResult {
+  isHuman: boolean
+  accessToken: string
+  presets: HumanityPresetResult[]
+  verifiedAt: string
 }
