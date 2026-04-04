@@ -12,23 +12,20 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   ShieldCheck,
-  ExternalLink,
-  Info,
+  Loader2,
+  HelpCircle,
+  CheckCircle2,
   Wallet,
   Edit3,
-  ChevronDown,
-  HelpCircle,
 } from 'lucide-react'
 import { useWallet } from '@/context/wallet-provider'
 import { isValidEthereumAddress } from '@/lib/validation-utils'
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+  HumanityConnect,
+  type HumanityReactError,
+} from '@humanity-org/react-sdk'
 import {
   Tooltip,
   TooltipContent,
@@ -39,54 +36,67 @@ import {
 interface HumanityVerificationModalProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
-  onVerify?: (walletAddress?: string) => void
-  isVerifying?: boolean
+  campaignId?: string
+  taskId?: string
+  isVerified?: boolean
+  onVerificationComplete?: (isHuman: boolean) => void
 }
 
 export function HumanityVerificationModal({
   isOpen,
   onOpenChange,
-  onVerify,
-  isVerifying = false,
+  campaignId,
+  taskId,
+  isVerified = false,
+  onVerificationComplete,
 }: HumanityVerificationModalProps) {
   const { address, isConnected } = useWallet()
   const [useCustomAddress, setUseCustomAddress] = useState(false)
   const [customWalletAddress, setCustomWalletAddress] = useState('')
-  const [showInstructions, setShowInstructions] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
 
-  // Use environment variable or default to testnet
-  const humanityPortalUrl =
-    process.env.NEXT_PUBLIC_HUMANITY_PORTAL_URL ||
-    'https://testnet.humanity.org'
+  const selectedAddress = useCustomAddress ? customWalletAddress : address
 
-  const handleOpenHumanityProtocol = () => {
-    window.open(humanityPortalUrl, '_blank')
-  }
-
-  const handleVerify = () => {
-    if (!onVerify) return
-
-    const addressToVerify = useCustomAddress ? customWalletAddress : address
-    if (!addressToVerify) return
-
-    onVerify(addressToVerify)
-  }
-
-  const canVerify = () => {
+  const canStartFlow = () => {
     if (useCustomAddress) {
       return customWalletAddress && isValidEthereumAddress(customWalletAddress)
     }
     return isConnected && address
   }
 
+  // Store context in sessionStorage before the redirect so the callback page
+  // and campaign page can pick it up after OAuth completes.
+  const storeContextBeforeRedirect = () => {
+    const walletToVerify = selectedAddress || address
+    if (walletToVerify) {
+      sessionStorage.setItem('humanity_wallet_address', walletToVerify)
+    }
+    sessionStorage.setItem('humanity_return_to', window.location.pathname)
+    if (campaignId && taskId) {
+      sessionStorage.setItem(
+        'humanity_task_context',
+        JSON.stringify({ campaignId, taskId }),
+      )
+    }
+  }
+
+  const handleAuthError = (error: HumanityReactError) => {
+    console.error('Humanity auth error:', error)
+    setIsRedirecting(false)
+    if (error.code === 'popup_closed' || error.code === 'popup_blocked') {
+      return
+    }
+    setVerificationError(error.message || 'Authentication failed. Please try again.')
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[480px] gap-4">
-        {/* Compact Header with Tooltip */}
+      <DialogContent className="sm:max-w-[460px] gap-4">
         <DialogHeader className="space-y-2">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <ShieldCheck className="h-5 w-5 text-purple-500" />
-            Humanity Verification Required
+            Humanity Verification
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -95,130 +105,146 @@ export function HumanityVerificationModal({
                 <TooltipContent side="bottom" className="max-w-xs">
                   <p className="text-xs">
                     <strong>Why verify?</strong> Prevents Sybil attacks and
-                    ensures fair reward distribution through biometric palm
-                    verification.
+                    ensures fair reward distribution through biometric
+                    verification via Humanity Protocol.
                   </p>
                   <ul className="text-xs mt-2 space-y-1 list-disc list-inside">
                     <li>One-time verification per wallet</li>
                     <li>Results cached for 24 hours</li>
-                    <li>No personal data stored</li>
+                    <li>No personal data stored by DappDrop</li>
                   </ul>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </DialogTitle>
           <DialogDescription className="text-sm">
-            Verify your wallet through Humanity Protocol to continue.
+            {isVerified
+              ? 'Your wallet is verified with Humanity Protocol.'
+              : 'Verify your identity through Humanity Protocol to complete this task.'}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Collapsible Instructions */}
-        <Collapsible open={showInstructions} onOpenChange={setShowInstructions}>
-          <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ChevronDown
-              className={`h-4 w-4 transition-transform ${
-                showInstructions ? 'rotate-180' : ''
-              }`}
-            />
-            How it works
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3">
-            <ol className="text-xs text-muted-foreground space-y-1.5 pl-5 list-decimal">
-              <li>Visit Humanity Protocol portal</li>
-              <li>Connect your wallet</li>
-              <li>Complete palm scan verification</li>
-              <li>Return and verify here</li>
-            </ol>
-          </CollapsibleContent>
-        </Collapsible>
-
-        {/* Compact Wallet Selection */}
-        <div className="space-y-3">
-          <Label className="text-sm font-medium">Select wallet</Label>
-
-          {/* Connected Wallet - Compact Card */}
-          <button
-            onClick={() => setUseCustomAddress(false)}
-            disabled={!isConnected}
-            className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
-              !useCustomAddress && isConnected
-                ? 'border-purple-500 bg-purple-500/10'
-                : 'border-border hover:border-border/80'
-            } ${
-              !isConnected ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-            }`}
-          >
-            <div
-              className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                !useCustomAddress && isConnected
-                  ? 'border-purple-500'
-                  : 'border-muted-foreground'
-              }`}
-            >
-              {!useCustomAddress && isConnected && (
-                <div className="w-2 h-2 rounded-full bg-purple-500" />
-              )}
+        <div className="space-y-4 py-2">
+          {isVerified ? (
+            <div className="flex items-center gap-3 p-4 rounded-lg border-2 border-green-500/30 bg-green-500/10">
+              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <div>
+                <p className="text-sm font-medium">Verified</p>
+                <p className="text-xs text-muted-foreground">
+                  {address?.slice(0, 6)}...{address?.slice(-4)} is verified as
+                  human
+                </p>
+              </div>
             </div>
-            <Wallet className="h-4 w-4 text-foreground" />
-            <span className="text-sm font-medium">Connected Wallet</span>
-            {isConnected && address && (
-              <span className="ml-auto text-xs font-mono text-muted-foreground bg-secondary px-2 py-1 rounded">
-                {address.slice(0, 6)}...{address.slice(-4)}
-              </span>
-            )}
-          </button>
+          ) : (
+            <>
+              {/* Wallet selection */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium">Select wallet to verify</p>
 
-          {!isConnected && (
-            <p className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1.5">
-              <Info className="h-3 w-3" />
-              No wallet connected. Use custom address below.
-            </p>
-          )}
+                {/* Connected wallet option */}
+                <button
+                  onClick={() => setUseCustomAddress(false)}
+                  disabled={!isConnected}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
+                    !useCustomAddress && isConnected
+                      ? 'border-purple-500 bg-purple-500/10'
+                      : 'border-border hover:border-border/80'
+                  } ${
+                    !isConnected
+                      ? 'opacity-50 cursor-not-allowed'
+                      : 'cursor-pointer'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      !useCustomAddress && isConnected
+                        ? 'border-purple-500'
+                        : 'border-muted-foreground'
+                    }`}
+                  >
+                    {!useCustomAddress && isConnected && (
+                      <div className="w-2 h-2 rounded-full bg-purple-500" />
+                    )}
+                  </div>
+                  <Wallet className="h-4 w-4 text-foreground" />
+                  <span className="text-sm font-medium">Connected Wallet</span>
+                  {isConnected && address && (
+                    <span className="ml-auto text-xs font-mono text-muted-foreground bg-secondary px-2 py-1 rounded">
+                      {address.slice(0, 6)}...{address.slice(-4)}
+                    </span>
+                  )}
+                </button>
 
-          {/* Custom Address - Compact Card */}
-          <button
-            onClick={() => setUseCustomAddress(true)}
-            className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
-              useCustomAddress
-                ? 'border-purple-500 bg-purple-500/10'
-                : 'border-border hover:border-border/80'
-            }`}
-          >
-            <div
-              className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                useCustomAddress
-                  ? 'border-purple-500'
-                  : 'border-muted-foreground'
-              }`}
-            >
-              {useCustomAddress && (
-                <div className="w-2 h-2 rounded-full bg-purple-500" />
-              )}
-            </div>
-            <Edit3 className="h-4 w-4 text-foreground" />
-            <span className="text-sm font-medium">Custom Address</span>
-          </button>
-
-          {/* Custom Address Input */}
-          {useCustomAddress && (
-            <div className="space-y-2 pl-7">
-              <Input
-                placeholder="0x..."
-                value={customWalletAddress}
-                onChange={(e) => setCustomWalletAddress(e.target.value)}
-                className="font-mono text-xs h-9"
-              />
-              {customWalletAddress &&
-                !isValidEthereumAddress(customWalletAddress) && (
-                  <p className="text-xs text-destructive">
-                    Invalid Ethereum address
+                {!isConnected && (
+                  <p className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1.5 pl-1">
+                    No wallet connected. Use custom address below.
                   </p>
                 )}
-            </div>
+
+                {/* Custom address option */}
+                <button
+                  onClick={() => setUseCustomAddress(true)}
+                  className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
+                    useCustomAddress
+                      ? 'border-purple-500 bg-purple-500/10'
+                      : 'border-border hover:border-border/80'
+                  }`}
+                >
+                  <div
+                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                      useCustomAddress
+                        ? 'border-purple-500'
+                        : 'border-muted-foreground'
+                    }`}
+                  >
+                    {useCustomAddress && (
+                      <div className="w-2 h-2 rounded-full bg-purple-500" />
+                    )}
+                  </div>
+                  <Edit3 className="h-4 w-4 text-foreground" />
+                  <span className="text-sm font-medium">Custom Address</span>
+                </button>
+
+                {/* Custom address input */}
+                {useCustomAddress && (
+                  <div className="space-y-2 pl-7">
+                    <Input
+                      placeholder="0x..."
+                      value={customWalletAddress}
+                      onChange={(e) => setCustomWalletAddress(e.target.value)}
+                      className="font-mono text-xs h-9"
+                    />
+                    {customWalletAddress &&
+                      !isValidEthereumAddress(customWalletAddress) && (
+                        <p className="text-xs text-destructive">
+                          Invalid Ethereum address
+                        </p>
+                      )}
+                  </div>
+                )}
+              </div>
+
+              {/* Error message */}
+              {verificationError && (
+                <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3">
+                  <p className="text-xs text-destructive">{verificationError}</p>
+                </div>
+              )}
+
+              {/* Redirecting state */}
+              {isRedirecting && (
+                <div className="flex items-center justify-center gap-2 py-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-purple-500" />
+                  <span className="text-sm text-muted-foreground">
+                    Redirecting to Humanity Protocol...
+                  </span>
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {/* Streamlined Footer */}
         <DialogFooter className="gap-2 sm:gap-3">
           <Button
             variant="ghost"
@@ -226,26 +252,28 @@ export function HumanityVerificationModal({
             onClick={() => onOpenChange(false)}
             className="flex-1"
           >
-            Cancel
+            {isVerified ? 'Close' : 'Cancel'}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleOpenHumanityProtocol}
-            className="flex-1"
-          >
-            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-            Get Verified
-          </Button>
-          {onVerify && (
-            <Button
-              size="sm"
-              onClick={handleVerify}
-              disabled={isVerifying || !canVerify()}
-              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+          {!isVerified && !isRedirecting && (
+            <div
+              className="flex-1"
+              onClick={() => {
+                // Store context BEFORE the SDK triggers the redirect
+                storeContextBeforeRedirect()
+                setIsRedirecting(true)
+              }}
             >
-              {isVerifying ? 'Checking...' : 'Verify'}
-            </Button>
+              <HumanityConnect
+                scopes={['openid', 'identity:read']}
+                mode="redirect"
+                onError={handleAuthError}
+                variant="primary"
+                size="sm"
+                label="Verify with Humanity"
+                disabled={!canStartFlow()}
+                className="w-full"
+              />
+            </div>
           )}
         </DialogFooter>
       </DialogContent>
