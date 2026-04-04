@@ -1,127 +1,243 @@
 'use server'
 /**
- * @fileOverview An AI flow for generating a complete Web3 airdrop campaign draft.
+ * @fileOverview Multi-agent pipeline for generating Web3 airdrop campaigns.
  *
- * - generateCampaign - A function that handles the campaign generation process.
+ * Pipeline: Planner → Generator → Validator (with retry loop)
+ *
+ * - Planner: Analyzes the project and decides campaign strategy
+ * - Generator: Creates campaign content based on the plan
+ * - Validator: Checks quality, hallucinations, and consistency; can fix or retry
  */
 
-import { ai } from '@/ai/genkit'
+import { generateObject } from 'ai'
+import { model, MAX_VALIDATION_RETRIES } from '@/ai/config'
 import {
   GenerateCampaignInputSchema,
   type GenerateCampaignInput,
-  GenerateCampaignOutputSchema,
   type GenerateCampaignOutput,
+  type CampaignPlan,
+  type ValidationResult,
+  CampaignPlanSchema,
+  GenerateCampaignOutputSchema,
+  ValidationResultSchema,
 } from './generate-campaign.schema'
+
+// ── Public API (same signature as before — no breaking changes) ──────────────
 
 export async function generateCampaign(
   input: GenerateCampaignInput,
 ): Promise<GenerateCampaignOutput> {
-  return generateCampaignFlow(input)
+  // Validate input
+  const trimmedInput = input.trim()
+  GenerateCampaignInputSchema.parse(trimmedInput)
+
+  // Step 1: Plan
+  const plan = await runPlanner(trimmedInput)
+
+  // Step 2: Generate
+  let draft = await runGenerator(trimmedInput, plan)
+
+  // Step 3: Validate (with retry loop)
+  for (let attempt = 0; attempt <= MAX_VALIDATION_RETRIES; attempt++) {
+    const validation = await runValidator(trimmedInput, draft)
+
+    if (validation.approved) {
+      // Apply any minor fixes the validator suggested
+      return applyFixes(draft, validation)
+    }
+
+    // Not approved — check if validator provided direct fixes
+    if (validation.fixes) {
+      draft = applyFixes(draft, validation)
+    }
+
+    // On last attempt, return what we have (best effort)
+    if (attempt === MAX_VALIDATION_RETRIES) {
+      console.warn(
+        'Campaign generation: max validation retries reached, returning best effort.',
+        { issues: validation.issues },
+      )
+      return sanitizeOutput(draft)
+    }
+
+    // Retry: regenerate with validator feedback
+    const feedback = validation.issues
+      .map((i) => `[${i.severity}] ${i.field}: ${i.issue} → ${i.fix}`)
+      .join('\n')
+
+    draft = await runGenerator(trimmedInput, plan, feedback)
+  }
+
+  return sanitizeOutput(draft)
 }
 
-const prompt = ai.definePrompt({
-  name: 'generateCampaignPrompt',
-  input: { schema: GenerateCampaignInputSchema },
-  output: { schema: GenerateCampaignOutputSchema },
-  prompt: `You are an expert marketing agent for Web3 airdrop campaigns.
+// ── Agent 1: Planner ─────────────────────────────────────────────────────────
 
-Your task: Generate ONLY a campaign title, descriptions, and tasks based on the user's project description.
+async function runPlanner(projectDescription: string): Promise<CampaignPlan> {
+  const { object } = await generateObject({
+    model,
+    schema: CampaignPlanSchema,
+    system: `You are a Web3 campaign strategist. Analyze the given project description and create a strategic plan for an airdrop campaign.
+
+Your job is ONLY to analyze and plan — do NOT write the campaign content yet.
+
+Consider:
+- What type of Web3 project is this? (DeFi, NFT, L2, DAO, GameFi, etc.)
+- Who is the target audience?
+- What is the most effective campaign goal?
+- Which social platforms are relevant for this project?
+- What 2-4 task types would drive the most engagement for THIS specific project?
+- What tone should the campaign copy use?
+
+Be specific to the project described. Do not make generic recommendations.`,
+    prompt: `Analyze this project and create a campaign strategy plan:
+
+${projectDescription}`,
+  })
+
+  return object
+}
+
+// ── Agent 2: Generator ───────────────────────────────────────────────────────
+
+async function runGenerator(
+  projectDescription: string,
+  plan: CampaignPlan,
+  validatorFeedback?: string,
+): Promise<GenerateCampaignOutput> {
+  const feedbackSection = validatorFeedback
+    ? `\n\nPREVIOUS ATTEMPT FEEDBACK (fix these issues):\n${validatorFeedback}`
+    : ''
+
+  const { object } = await generateObject({
+    model,
+    schema: GenerateCampaignOutputSchema,
+    system: `You are an expert Web3 marketing copywriter. Generate campaign content based on the strategic plan provided.
 
 STRICT RULES:
-1. Use ONLY information from the project description provided below
-2. DO NOT invent or hallucinate details not mentioned in the description
-3. DO NOT generate reward information (user will add this separately)
-4. Keep tasks directly relevant to the specific project described
-5. Be concise and actionable
-6. If the description is vague, create general Web3 tasks
+1. Use ONLY information from the project description — do NOT hallucinate details
+2. DO NOT generate reward information (users add this separately)
+3. Make tasks SPECIFIC to the project (not generic like "Complete social tasks")
+4. Follow the strategic plan's recommendations for task types and tone
+5. Character limits are enforced — be concise:
+   - Title: max 50 characters
+   - Short description: max 100 characters
+   - Description: 50-500 characters
+   - Task descriptions: max 200 characters each
+6. Generate exactly 2-4 tasks based on the plan's task strategy
 
-Generate:
-1. Title: Catchy, max 50 characters, relevant to the project mentioned
-2. Short Description: One sentence, max 100 characters, for campaign preview card
-3. Detailed Description: Engaging, min 50 characters, explains the campaign purpose based on the project
-4. Tasks: 2-3 actionable tasks that make sense for THIS specific project
-
-Available task types and when to use them:
-- SOCIAL_FOLLOW: Follow the project on social media (Twitter/X, etc.)
-- JOIN_DISCORD: Join the project's Discord community server
-- JOIN_TELEGRAM: Join the project's Telegram group/channel
-- RETWEET: Share or retweet project announcements
-- ONCHAIN_TX: Perform a blockchain action (stake, swap, mint, bridge, etc.)
-- HUMANITY_VERIFICATION: Verify as a real human using Humanity Protocol
-
-Example good tasks:
+GOOD task examples:
 - "Follow @ProjectName on X (Twitter)"
-- "Join our Discord community"
-- "Stake 10 tokens in the protocol"
-- "Mint your genesis NFT"
+- "Join the ProjectName Discord community"
+- "Stake tokens in the ProjectName protocol"
+- "Mint your ProjectName genesis NFT"
 
-Example bad tasks (too generic):
+BAD task examples (too generic — NEVER do this):
 - "Complete social tasks"
-- "Do stuff"
-- "Participate"
+- "Participate in the campaign"
+- "Do stuff"`,
+    prompt: `PROJECT DESCRIPTION:
+${projectDescription}
 
-Project Description:
-{{{input}}}
+STRATEGIC PLAN:
+- Project Type: ${plan.projectType}
+- Target Audience: ${plan.targetAudience}
+- Campaign Goal: ${plan.campaignGoal}
+- Recommended Platforms: ${plan.recommendedPlatforms.join(', ')}
+- Tone: ${plan.campaignTone}
+- Task Strategy:
+${plan.taskStrategy.map((t) => `  - ${t.taskType}: ${t.rationale}`).join('\n')}
+${feedbackSection}
 
-IMPORTANT: Generate tasks that are SPECIFIC to this project. Match the task descriptions to what the project actually does.`,
-})
+Generate the campaign content now.`,
+  })
 
-const generateCampaignFlow = ai.defineFlow(
-  {
-    name: 'generateCampaignFlow',
-    inputSchema: GenerateCampaignInputSchema,
-    outputSchema: GenerateCampaignOutputSchema,
-  },
-  async (input) => {
-    // Additional runtime validation
-    const trimmedInput = input.trim()
+  return object
+}
 
-    if (trimmedInput.length < 20) {
-      throw new Error(
-        'Project description must be at least 20 characters. Please provide more details about your project.',
-      )
-    }
+// ── Agent 3: Validator ───────────────────────────────────────────────────────
 
-    if (trimmedInput.length > 1000) {
-      throw new Error(
-        'Project description is too long (max 1000 characters). Please be more concise.',
-      )
-    }
+async function runValidator(
+  projectDescription: string,
+  campaign: GenerateCampaignOutput,
+): Promise<ValidationResult> {
+  const { object } = await generateObject({
+    model,
+    schema: ValidationResultSchema,
+    system: `You are a quality assurance agent for Web3 airdrop campaigns. Your job is to validate a generated campaign against the original project description.
 
-    const { output } = await prompt(trimmedInput)
+CHECK FOR:
+1. **Hallucination**: Does the campaign reference details NOT in the project description? (critical)
+2. **Generic content**: Are tasks too generic like "Complete social tasks" instead of specific? (critical)
+3. **Task relevance**: Do the tasks make sense for THIS specific project? (critical)
+4. **Character limits**: Title ≤50, short description ≤100, description 50-500, task descriptions ≤200 (warning)
+5. **Task count**: Should have 2-4 tasks (warning)
+6. **Consistency**: Do the title, descriptions, and tasks tell a coherent story? (warning)
+7. **Quality**: Is the copy engaging and professional? (suggestion)
 
-    if (!output) {
-      throw new Error(
-        'AI failed to generate campaign. Please try again with a clearer project description.',
-      )
-    }
+SCORING:
+- Score 8-10: Approve (minor suggestions OK)
+- Score 5-7: Approve but apply fixes
+- Score 1-4: Reject, provide fixes for critical issues
 
-    // Post-process AI output to ensure it meets character limits
-    // (LLMs don't always respect character limits in prompts)
-    const sanitizedOutput = {
-      title: truncateText(output.title, 50),
-      shortDescription: truncateText(output.shortDescription, 100),
-      description:
-        output.description.length > 500
-          ? output.description.slice(0, 497) + '...'
-          : output.description,
-      tasks: output.tasks.slice(0, 4).map((task) => ({
-        type: task.type,
-        description: truncateText(task.description, 200),
-      })),
-    }
+When you find issues, provide DIRECT FIXES in the "fixes" field — don't just describe the problem, provide the corrected content.
 
-    return sanitizedOutput
-  },
-)
+If the campaign is good (score ≥ 5), set approved=true even if you have suggestions.`,
+    prompt: `ORIGINAL PROJECT DESCRIPTION:
+${projectDescription}
 
-/**
- * Truncate text to a maximum length, trying to break at a word boundary
- */
+GENERATED CAMPAIGN TO VALIDATE:
+Title: ${campaign.title}
+Short Description: ${campaign.shortDescription}
+Description: ${campaign.description}
+Tasks:
+${campaign.tasks.map((t, i) => `  ${i + 1}. [${t.type}] ${t.description}`).join('\n')}
+
+Validate this campaign. Check for hallucinations, generic content, and quality issues.`,
+  })
+
+  return object
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function applyFixes(
+  draft: GenerateCampaignOutput,
+  validation: ValidationResult,
+): GenerateCampaignOutput {
+  const fixed = { ...draft }
+
+  if (validation.fixes) {
+    if (validation.fixes.title) fixed.title = validation.fixes.title
+    if (validation.fixes.shortDescription)
+      fixed.shortDescription = validation.fixes.shortDescription
+    if (validation.fixes.description)
+      fixed.description = validation.fixes.description
+    if (validation.fixes.tasks && validation.fixes.tasks.length > 0)
+      fixed.tasks = validation.fixes.tasks
+  }
+
+  return sanitizeOutput(fixed)
+}
+
+function sanitizeOutput(output: GenerateCampaignOutput): GenerateCampaignOutput {
+  return {
+    title: truncateText(output.title, 50),
+    shortDescription: truncateText(output.shortDescription, 100),
+    description:
+      output.description.length > 500
+        ? output.description.slice(0, 497) + '...'
+        : output.description,
+    tasks: output.tasks.slice(0, 4).map((task) => ({
+      type: task.type,
+      description: truncateText(task.description, 200),
+    })),
+  }
+}
+
 function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text
 
-  // Try to find a good break point (space, comma, etc.)
   const truncated = text.slice(0, maxLength - 3)
   const lastSpace = truncated.lastIndexOf(' ')
 
