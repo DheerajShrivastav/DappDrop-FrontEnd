@@ -1,33 +1,33 @@
 // src/app/api/verify-humanity/route.ts
 import { NextResponse } from 'next/server'
-import { verifyHumanity, isUserVerified } from '@/lib/humanity-service'
+import {
+  saveHumanityVerification,
+  isUserVerified,
+} from '@/lib/humanity-service'
 import { validateWalletAddress } from '@/lib/validation-utils'
 
 /**
  * POST /api/verify-humanity
- * Verify a wallet address using Humanity Protocol
+ * Save verification result from the Humanity Protocol OAuth SDK flow.
+ * Called by the client after completing OAuth + verifyPresets.
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { walletAddress, forceRefresh } = body
+    const { walletAddress, isHuman, accessToken } = body
 
-    // Validate and sanitize wallet address
     const validAddress = validateWalletAddress(walletAddress)
 
-    console.log(
-      'Verifying humanity for wallet:',
+    const result = await saveHumanityVerification(
       validAddress,
-      forceRefresh ? '(force refresh)' : '(using cache)'
+      isHuman ?? false,
+      accessToken,
     )
-    const result = await verifyHumanity(validAddress, forceRefresh || false)
 
-    // Check if verification was successful (no error in response)
     if (result.error) {
-      console.log('Verification completed with error:', result.error)
       return NextResponse.json({
-        success: true, // API call succeeded
-        isHuman: result.is_human, // but verification failed
+        success: true,
+        isHuman: result.is_human,
         walletAddress: result.wallet_address,
         error: result.error,
       })
@@ -42,37 +42,32 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('Humanity verification API error:', error)
 
-    // Handle validation errors
     if (
       error.message?.includes('required') ||
       error.message?.includes('Invalid')
     ) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 400 }
-     )
+        { status: 400 },
+      )
     }
 
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Failed to verify humanity',
-      },
-      { status: 500 }
+      { success: false, error: error.message || 'Failed to save verification' },
+      { status: 500 },
     )
   }
 }
 
 /**
  * GET /api/verify-humanity?walletAddress=0x...
- * Check cached verification status
+ * Check cached verification status (unchanged from v1)
  */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const walletAddress = searchParams.get('walletAddress')
 
-    // Validate and sanitize wallet address
     const validAddress = validateWalletAddress(walletAddress || '')
 
     const isVerified = await isUserVerified(validAddress)
@@ -85,7 +80,6 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Humanity verification check error:', error)
 
-    // Handle validation errors
     if (
       error.message?.includes('required') ||
       error.message?.includes('Invalid')
@@ -93,9 +87,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-     return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 400 }
-      )
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 400 },
+    )
   }
 }
