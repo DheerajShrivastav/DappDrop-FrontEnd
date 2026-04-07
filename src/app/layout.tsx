@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Web3Provider } from '@/context/web3-provider';
 import { WalletProvider } from '@/context/wallet-provider';
+import { HumanityAuthProvider } from '@/context/humanity-provider';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import { Toaster } from '@/components/ui/toaster';
@@ -39,10 +40,12 @@ export default function RootLayout({
             <body className="font-body antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
                 <Web3Provider>
                     <WalletProvider>
-                        <Header />
-                        <main className="flex-grow">{children}</main>
-                        <Footer />
-                        <Toaster />
+                        <HumanityAuthProvider>
+                            <Header />
+                            <main className="flex-grow">{children}</main>
+                            <Footer />
+                            <Toaster />
+                        </HumanityAuthProvider>
                     </WalletProvider>
                 </Web3Provider>
             </body>

@@ -530,6 +530,123 @@ export default function CampaignDetailsPage() {
     }
   }, [address, isConnected])
 
+  // Handle return from Humanity OAuth redirect flow
+  // The callback page stores the result in sessionStorage, then redirects here.
+  useEffect(() => {
+    const result = sessionStorage.getItem('humanity_verification_result')
+    if (!result) return
+    if (!address || !isConnected || !campaign) return
+
+    try {
+      const verification = JSON.parse(result)
+      sessionStorage.removeItem('humanity_verification_result')
+
+      // Read task context stored before the redirect
+      const taskContextRaw = sessionStorage.getItem('humanity_task_context')
+      sessionStorage.removeItem('humanity_task_context')
+      sessionStorage.removeItem('humanity_wallet_address')
+
+      if (verification.isHuman) {
+        setUserHumanityStatus(true)
+
+        if (taskContextRaw) {
+          const taskContext = JSON.parse(taskContextRaw)
+          if (taskContext.campaignId === campaignId && taskContext.taskId) {
+            const taskIndex = campaign.tasks.findIndex(
+              (task) => task.id === taskContext.taskId,
+            )
+            if (taskIndex !== -1) {
+              completeTask(campaignId, taskIndex)
+                .then(() => {
+                  setUserTasks((prevTasks) =>
+                    prevTasks.map((task) =>
+                      task.taskId === taskContext.taskId
+                        ? { ...task, completed: true }
+                        : task,
+                    ),
+                  )
+                  fetchAllCampaignData()
+                  if (!isJoined) setIsJoined(true)
+                  toast({
+                    title: 'Task Completed!',
+                    description:
+                      'Humanity verification successful and task marked complete.',
+                  })
+                })
+                .catch((err: any) => {
+                  console.error('Error completing task after OAuth:', err)
+                  toast({
+                    variant: 'destructive',
+                    title: 'Task Completion Failed',
+                    description:
+                      err.message || 'Verified but could not complete task on blockchain.',
+                  })
+                })
+              return
+            }
+          }
+        }
+
+        toast({
+          title: 'Verification Successful!',
+          description: 'Your wallet is verified as human.',
+        })
+      }
+    } catch (e) {
+      console.error('Error processing humanity verification result:', e)
+    }
+  }, [address, isConnected, campaign, campaignId])
+
+  // Handle humanity verification completion (kept for direct calls)
+  const handleHumanityVerificationComplete = async (isHuman: boolean) => {
+    if (!isHuman) return
+
+    setUserHumanityStatus(true)
+
+    // Complete the task on blockchain if we have a verifying task ID
+    if (verifyingTaskId && campaign) {
+      const taskIndex = campaign.tasks.findIndex(
+        (task) => task.id === verifyingTaskId,
+      )
+      if (taskIndex !== -1) {
+        try {
+          await completeTask(campaignId, taskIndex)
+          setUserTasks((prevTasks) =>
+            prevTasks.map((task) =>
+              task.taskId === verifyingTaskId
+                ? { ...task, completed: true }
+                : task,
+            ),
+          )
+          await fetchAllCampaignData()
+          if (!isJoined) setIsJoined(true)
+          toast({
+            title: 'Task Completed!',
+            description:
+              'Humanity verification successful and task marked complete.',
+          })
+        } catch (err: any) {
+          console.error('Error completing task on blockchain:', err)
+          toast({
+            variant: 'destructive',
+            title: 'Task Completion Failed',
+            description:
+              err.message || 'Verified but could not complete task on blockchain.',
+          })
+        }
+      }
+    } else {
+      toast({
+        title: 'Verification Successful!',
+        description: 'Your wallet is verified as human.',
+      })
+    }
+
+    setIsHumanityModalOpen(false)
+    setVerifyingTaskId(null)
+    setVerifyingTaskType(null)
+  }
+
   // [KEEPING ALL OTHER EXISTING useEffects AND HANDLER FUNCTIONS]
   // ... (All the existing logic will remain)
 
@@ -612,150 +729,11 @@ export default function CampaignDetailsPage() {
     campaign &&
     address?.toLowerCase() === campaign.host.toLowerCase()
 
-  // Verify user with Humanity Protocol
-  const handleVerifyHumanity = async (walletAddress?: string) => {
-    console.log('🚀 handleVerifyHumanity called with:', walletAddress)
-    const addressToVerify = walletAddress || address
-    if (!addressToVerify) {
-      console.log('❌ No wallet address provided')
-      toast({
-        variant: 'destructive',
-        title: 'No Wallet Address',
-        description: 'Please provide a wallet address to verify.',
-      })
-      return
-    }
-
-    console.log('🔍 Verifying humanity for address:', addressToVerify)
-    setIsCheckingHumanity(true)
-    try {
-      const response = await fetch('/api/verify-humanity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walletAddress: addressToVerify }),
-      })
-
-      console.log(
-        '📡 API response status:',
-        response.status,
-        response.statusText,
-      )
-      const data = await response.json()
-      console.log('📄 Raw API Response:', JSON.stringify(data, null, 2))
-
-      if (data.success) {
-        console.log(
-          '✅ API success=true, isHuman value:',
-          data.isHuman,
-          typeof data.isHuman,
-        )
-        setUserHumanityStatus(data.isHuman)
-
-        if (data.isHuman) {
-          console.log('🎉 SHOWING SUCCESS TOAST - data.isHuman is truthy')
-
-          // Complete the task on blockchain if we have a verifying task ID
-          if (verifyingTaskId && campaign) {
-            try {
-              const taskIndex = campaign.tasks.findIndex(
-                (task) => task.id === verifyingTaskId,
-              )
-              if (taskIndex !== -1) {
-                console.log(
-                  '🔗 Completing humanity verification task on blockchain...',
-                  { campaignId, taskIndex },
-                )
-                await completeTask(campaignId, taskIndex)
-
-                // Update local state to mark task as completed
-                setUserTasks((prevTasks) =>
-                  prevTasks.map((task) =>
-                    task.taskId === verifyingTaskId
-                      ? { ...task, completed: true }
-                      : task,
-                  ),
-                )
-
-                // Refresh campaign data to update participant count and other blockchain data
-                await fetchAllCampaignData()
-
-                if (!isJoined) {
-                  setIsJoined(true)
-                }
-
-                toast({
-                  title: 'Task Completed!',
-                  description: `Address ${addressToVerify.slice(
-                    0,
-                    6,
-                  )}...${addressToVerify.slice(
-                    -4,
-                  )} is verified as human and task has been marked complete.`,
-                })
-              } else {
-                console.error(
-                  '❌ Could not find task index for verifyingTaskId:',
-                  verifyingTaskId,
-                )
-                toast({
-                  title: 'Verification Successful!',
-                  description: `Address ${addressToVerify.slice(
-                    0,
-                    6,
-                  )}...${addressToVerify.slice(-4)} is verified as human.`,
-                })
-              }
-            } catch (taskError: any) {
-              console.error(
-                '❌ Error completing task on blockchain:',
-                taskError,
-              )
-              toast({
-                variant: 'destructive',
-                title: 'Task Completion Failed',
-                description:
-                  taskError.message ||
-                  'Could not complete task on blockchain. Please try again.',
-              })
-            }
-          } else {
-            toast({
-              title: 'Verification Successful!',
-              description: `Address ${addressToVerify.slice(
-                0,
-                6,
-              )}...${addressToVerify.slice(-4)} is verified as human.`,
-            })
-          }
-
-          setIsHumanityModalOpen(false)
-          // Reset verifying task state
-          setVerifyingTaskId(null)
-          setVerifyingTaskType(null)
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Not Verified',
-            description: `Address ${addressToVerify.slice(
-              0,
-              6,
-            )}...${addressToVerify.slice(
-              -4,
-            )} is not verified. Please complete verification on Humanity Protocol first.`,
-          })
-        }
-      }
-    } catch (error) {
-      console.error('Error verifying Humanity:', error)
-      toast({
-        variant: 'destructive',
-        title: 'Verification Failed',
-        description: 'Could not verify Humanity status. Please try again.',
-      })
-    } finally {
-      setIsCheckingHumanity(false)
-    }
-  }
+  // Humanity verification is now handled via OAuth flow:
+  // 1. Modal opens → user clicks "Verify with Humanity" → SDK redirects to Humanity OAuth
+  // 2. User authenticates → redirected to /humanity-callback
+  // 3. Callback page exchanges code, verifies presets, saves to DB, redirects back here
+  // 4. The useEffect above detects the result in sessionStorage and auto-completes the task
 
   if (isLoading) {
     return (
@@ -1128,8 +1106,10 @@ export default function CampaignDetailsPage() {
       <HumanityVerificationModal
         isOpen={isHumanityModalOpen}
         onOpenChange={setIsHumanityModalOpen}
-        onVerify={handleVerifyHumanity}
-        isVerifying={isCheckingHumanity}
+        campaignId={campaignId}
+        taskId={verifyingTaskId || undefined}
+        isVerified={userHumanityStatus === true}
+        onVerificationComplete={handleHumanityVerificationComplete}
       />
 
       {/* Campaign Action Confirmation Dialog */}
