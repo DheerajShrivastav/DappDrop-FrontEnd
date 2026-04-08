@@ -57,8 +57,8 @@ export async function POST(request: Request) {
     }
 
     // Simple task type detection without heavy validation
-    const isDiscordTask = taskType === 'DISCORD_JOIN'
-    const isTelegramTask = taskType === 'TELEGRAM_JOIN'
+    const isDiscordTask = taskType === 'JOIN_DISCORD'
+    const isTelegramTask = taskType === 'JOIN_TELEGRAM'
 
     if (isDiscordTask) {
       // Discord verification - use stored server ID from dedicated column
