@@ -57,7 +57,7 @@ export async function POST(request: Request) {
         telegramInviteLink,
         telegramChatId,
         requiresHumanityVerification: requiresHumanityVerification || false,
-        metadata: metadata && typeof metadata === 'object' ? metadata : undefined,
+        metadata: metadata && typeof metadata === 'object' ? metadata : null,
       },
       create: {
         campaignId,
