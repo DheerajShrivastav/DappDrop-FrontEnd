@@ -77,11 +77,11 @@ import {
   createAndActivateCampaign,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
 import {
-  generateCampaign,
   parseCampaignGenerationError,
   type GenerationStage,
-} from '@/ai/flows/generate-campaign-flow'
+} from '@/ai/flows/generate-campaign.errors'
 import { AlertCircle, Wifi, Clock, RefreshCw } from 'lucide-react'
 
 // Ethereum address regex: 0x followed by 40 hex characters
