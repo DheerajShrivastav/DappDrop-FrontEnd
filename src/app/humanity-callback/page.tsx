@@ -41,32 +41,43 @@ function CallbackContent() {
       try {
         setStatus('Verifying identity...')
 
-        // Verify the is_human preset
-        const verification = await verify('is_human')
-        const isHuman = verification.verified
+        // Client-side verify for UX feedback only; server will re-validate
+        await verify('is_human')
 
         setStatus('Saving verification...')
 
-        // Save to our backend DB
+        // Send accessToken to backend for server-side verification.
+        // The server validates the token against the Humanity Protocol
+        // and determines isHuman — we do NOT send a client-side isHuman flag.
         const walletAddress = sessionStorage.getItem('humanity_wallet_address')
+        let serverIsHuman = false
+        let serverVerifiedAt: string | undefined
+
         if (walletAddress) {
-          await fetch('/api/verify-humanity', {
+          const response = await fetch('/api/verify-humanity', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               walletAddress,
-              isHuman,
               accessToken,
             }),
           })
+          const data = await response.json()
+
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Server-side verification failed')
+          }
+
+          serverIsHuman = data.isHuman
+          serverVerifiedAt = data.verifiedAt
         }
 
-        // Store the result for the campaign page to pick up
+        // Store the server-validated result for the campaign page to pick up
         sessionStorage.setItem(
           'humanity_verification_result',
           JSON.stringify({
-            isHuman,
-            verifiedAt: new Date().toISOString(),
+            isHuman: serverIsHuman,
+            verifiedAt: serverVerifiedAt ?? new Date().toISOString(),
           }),
         )
 

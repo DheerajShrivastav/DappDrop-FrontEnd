@@ -77,7 +77,12 @@ import {
   createAndActivateCampaign,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
-import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
+import {
+  generateCampaign,
+  parseCampaignGenerationError,
+  type GenerationStage,
+} from '@/ai/flows/generate-campaign-flow'
+import { AlertCircle, Wifi, Clock, RefreshCw } from 'lucide-react'
 
 // Ethereum address regex: 0x followed by 40 hex characters
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
@@ -205,6 +210,12 @@ export default function CreateCampaignPage() {
   const [step, setStep] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [generationStage, setGenerationStage] = useState<GenerationStage | null>(null)
+  const [generationError, setGenerationError] = useState<{
+    message: string
+    retryable: boolean
+    category: string
+  } | null>(null)
   const [isBecomingHost, setIsBecomingHost] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [createMode, setCreateMode] = useState<'draft' | 'activate'>('activate')
@@ -403,36 +414,92 @@ export default function CreateCampaignPage() {
       })
       return
     }
+    if (aiPrompt.trim().length < 20) {
+      toast({
+        variant: 'destructive',
+        title: 'Description Too Short',
+        description: 'Please provide at least 20 characters so the AI has enough context to work with.',
+      })
+      return
+    }
     setIsGenerating(true)
+    setGenerationError(null)
+    setGenerationStage('planning')
     try {
+      // The server action handles all stages internally.
+      // We simulate stage transitions based on typical timing.
+      const stageTimer1 = setTimeout(() => setGenerationStage('generating'), 8000)
+      const stageTimer2 = setTimeout(() => setGenerationStage('validating'), 25000)
+
       const result = await generateCampaign(aiPrompt)
+
+      clearTimeout(stageTimer1)
+      clearTimeout(stageTimer2)
+
       const currentValues = form.getValues()
       form.reset({
-        ...currentValues, // Keep existing values for reward, dates, etc.
+        ...currentValues,
         title: result.title,
         shortDescription: result.shortDescription,
         description: result.description,
         tasks: result.tasks,
       })
       toast({
-        title: 'Campaign Drafted!',
-        description: 'The campaign details have been filled in for you.',
+        title: '✨ Campaign Drafted!',
+        description: 'AI has generated your campaign. Review and customize the details below.',
       })
-      setStep(1) // Move to the first step of the form
+      setStep(1)
     } catch (e: any) {
       console.error('Error generating campaign:', e)
-      // Extract user-friendly error message
-      const errorMessage =
-        e?.message ||
-        e?.originalMessage ||
-        'Could not generate the campaign. Please try again.'
+
+      let errorTitle = 'Generation Failed'
+      let errorMessage = 'Something went wrong. Please try again.'
+      let retryable = true
+      let category = 'unknown'
+
+      const parsed = parseCampaignGenerationError(e)
+      if (parsed) {
+        errorMessage = parsed.userMessage
+        retryable = parsed.retryable
+        category = parsed.category
+
+        switch (parsed.category) {
+          case 'rate_limit':
+            errorTitle = '⏳ AI Service Busy'
+            break
+          case 'config':
+            errorTitle = '🔑 Configuration Error'
+            break
+          case 'network':
+            errorTitle = '🌐 Connection Error'
+            break
+          case 'validation':
+            errorTitle = '📝 Invalid Input'
+            break
+          case 'api_error':
+            errorTitle = '🤖 AI Service Error'
+            break
+          default:
+            errorTitle = '❌ Generation Failed'
+        }
+      } else {
+        errorMessage =
+          e?.message ||
+          e?.originalMessage ||
+          'Could not generate the campaign. Please try again.'
+      }
+
+      setGenerationError({ message: errorMessage, retryable, category })
+
       toast({
         variant: 'destructive',
-        title: 'AI Generation Failed',
+        title: errorTitle,
         description: errorMessage,
+        duration: 8000,
       })
     } finally {
       setIsGenerating(false)
+      setGenerationStage(null)
     }
   }
 
@@ -543,31 +610,128 @@ export default function CreateCampaignPage() {
                     <Textarea
                       placeholder="E.g., 'My project is a decentralized lending protocol on Sepolia that allows users to borrow against their NFTs...'"
                       value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
+                      onChange={(e) => {
+                        setAiPrompt(e.target.value)
+                        if (generationError) setGenerationError(null)
+                      }}
                       rows={4}
                       className="bg-card"
+                      disabled={isGenerating}
                     />
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Our AI will draft a campaign title, description, and tasks
-                      for you.
-                    </p>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Our AI will draft a campaign title, description, and tasks
+                        for you.
+                      </p>
+                      <p className={cn(
+                        'text-xs tabular-nums',
+                        aiPrompt.trim().length < 20 ? 'text-muted-foreground' : 'text-green-500',
+                      )}>
+                        {aiPrompt.trim().length}/20 min
+                      </p>
+                    </div>
+
+                    {/* Generation stage progress */}
+                    {isGenerating && generationStage && (
+                      <div className="mt-4 p-4 rounded-lg bg-card border animate-in fade-in-50">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">
+                              {generationStage === 'planning' && '🧠 Analyzing your project...'}
+                              {generationStage === 'generating' && '✍️ Writing campaign content...'}
+                              {generationStage === 'validating' && '🔍 Reviewing quality...'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {generationStage === 'planning' && 'Deciding campaign strategy, target audience, and task types'}
+                              {generationStage === 'generating' && 'Crafting title, description, and tasks based on the plan'}
+                              {generationStage === 'validating' && 'Checking for quality, accuracy, and consistency'}
+                            </p>
+                          </div>
+                        </div>
+                        {/* Stage dots */}
+                        <div className="flex items-center gap-2 mt-3">
+                          {(['planning', 'generating', 'validating'] as const).map((stage, idx) => (
+                            <React.Fragment key={stage}>
+                              <div className={cn(
+                                'h-2 w-2 rounded-full transition-colors duration-300',
+                                generationStage === stage
+                                  ? 'bg-primary animate-pulse'
+                                  : (['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
+                                    ? 'bg-primary'
+                                    : 'bg-muted'),
+                              )} />
+                              {idx < 2 && (
+                                <div className={cn(
+                                  'h-0.5 flex-1 rounded transition-colors duration-300',
+                                  ['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
+                                    ? 'bg-primary'
+                                    : 'bg-muted',
+                                )} />
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                        <div className="flex justify-between mt-1">
+                          <span className="text-[10px] text-muted-foreground">Plan</span>
+                          <span className="text-[10px] text-muted-foreground">Generate</span>
+                          <span className="text-[10px] text-muted-foreground">Validate</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Error display with retry */}
+                    {generationError && !isGenerating && (
+                      <div className="mt-4 p-4 rounded-lg border border-destructive/50 bg-destructive/5 animate-in fade-in-50">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5">
+                            {generationError.category === 'rate_limit' && <Clock className="h-5 w-5 text-amber-500" />}
+                            {generationError.category === 'network' && <Wifi className="h-5 w-5 text-destructive" />}
+                            {!['rate_limit', 'network'].includes(generationError.category) && <AlertCircle className="h-5 w-5 text-destructive" />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-destructive">
+                              {generationError.message}
+                            </p>
+                            {generationError.retryable && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={handleGenerate}
+                              >
+                                <RefreshCw className="mr-2 h-3 w-3" />
+                                Try Again
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex justify-end gap-4 mt-4">
                       <Button
                         type="button"
                         variant="ghost"
                         onClick={() => setStep(1)}
+                        disabled={isGenerating}
                       >
                         Skip &amp; Create Manually
                       </Button>
                       <Button
                         type="button"
                         onClick={handleGenerate}
-                        disabled={isGenerating}
+                        disabled={isGenerating || aiPrompt.trim().length < 20}
                       >
-                        {isGenerating && (
+                        {isGenerating ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-2 h-4 w-4" />
                         )}
-                        Generate Campaign
+                        {isGenerating ? 'Generating...' : 'Generate Campaign'}
                       </Button>
                     </div>
                   </div>

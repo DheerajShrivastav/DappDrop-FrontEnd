@@ -14,23 +14,32 @@ import { validateWalletAddress } from '@/lib/validation-utils'
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { walletAddress, isHuman, accessToken } = body
+    const { walletAddress, accessToken } = body
+
+    if (!accessToken) {
+      return NextResponse.json(
+        { success: false, error: 'Access token is required for verification' },
+        { status: 400 },
+      )
+    }
 
     const validAddress = validateWalletAddress(walletAddress)
 
-    const result = await saveHumanityVerification(
-      validAddress,
-      isHuman ?? false,
-      accessToken,
-    )
+    // Server-side verification: accessToken is validated against the
+    // Humanity Protocol inside saveHumanityVerification. The client-provided
+    // isHuman field (if any) is intentionally ignored.
+    const result = await saveHumanityVerification(validAddress, accessToken)
 
     if (result.error) {
-      return NextResponse.json({
-        success: true,
-        isHuman: result.is_human,
-        walletAddress: result.wallet_address,
-        error: result.error,
-      })
+      return NextResponse.json(
+        {
+          success: false,
+          isHuman: result.is_human,
+          walletAddress: result.wallet_address,
+          error: result.error,
+        },
+        { status: 403 },
+      )
     }
 
     return NextResponse.json({

@@ -3,6 +3,7 @@
 import { prisma } from './prisma'
 import type { HumanityVerificationResponse } from './types'
 import { isValidEthereumAddress } from './validation-utils'
+import { HumanitySDK } from '@humanity-org/connect-sdk'
 
 // Cache TTL: 24 hours in milliseconds
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
@@ -38,18 +39,63 @@ function checkRateLimit(walletAddress: string): boolean {
   return true
 }
 
+// Lazy-initialized singleton HumanitySDK instance for server-side verification
+let _humanitySdk: HumanitySDK | null = null
+
+function getHumanitySDK(): HumanitySDK {
+  if (!_humanitySdk) {
+    const clientId = process.env.NEXT_PUBLIC_HUMANITY_CLIENT_ID
+    if (!clientId) {
+      throw new Error('NEXT_PUBLIC_HUMANITY_CLIENT_ID is not configured')
+    }
+    _humanitySdk = new HumanitySDK({
+      clientId,
+      clientSecret: process.env.HUMANITY_CLIENT_SECRET,
+      environment:
+        (process.env.NEXT_PUBLIC_HUMANITY_ENVIRONMENT as 'sandbox' | 'production') ?? 'sandbox',
+    })
+  }
+  return _humanitySdk
+}
+
 /**
- * Save humanity verification result from the OAuth SDK flow.
- * Called after the client completes the OAuth + verifyPresets flow.
+ * Verify an access token against the Humanity Protocol server-side.
+ * Uses the HumanitySDK.verifyPreset() to confirm the is_human preset
+ * directly with the protocol, ensuring the token is valid and the
+ * user is genuinely verified.
+ *
+ * @param accessToken - The OAuth access token to verify
+ * @returns The verification result from the protocol
+ * @throws Error if the token is invalid, expired, or verification fails
+ */
+export async function verifyHumanityToken(
+  accessToken: string,
+): Promise<{ isHuman: boolean; verifiedAt?: string }> {
+  const sdk = getHumanitySDK()
+
+  const result = await sdk.verifyPreset({
+    accessToken,
+    preset: 'is_human',
+  })
+
+  return {
+    isHuman: result.value === true && result.status === 'valid',
+    verifiedAt: result.verifiedAt,
+  }
+}
+
+/**
+ * Save humanity verification result after server-side validation.
+ * The accessToken is verified against the Humanity Protocol before
+ * persisting any result. The client-provided isHuman flag is ignored;
+ * only the protocol's server-side response is trusted.
  *
  * @param walletAddress - The wallet address being verified
- * @param isHuman - Whether the user passed the is_human preset
- * @param accessToken - The OAuth access token (for audit trail)
+ * @param accessToken - The OAuth access token (required for server-side validation)
  */
 export async function saveHumanityVerification(
   walletAddress: string,
-  isHuman: boolean,
-  accessToken?: string,
+  accessToken: string,
 ): Promise<HumanityVerificationResponse> {
   try {
     if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
@@ -57,6 +103,14 @@ export async function saveHumanityVerification(
         is_human: false,
         wallet_address: walletAddress,
         error: 'Invalid wallet address format',
+      }
+    }
+
+    if (!accessToken) {
+      return {
+        is_human: false,
+        wallet_address: walletAddress,
+        error: 'Access token is required for verification',
       }
     }
 
@@ -68,13 +122,29 @@ export async function saveHumanityVerification(
       }
     }
 
-    // Update user record in database
-    await updateUserVerificationStatus(walletAddress, isHuman)
+    // Server-side verification: validate the token with Humanity Protocol
+    let protocolResult: { isHuman: boolean; verifiedAt?: string }
+    try {
+      protocolResult = await verifyHumanityToken(accessToken)
+    } catch (tokenError: any) {
+      console.error('Humanity Protocol token verification failed:', {
+        wallet: walletAddress,
+        error: tokenError.message,
+      })
+      return {
+        is_human: false,
+        wallet_address: walletAddress,
+        error: 'Access token verification failed. Token may be invalid or expired.',
+      }
+    }
+
+    // Persist the protocol-verified result (NOT the client-provided value)
+    await updateUserVerificationStatus(walletAddress, protocolResult.isHuman)
 
     return {
-      is_human: isHuman,
+      is_human: protocolResult.isHuman,
       wallet_address: walletAddress,
-      verified_at: new Date().toISOString(),
+      verified_at: protocolResult.verifiedAt ?? new Date().toISOString(),
     }
   } catch (error: any) {
     console.error('Error saving humanity verification:', {
