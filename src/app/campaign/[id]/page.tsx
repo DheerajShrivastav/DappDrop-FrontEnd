@@ -626,7 +626,7 @@ export default function CampaignDetailsPage() {
               'Humanity verification successful and task marked complete.',
           })
         } catch (err: any) {
-          console.error('Error completing task on blockchain:', err)
+          console.warn('Error completing task on blockchain:', err?.message || err)
           toast({
             variant: 'destructive',
             title: 'Task Completion Failed',

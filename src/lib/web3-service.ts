@@ -386,8 +386,12 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
 
           campaigns.push(campaign)
         }
-      } catch (error) {
-        console.error(`Failed to fetch campaign ${i}:`, error)
+      } catch (error: any) {
+        if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+          console.warn(`Campaign ${i} not found on blockchain or reverted.`)
+        } else {
+          console.warn(`Failed to fetch campaign ${i}:`, error?.message || 'Unknown error')
+        }
       }
     }
     // Show open and ended campaigns, but not drafts
@@ -460,11 +464,12 @@ export const getCampaignsByHostAddress = async (
           )
 
           return campaign
-        } catch (error) {
-          console.error(
-            `Failed to fetch campaign ${id} for host ${hostAddress}:`,
-            error
-          )
+        } catch (error: any) {
+          if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+            console.warn(`Campaign ${id} not found for host ${hostAddress} (reverted).`)
+          } else {
+            console.warn(`Failed to fetch campaign ${id} for host ${hostAddress}:`, error?.message || 'Unknown error')
+          }
           return null
         }
       })
@@ -549,8 +554,12 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
     })
 
     return campaign
-  } catch (error) {
-    console.error(`Error fetching campaign ${id}:`, error)
+  } catch (error: any) {
+    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+      console.warn(`Campaign ${id} not found on blockchain or reverted.`)
+    } else {
+      console.warn(`Error fetching campaign ${id}:`, error?.message || 'Unknown error')
+    }
     return null
   }
 }
@@ -1246,11 +1255,12 @@ export const hasParticipated = async (
     // Convert campaignId from string to number for smart contract calls
     const campaignIdNumber = parseInt(campaignId, 10)
     return await contractToUse.hasParticipated(campaignIdNumber, participantAddress)
-  } catch (error) {
-    console.error(
-      `Error checking participation for ${participantAddress} in campaign ${campaignId}:`,
-      error
-    )
+  } catch (error: any) {
+    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+      console.warn(`Campaign ${campaignId} or participation data not found/reverted.`)
+    } else {
+      console.warn(`Error checking participation for ${participantAddress} in campaign ${campaignId}:`, error?.message || 'Unknown error')
+    }
     // Don't show a toast for this, as it might be called frequently
     return false
   }
@@ -1424,9 +1434,24 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
   // This function is called with the user's connected wallet.
   // The smart contract automatically uses msg.sender as the participant.
   const signer = await getSigner()
-  const contractWithSigner = contract.connect(signer) as Contract
+  let contractWithSigner = contract.connect(signer) as Contract
 
   try {
+    if (provider) {
+      const network = await provider.getNetwork()
+      if (network.chainId !== BigInt(11155111)) { // Sepolia chain ID
+        if (window.ethereum) {
+          await switchOrAddSepoliaNetwork(window.ethereum as any)
+          // Refresh signer/contract after network switch
+          const providerRefresh = new ethers.BrowserProvider(window.ethereum)
+          const signerRefresh = await providerRefresh.getSigner()
+          contractWithSigner = contract.connect(signerRefresh) as Contract
+        } else {
+          throw new Error('Please switch to Sepolia testnet in your wallet.')
+        }
+      }
+    }
+
     // Convert campaignId from string to number for all smart contract calls
     const campaignIdNumber = parseInt(campaignId, 10)
 
@@ -1437,7 +1462,8 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     })
 
     // First, let's check the campaign status and other details
-    const campaignData = await contractWithSigner.getCampaign(campaignIdNumber)
+    const contractToRead = readOnlyContract || contractWithSigner
+    const campaignData = await contractToRead.getCampaign(campaignIdNumber)
     console.log('Campaign data before task completion:', {
       id: campaignData.id.toString(),
       status: campaignData.status.toString(),
@@ -1469,10 +1495,14 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
 
     console.log('Task completed successfully!')
   } catch (error: any) {
-    console.error(
-      `Error completing task ${taskIndex} for campaign ${campaignId}:`,
-      error
-    )
+    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+      console.warn(`Campaign ${campaignId} not found or reverted when attempting task completion.`)
+    } else {
+      console.warn(
+        `Error completing task ${taskIndex} for campaign ${campaignId}:`,
+        error?.message || 'Unknown error'
+      )
+    }
 
     let description = `Failed to complete task.`
 
@@ -1616,9 +1646,13 @@ export const getUserTaskCompletionStatus = async (
     })
 
     return completionStatus
-  } catch (error) {
-    console.error('Error checking user task completion status:', error)
-    console.error('Error details:', {
+  } catch (error: any) {
+    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+      console.warn(`Campaign ${campaignId} task completion data not found/reverted for ${userAddress}.`)
+    } else {
+      console.warn('Error checking user task completion status:', error?.message || 'Unknown error')
+    }
+    console.warn('Error details:', {
       campaignId,
       userAddress,
       taskCount: tasks.length,
@@ -1722,8 +1756,12 @@ export const getCampaignParticipantAddresses = async (
     })
 
     return participantAddresses
-  } catch (error) {
-    console.error('Error fetching participant addresses:', error)
+  } catch (error: any) {
+    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+      console.warn(`Campaign ${campaignId} participants not found/reverted (probably uncreated).`)
+    } else {
+      console.warn('Error fetching participant addresses:', error?.message || 'Unknown error')
+    }
     return []
   }
 }
@@ -1813,8 +1851,12 @@ export const getCampaignParticipants = async (
     )
 
     return participantData
-  } catch (error) {
-    console.error('Error fetching participants:', error)
+  } catch (error: any) {
+    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+      console.warn(`Campaign ${campaign.id} participant data not found/reverted.`)
+    } else {
+      console.warn('Error fetching participants:', error?.message || 'Unknown error')
+    }
     toast({
       variant: 'destructive',
       title: 'Error',

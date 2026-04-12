@@ -275,6 +275,14 @@ export function HumanityVerificationModal({
               />
             </div>
           )}
+          {isVerified && onVerificationComplete && taskId && (
+            <Button
+              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+              onClick={() => onVerificationComplete(true)}
+            >
+              Complete Task
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

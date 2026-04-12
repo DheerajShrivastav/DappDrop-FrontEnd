@@ -14,7 +14,7 @@ import { Loader2 } from 'lucide-react'
 function CallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { isAuthenticated, isLoading, accessToken } = useAuth()
+  const { isAuthenticated, isLoading, accessToken, error: authError } = useAuth()
   const { verify } = useHumanity()
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState('Completing authentication...')
@@ -30,8 +30,20 @@ function CallbackContent() {
       return
     }
 
+    if (authError) {
+      console.error('Auth error from SDK:', authError)
+      setError(authError.message || 'Authentication failed in SDK')
+      return
+    }
+
     // Wait for the SDK to finish processing the auth code
-    if (isLoading || !isAuthenticated || !accessToken) return
+    if (isLoading) return
+    
+    if (!isAuthenticated || !accessToken) {
+      // If loading finished but we aren't authenticated, something went silently wrong
+      console.log('Finished loading but not authenticated. authStatus might be unauthenticated.')
+      return
+    }
 
     // Prevent double processing
     if (processedRef.current) return
