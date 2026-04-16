@@ -41,7 +41,8 @@ function CallbackContent() {
     
     if (!isAuthenticated || !accessToken) {
       // If loading finished but we aren't authenticated, something went silently wrong
-      console.log('Finished loading but not authenticated. authStatus might be unauthenticated.')
+      console.error('Finished loading but not authenticated. authStatus might be unauthenticated.')
+      setError('Authentication failed: No access token or user identity was returned.')
       return
     }
 

@@ -587,9 +587,11 @@ export default function CampaignDetailsPage() {
           }
         }
 
+      } else {
         toast({
-          title: 'Verification Successful!',
-          description: 'Your wallet is verified as human.',
+          variant: 'destructive',
+          title: 'Verification Failed',
+          description: 'Humanity Protocol did not verify this wallet as human. Please ensure you have completed Palm verification.',
         })
       }
     } catch (e) {
@@ -599,7 +601,14 @@ export default function CampaignDetailsPage() {
 
   // Handle humanity verification completion (kept for direct calls)
   const handleHumanityVerificationComplete = async (isHuman: boolean) => {
-    if (!isHuman) return
+    if (!isHuman) {
+      toast({
+        variant: 'destructive',
+        title: 'Verification Failed',
+        description: 'You are not verified as human by Humanity Protocol.',
+      })
+      return
+    }
 
     setUserHumanityStatus(true)
 
