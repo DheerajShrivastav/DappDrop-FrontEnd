@@ -11,17 +11,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   ShieldCheck,
   Loader2,
   HelpCircle,
   CheckCircle2,
-  Wallet,
-  Edit3,
+  Fingerprint,
 } from 'lucide-react'
 import { useWallet } from '@/context/wallet-provider'
-import { isValidEthereumAddress } from '@/lib/validation-utils'
 import {
   HumanityConnect,
   type HumanityReactError,
@@ -51,26 +48,14 @@ export function HumanityVerificationModal({
   onVerificationComplete,
 }: HumanityVerificationModalProps) {
   const { address, isConnected } = useWallet()
-  const [useCustomAddress, setUseCustomAddress] = useState(false)
-  const [customWalletAddress, setCustomWalletAddress] = useState('')
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [verificationError, setVerificationError] = useState<string | null>(null)
-
-  const selectedAddress = useCustomAddress ? customWalletAddress : address
-
-  const canStartFlow = () => {
-    if (useCustomAddress) {
-      return customWalletAddress && isValidEthereumAddress(customWalletAddress)
-    }
-    return isConnected && address
-  }
 
   // Store context in sessionStorage before the redirect so the callback page
   // and campaign page can pick it up after OAuth completes.
   const storeContextBeforeRedirect = () => {
-    const walletToVerify = selectedAddress || address
-    if (walletToVerify) {
-      sessionStorage.setItem('humanity_wallet_address', walletToVerify)
+    if (address) {
+      sessionStorage.setItem('humanity_wallet_address', address)
     }
     sessionStorage.setItem('humanity_return_to', window.location.pathname)
     if (campaignId && taskId) {
@@ -92,7 +77,7 @@ export function HumanityVerificationModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[460px] gap-4">
+      <DialogContent className="sm:max-w-[420px] gap-4">
         <DialogHeader className="space-y-2">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <ShieldCheck className="h-5 w-5 text-purple-500" />
@@ -127,102 +112,28 @@ export function HumanityVerificationModal({
         <div className="space-y-4 py-2">
           {isVerified ? (
             <div className="flex items-center gap-3 p-4 rounded-lg border-2 border-green-500/30 bg-green-500/10">
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
+              <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
               <div>
-                <p className="text-sm font-medium">Verified</p>
+                <p className="text-sm font-medium">Verified Human</p>
                 <p className="text-xs text-muted-foreground">
-                  {address?.slice(0, 6)}...{address?.slice(-4)} is verified as
-                  human
+                  {address?.slice(0, 6)}...{address?.slice(-4)}&nbsp;is verified
+                  with Humanity Protocol
                 </p>
               </div>
             </div>
           ) : (
             <>
-              {/* Wallet selection */}
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Select wallet to verify</p>
-
-                {/* Connected wallet option */}
-                <button
-                  onClick={() => setUseCustomAddress(false)}
-                  disabled={!isConnected}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all ${
-                    !useCustomAddress && isConnected
-                      ? 'border-purple-500 bg-purple-500/10'
-                      : 'border-border hover:border-border/80'
-                  } ${
-                    !isConnected
-                      ? 'opacity-50 cursor-not-allowed'
-                      : 'cursor-pointer'
-                  }`}
-                >
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      !useCustomAddress && isConnected
-                        ? 'border-purple-500'
-                        : 'border-muted-foreground'
-                    }`}
-                  >
-                    {!useCustomAddress && isConnected && (
-                      <div className="w-2 h-2 rounded-full bg-purple-500" />
-                    )}
-                  </div>
-                  <Wallet className="h-4 w-4 text-foreground" />
-                  <span className="text-sm font-medium">Connected Wallet</span>
-                  {isConnected && address && (
-                    <span className="ml-auto text-xs font-mono text-muted-foreground bg-secondary px-2 py-1 rounded">
-                      {address.slice(0, 6)}...{address.slice(-4)}
-                    </span>
-                  )}
-                </button>
-
-                {!isConnected && (
-                  <p className="text-xs text-yellow-600 dark:text-yellow-400 flex items-center gap-1.5 pl-1">
-                    No wallet connected. Use custom address below.
+              {/* Info card */}
+              <div className="flex items-start gap-3 p-4 rounded-lg border border-purple-500/20 bg-purple-500/5">
+                <Fingerprint className="h-5 w-5 text-purple-500 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Biometric Proof of Humanity</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Click below to connect your Humanity account. You will be
+                    redirected to the Humanity Protocol to complete a one-time
+                    palm scan verification.
                   </p>
-                )}
-
-                {/* Custom address option */}
-                <button
-                  onClick={() => setUseCustomAddress(true)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all cursor-pointer ${
-                    useCustomAddress
-                      ? 'border-purple-500 bg-purple-500/10'
-                      : 'border-border hover:border-border/80'
-                  }`}
-                >
-                  <div
-                    className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                      useCustomAddress
-                        ? 'border-purple-500'
-                        : 'border-muted-foreground'
-                    }`}
-                  >
-                    {useCustomAddress && (
-                      <div className="w-2 h-2 rounded-full bg-purple-500" />
-                    )}
-                  </div>
-                  <Edit3 className="h-4 w-4 text-foreground" />
-                  <span className="text-sm font-medium">Custom Address</span>
-                </button>
-
-                {/* Custom address input */}
-                {useCustomAddress && (
-                  <div className="space-y-2 pl-7">
-                    <Input
-                      placeholder="0x..."
-                      value={customWalletAddress}
-                      onChange={(e) => setCustomWalletAddress(e.target.value)}
-                      className="font-mono text-xs h-9"
-                    />
-                    {customWalletAddress &&
-                      !isValidEthereumAddress(customWalletAddress) && (
-                        <p className="text-xs text-destructive">
-                          Invalid Ethereum address
-                        </p>
-                      )}
-                  </div>
-                )}
+                </div>
               </div>
 
               {/* Error message */}
@@ -241,6 +152,12 @@ export function HumanityVerificationModal({
                   </span>
                 </div>
               )}
+
+              {!isConnected && !isRedirecting && (
+                <p className="text-xs text-yellow-600 dark:text-yellow-400 text-center">
+                  Please connect your wallet before verifying.
+                </p>
+              )}
             </>
           )}
         </div>
@@ -254,6 +171,7 @@ export function HumanityVerificationModal({
           >
             {isVerified ? 'Close' : 'Cancel'}
           </Button>
+
           {!isVerified && !isRedirecting && (
             <div
               className="flex-1"
@@ -269,12 +187,13 @@ export function HumanityVerificationModal({
                 onError={handleAuthError}
                 variant="primary"
                 size="sm"
-                label="Verify with Humanity"
-                disabled={!canStartFlow()}
+                label="Connect Humanity Account"
+                disabled={!isConnected}
                 className="w-full"
               />
             </div>
           )}
+
           {isVerified && onVerificationComplete && taskId && (
             <Button
               className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
