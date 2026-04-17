@@ -83,6 +83,7 @@ import {
   type GenerationStage,
 } from '@/ai/flows/generate-campaign.errors'
 import { AlertCircle, Wifi, Clock, RefreshCw } from 'lucide-react'
+import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
@@ -103,6 +104,8 @@ const taskSchema = z
     verificationData: z.string().optional(),
     discordInviteLink: z.string().optional(),
     telegramInviteLink: z.string().optional(),
+    // Humanity Protocol preset for HUMANITY_VERIFICATION tasks
+    humanityPreset: z.string().optional(),
     // Payment metadata fields for ONCHAIN_TX tasks
     paymentRequired: z.boolean().optional(),
     paymentRecipient: z.string().optional(),
@@ -1609,6 +1612,57 @@ export default function CreateCampaignPage() {
                               </div>
                             </TooltipProvider>
                           )}
+                        </div>
+                      )}
+
+                      {tasks[index].type === 'HUMANITY_VERIFICATION' && (
+                        <div className="space-y-4">
+                          <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3 dark:bg-purple-950/20 dark:border-purple-800/40">
+                            <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
+                              <ShieldCheck className="h-5 w-5" />
+                              <h4 className="font-semibold">Verification Preset</h4>
+                            </div>
+                            <p className="text-sm text-purple-700 dark:text-purple-400">
+                              Choose which Humanity Protocol credential users
+                              must prove to complete this task.
+                            </p>
+                            <FormField
+                              control={form.control}
+                              name={`tasks.${index}.humanityPreset`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Humanity Preset</FormLabel>
+                                  <Select
+                                    onValueChange={field.onChange}
+                                    value={field.value ?? 'is_human'}
+                                    defaultValue="is_human"
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select verification preset" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      {HUMANITY_PRESETS.map((p) => (
+                                        <SelectItem key={p.preset} value={p.preset}>
+                                          <span className="flex items-center gap-2">
+                                            <span>{p.icon}</span>
+                                            <span>{p.label}</span>
+                                          </span>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <FormDescription>
+                                    {HUMANITY_PRESETS.find(
+                                      (p) => p.preset === (field.value ?? 'is_human'),
+                                    )?.description}
+                                  </FormDescription>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>

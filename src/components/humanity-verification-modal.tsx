@@ -16,7 +16,6 @@ import {
   Loader2,
   HelpCircle,
   CheckCircle2,
-  Fingerprint,
 } from 'lucide-react'
 import { useWallet } from '@/context/wallet-provider'
 import {
@@ -29,6 +28,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  getPresetConfig,
+  getScopesForPreset,
+  DEFAULT_PRESET,
+  type HumanityPreset,
+} from '@/lib/humanity-presets'
 
 interface HumanityVerificationModalProps {
   isOpen: boolean
@@ -37,6 +42,8 @@ interface HumanityVerificationModalProps {
   taskId?: string
   isVerified?: boolean
   onVerificationComplete?: (isHuman: boolean) => void
+  /** Which Humanity preset this task requires. Defaults to 'is_human'. */
+  preset?: HumanityPreset | string
 }
 
 export function HumanityVerificationModal({
@@ -46,10 +53,16 @@ export function HumanityVerificationModal({
   taskId,
   isVerified = false,
   onVerificationComplete,
+  preset,
 }: HumanityVerificationModalProps) {
   const { address, isConnected } = useWallet()
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [verificationError, setVerificationError] = useState<string | null>(null)
+
+  // Resolve the active preset and its config from the registry
+  const activePreset = preset ?? DEFAULT_PRESET
+  const presetConfig = getPresetConfig(activePreset)
+  const requiredScopes = getScopesForPreset(activePreset)
 
   // Store context in sessionStorage before the redirect so the callback page
   // and campaign page can pick it up after OAuth completes.
@@ -57,6 +70,8 @@ export function HumanityVerificationModal({
     if (address) {
       sessionStorage.setItem('humanity_wallet_address', address)
     }
+    // Store the preset so the callback knows what to verify
+    sessionStorage.setItem('humanity_preset', activePreset)
     sessionStorage.setItem('humanity_return_to', window.location.pathname)
     if (campaignId && taskId) {
       sessionStorage.setItem(
@@ -123,15 +138,21 @@ export function HumanityVerificationModal({
             </div>
           ) : (
             <>
-              {/* Info card */}
+              {/* Preset info card */}
               <div className="flex items-start gap-3 p-4 rounded-lg border border-purple-500/20 bg-purple-500/5">
-                <Fingerprint className="h-5 w-5 text-purple-500 mt-0.5 shrink-0" />
+                <span className="text-xl mt-0.5 shrink-0" role="img" aria-label="preset icon">
+                  {presetConfig?.icon ?? '🛡️'}
+                </span>
                 <div className="space-y-1">
-                  <p className="text-sm font-medium">Biometric Proof of Humanity</p>
+                  <p className="text-sm font-medium">
+                    {presetConfig?.label ?? 'Humanity Verification'}
+                  </p>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    Click below to connect your Humanity account. You will be
-                    redirected to the Humanity Protocol to complete a one-time
-                    palm scan verification.
+                    {presetConfig?.description ??
+                      'You will be redirected to Humanity Protocol to complete verification.'}
+                  </p>
+                  <p className="text-xs text-purple-600 font-mono mt-1">
+                    Preset: <span className="font-semibold">{activePreset}</span>
                   </p>
                 </div>
               </div>
@@ -176,13 +197,13 @@ export function HumanityVerificationModal({
             <div
               className="flex-1"
               onClick={() => {
-                // Store context BEFORE the SDK triggers the redirect
+                // Store preset + context BEFORE the SDK triggers the redirect
                 storeContextBeforeRedirect()
                 setIsRedirecting(true)
               }}
             >
               <HumanityConnect
-                scopes={['openid', 'identity:read']}
+                scopes={requiredScopes}
                 mode="redirect"
                 onError={handleAuthError}
                 variant="primary"

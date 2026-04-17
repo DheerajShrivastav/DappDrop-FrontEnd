@@ -60,27 +60,30 @@ function getHumanitySDK(): HumanitySDK {
 
 /**
  * Verify an access token against the Humanity Protocol server-side.
- * Uses the HumanitySDK.verifyPreset() to confirm the is_human preset
+ * Uses the HumanitySDK.verifyPreset() to confirm the requested preset
  * directly with the protocol, ensuring the token is valid and the
- * user is genuinely verified.
+ * user genuinely passes the check.
  *
  * @param accessToken - The OAuth access token to verify
+ * @param preset - The Humanity preset to verify against (default: 'is_human')
  * @returns The verification result from the protocol
  * @throws Error if the token is invalid, expired, or verification fails
  */
 export async function verifyHumanityToken(
   accessToken: string,
-): Promise<{ isHuman: boolean; verifiedAt?: string }> {
+  preset: string = 'is_human',
+): Promise<{ isHuman: boolean; verifiedAt?: string; presetChecked: string }> {
   const sdk = getHumanitySDK()
 
   const result = await sdk.verifyPreset({
     accessToken,
-    preset: 'is_human',
+    preset,
   })
 
   return {
     isHuman: result.value === true && result.status === 'valid',
     verifiedAt: result.verifiedAt,
+    presetChecked: preset,
   }
 }
 
@@ -92,10 +95,12 @@ export async function verifyHumanityToken(
  *
  * @param walletAddress - The wallet address being verified
  * @param accessToken - The OAuth access token (required for server-side validation)
+ * @param preset - The Humanity preset to verify against (default: 'is_human')
  */
 export async function saveHumanityVerification(
   walletAddress: string,
   accessToken: string,
+  preset: string = 'is_human',
 ): Promise<HumanityVerificationResponse> {
   try {
     if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
@@ -123,9 +128,9 @@ export async function saveHumanityVerification(
     }
 
     // Server-side verification: validate the token with Humanity Protocol
-    let protocolResult: { isHuman: boolean; verifiedAt?: string }
+    let protocolResult: { isHuman: boolean; verifiedAt?: string; presetChecked: string }
     try {
-      protocolResult = await verifyHumanityToken(accessToken)
+      protocolResult = await verifyHumanityToken(accessToken, preset)
     } catch (tokenError: any) {
       console.error('Humanity Protocol token verification failed:', {
         wallet: walletAddress,

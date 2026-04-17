@@ -1,3 +1,5 @@
+export type { HumanityPreset } from './humanity-presets'
+
 export type TaskType =
   | 'SOCIAL_FOLLOW'
   | 'JOIN_DISCORD'
@@ -22,6 +24,8 @@ export type Task = {
     tokenSymbol?: string
     amount?: string
     amountDisplay?: string
+    /** For HUMANITY_VERIFICATION tasks: which preset to verify against */
+    humanityPreset?: string
   }
 }
 

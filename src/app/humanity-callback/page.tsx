@@ -2,8 +2,8 @@
 // OAuth redirect target for the Humanity SDK.
 // After Humanity redirects here with an auth code, the HumanityProvider
 // (loaded via layout) exchanges it for a token. This page watches for
-// auth completion, verifies the is_human preset, saves to DB, and
-// redirects back to the campaign page.
+// auth completion, reads the configured preset from sessionStorage,
+// verifies it server-side, saves to DB, and redirects back to the campaign page.
 'use client'
 
 import { Suspense, useEffect, useState, useRef } from 'react'
@@ -54,12 +54,16 @@ function CallbackContent() {
       try {
         setStatus('Verifying identity...')
 
+        // Read the preset that was stored before the OAuth redirect.
+        // Falls back to 'is_human' if no preset was stored (backward compat).
+        const storedPreset = sessionStorage.getItem('humanity_preset') ?? 'is_human'
+
         // Client-side verify for UX feedback only; server will re-validate
-        await verify('is_human')
+        await verify(storedPreset)
 
         setStatus('Saving verification...')
 
-        // Send accessToken to backend for server-side verification.
+        // Send accessToken + preset to backend for server-side verification.
         // The server validates the token against the Humanity Protocol
         // and determines isHuman — we do NOT send a client-side isHuman flag.
         const walletAddress = sessionStorage.getItem('humanity_wallet_address')
@@ -73,6 +77,7 @@ function CallbackContent() {
             body: JSON.stringify({
               walletAddress,
               accessToken,
+              preset: storedPreset,
             }),
           })
           const data = await response.json()
@@ -99,6 +104,7 @@ function CallbackContent() {
         // Redirect back to the campaign page
         const returnPath = sessionStorage.getItem('humanity_return_to')
         sessionStorage.removeItem('humanity_return_to')
+        sessionStorage.removeItem('humanity_preset')
 
         router.replace(returnPath || '/')
       } catch (err: any) {

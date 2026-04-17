@@ -588,17 +588,36 @@ export const getCampaignByIdWithMetadata = async (
     try {
       const taskMetadata = await fetchTaskMetadata(id)
       if (taskMetadata && Array.isArray(taskMetadata)) {
-        // Update Discord tasks with invite links
+        // Enrich tasks with all stored metadata
         campaign.tasks = campaign.tasks.map((task, index) => {
-          if (task.type === 'JOIN_DISCORD') {
-            const metadata = taskMetadata.find((tm) => tm.taskIndex === index)
-            if (metadata && metadata.discordInviteLink) {
-              return {
-                ...task,
-                discordInviteLink: metadata.discordInviteLink,
-              }
+          const meta = taskMetadata.find((tm) => tm.taskIndex === index)
+          if (!meta) return task
+
+          if (task.type === 'JOIN_DISCORD' && meta.discordInviteLink) {
+            return { ...task, discordInviteLink: meta.discordInviteLink }
+          }
+
+          if (task.type === 'JOIN_TELEGRAM' && meta.telegramInviteLink) {
+            return { ...task, telegramInviteLink: meta.telegramInviteLink }
+          }
+
+          if (task.type === 'HUMANITY_VERIFICATION' && meta.metadata?.humanityPreset) {
+            return {
+              ...task,
+              metadata: {
+                ...task.metadata,
+                humanityPreset: meta.metadata.humanityPreset,
+              },
             }
           }
+
+          if (task.type === 'ONCHAIN_TX' && meta.metadata) {
+            return {
+              ...task,
+              metadata: { ...task.metadata, ...meta.metadata },
+            }
+          }
+
           return task
         })
       }
@@ -812,6 +831,29 @@ export const createAndActivateCampaign = async (campaignData: any) => {
             telegramInviteLink: task.telegramInviteLink,
           }
         )
+      }
+
+      // Store humanity preset in database for HUMANITY_VERIFICATION tasks
+      if (task.type === 'HUMANITY_VERIFICATION') {
+        try {
+          const taskIndex = campaignData.tasks.indexOf(task)
+          const presetToStore = (task as any).humanityPreset ?? 'is_human'
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              campaignId: campaignId,
+              taskIndex: taskIndex,
+              taskType: task.type,
+              metadata: {
+                humanityPreset: presetToStore,
+              },
+            }),
+          })
+          console.log(`✅ Humanity preset '${presetToStore}' stored for task index ${taskIndex}`)
+        } catch (e) {
+          console.warn('Failed to store humanity preset in database:', e)
+        }
       }
     }
 

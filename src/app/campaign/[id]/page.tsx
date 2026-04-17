@@ -1119,6 +1119,11 @@ export default function CampaignDetailsPage() {
         taskId={verifyingTaskId || undefined}
         isVerified={userHumanityStatus === true}
         onVerificationComplete={handleHumanityVerificationComplete}
+        preset={
+          verifyingTaskId
+            ? (campaign?.tasks.find((t) => t.id === verifyingTaskId)?.metadata?.humanityPreset ?? 'is_human')
+            : 'is_human'
+        }
       />
 
       {/* Campaign Action Confirmation Dialog */}
