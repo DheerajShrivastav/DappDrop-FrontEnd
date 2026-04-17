@@ -104,8 +104,8 @@ const taskSchema = z
     verificationData: z.string().optional(),
     discordInviteLink: z.string().optional(),
     telegramInviteLink: z.string().optional(),
-    // Humanity Protocol preset for HUMANITY_VERIFICATION tasks
-    humanityPreset: z.string().optional(),
+    // Humanity Protocol presets for HUMANITY_VERIFICATION tasks (multi-select)
+    humanityPreset: z.array(z.string()).optional(),
     // Payment metadata fields for ONCHAIN_TX tasks
     paymentRequired: z.boolean().optional(),
     paymentRecipient: z.string().optional(),
@@ -428,16 +428,16 @@ export default function CreateCampaignPage() {
     setIsGenerating(true)
     setGenerationError(null)
     setGenerationStage('planning')
+    // Hoist timer IDs so the finally block can always clear them
+    let stageTimer1: ReturnType<typeof setTimeout> | undefined
+    let stageTimer2: ReturnType<typeof setTimeout> | undefined
     try {
       // The server action handles all stages internally.
       // We simulate stage transitions based on typical timing.
-      const stageTimer1 = setTimeout(() => setGenerationStage('generating'), 8000)
-      const stageTimer2 = setTimeout(() => setGenerationStage('validating'), 25000)
+      stageTimer1 = setTimeout(() => setGenerationStage('generating'), 8000)
+      stageTimer2 = setTimeout(() => setGenerationStage('validating'), 25000)
 
       const result = await generateCampaign(aiPrompt)
-
-      clearTimeout(stageTimer1)
-      clearTimeout(stageTimer2)
 
       const currentValues = form.getValues()
       form.reset({
@@ -501,6 +501,8 @@ export default function CreateCampaignPage() {
         duration: 8000,
       })
     } finally {
+      clearTimeout(stageTimer1)
+      clearTimeout(stageTimer2)
       setIsGenerating(false)
       setGenerationStage(null)
     }
@@ -1620,47 +1622,91 @@ export default function CreateCampaignPage() {
                           <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3 dark:bg-purple-950/20 dark:border-purple-800/40">
                             <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
                               <ShieldCheck className="h-5 w-5" />
-                              <h4 className="font-semibold">Verification Preset</h4>
+                              <h4 className="font-semibold">Verification Presets</h4>
                             </div>
                             <p className="text-sm text-purple-700 dark:text-purple-400">
-                              Choose which Humanity Protocol credential users
-                              must prove to complete this task.
+                              Select one or more Humanity Protocol checks users
+                              must pass to complete this task.
                             </p>
                             <FormField
                               control={form.control}
                               name={`tasks.${index}.humanityPreset`}
-                              render={({ field }) => (
-                                <FormItem>
-                                  <FormLabel>Humanity Preset</FormLabel>
-                                  <Select
-                                    onValueChange={field.onChange}
-                                    value={field.value ?? 'is_human'}
-                                    defaultValue="is_human"
-                                  >
-                                    <FormControl>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Select verification preset" />
-                                      </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                      {HUMANITY_PRESETS.map((p) => (
-                                        <SelectItem key={p.preset} value={p.preset}>
-                                          <span className="flex items-center gap-2">
-                                            <span>{p.icon}</span>
-                                            <span>{p.label}</span>
-                                          </span>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <FormDescription>
-                                    {HUMANITY_PRESETS.find(
-                                      (p) => p.preset === (field.value ?? 'is_human'),
-                                    )?.description}
-                                  </FormDescription>
-                                  <FormMessage />
-                                </FormItem>
-                              )}
+                              render={({ field }) => {
+                                const selected: string[] = Array.isArray(field.value) ? field.value : field.value ? [field.value] : ['is_human']
+
+                                const toggle = (preset: string) => {
+                                  const next = selected.includes(preset)
+                                    ? selected.filter((p) => p !== preset)
+                                    : [...selected, preset]
+                                  // Ensure at least one preset is always selected
+                                  field.onChange(next.length > 0 ? next : ['is_human'])
+                                }
+
+                                // Group presets by category
+                                const categories = [
+                                  { key: 'identity', label: 'Identity' },
+                                  { key: 'age', label: 'Age Verification' },
+                                  { key: 'kyc', label: 'KYC' },
+                                  { key: 'financial', label: 'Financial' },
+                                ] as const
+
+                                return (
+                                  <FormItem className="space-y-3">
+                                    <FormLabel>
+                                      Required Checks ({selected.length} selected)
+                                    </FormLabel>
+                                    {categories.map((cat) => {
+                                      const presets = HUMANITY_PRESETS.filter(
+                                        (p) => p.category === cat.key,
+                                      )
+                                      if (presets.length === 0) return null
+                                      return (
+                                        <div key={cat.key} className="space-y-1.5">
+                                          <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
+                                            {cat.label}
+                                          </p>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {presets.map((p) => {
+                                              const isChecked = selected.includes(p.preset)
+                                              return (
+                                                <label
+                                                  key={p.preset}
+                                                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                                    isChecked
+                                                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 ring-1 ring-purple-500/30'
+                                                      : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/10'
+                                                  }`}
+                                                >
+                                                  <Checkbox
+                                                    checked={isChecked}
+                                                    onCheckedChange={() => toggle(p.preset)}
+                                                    className="mt-0.5"
+                                                  />
+                                                  <div className="space-y-0.5 flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="text-sm">{p.icon}</span>
+                                                      <span className="text-sm font-medium truncate">
+                                                        {p.label}
+                                                      </span>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-snug">
+                                                      {p.description}
+                                                    </p>
+                                                  </div>
+                                                </label>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                    <FormDescription>
+                                      Users must pass <strong>all</strong> selected checks to complete this task.
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )
+                              }}
                             />
                           </div>
                         </div>
