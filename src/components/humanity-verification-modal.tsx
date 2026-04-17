@@ -30,9 +30,8 @@ import {
 } from '@/components/ui/tooltip'
 import {
   getPresetConfig,
-  getScopesForPreset,
-  DEFAULT_PRESET,
-  type HumanityPreset,
+  getScopesForPresets,
+  normalizePresets,
 } from '@/lib/humanity-presets'
 
 interface HumanityVerificationModalProps {
@@ -42,8 +41,8 @@ interface HumanityVerificationModalProps {
   taskId?: string
   isVerified?: boolean
   onVerificationComplete?: (isHuman: boolean) => void
-  /** Which Humanity preset this task requires. Defaults to 'is_human'. */
-  preset?: HumanityPreset | string
+  /** Which Humanity preset(s) this task requires. Accepts single string or array. */
+  preset?: string | string[]
 }
 
 export function HumanityVerificationModal({
@@ -59,10 +58,12 @@ export function HumanityVerificationModal({
   const [isRedirecting, setIsRedirecting] = useState(false)
   const [verificationError, setVerificationError] = useState<string | null>(null)
 
-  // Resolve the active preset and its config from the registry
-  const activePreset = preset ?? DEFAULT_PRESET
-  const presetConfig = getPresetConfig(activePreset)
-  const requiredScopes = getScopesForPreset(activePreset)
+  // Normalize to array and resolve configs + merged scopes
+  const activePresets = normalizePresets(preset)
+  const presetConfigs = activePresets
+    .map((p) => getPresetConfig(p))
+    .filter(Boolean) as NonNullable<ReturnType<typeof getPresetConfig>>[]
+  const requiredScopes = getScopesForPresets(activePresets)
 
   // Store context in sessionStorage before the redirect so the callback page
   // and campaign page can pick it up after OAuth completes.
@@ -70,8 +71,8 @@ export function HumanityVerificationModal({
     if (address) {
       sessionStorage.setItem('humanity_wallet_address', address)
     }
-    // Store the preset so the callback knows what to verify
-    sessionStorage.setItem('humanity_preset', activePreset)
+    // Store presets as JSON array so the callback can verify all of them
+    sessionStorage.setItem('humanity_preset', JSON.stringify(activePresets))
     sessionStorage.setItem('humanity_return_to', window.location.pathname)
     if (campaignId && taskId) {
       sessionStorage.setItem(
@@ -92,7 +93,7 @@ export function HumanityVerificationModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px] gap-4">
+      <DialogContent className="sm:max-w-[460px] gap-4">
         <DialogHeader className="space-y-2">
           <DialogTitle className="flex items-center gap-2 text-lg">
             <ShieldCheck className="h-5 w-5 text-purple-500" />
@@ -120,11 +121,11 @@ export function HumanityVerificationModal({
           <DialogDescription className="text-sm">
             {isVerified
               ? 'Your wallet is verified with Humanity Protocol.'
-              : 'Verify your identity through Humanity Protocol to complete this task.'}
+              : `Verify your identity through Humanity Protocol to complete this task (${activePresets.length} check${activePresets.length > 1 ? 's' : ''} required).`}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-3 py-2">
           {isVerified ? (
             <div className="flex items-center gap-3 p-4 rounded-lg border-2 border-green-500/30 bg-green-500/10">
               <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
@@ -138,24 +139,31 @@ export function HumanityVerificationModal({
             </div>
           ) : (
             <>
-              {/* Preset info card */}
-              <div className="flex items-start gap-3 p-4 rounded-lg border border-purple-500/20 bg-purple-500/5">
-                <span className="text-xl mt-0.5 shrink-0" role="img" aria-label="preset icon">
-                  {presetConfig?.icon ?? '🛡️'}
-                </span>
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">
-                    {presetConfig?.label ?? 'Humanity Verification'}
-                  </p>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {presetConfig?.description ??
-                      'You will be redirected to Humanity Protocol to complete verification.'}
-                  </p>
-                  <p className="text-xs text-purple-600 font-mono mt-1">
-                    Preset: <span className="font-semibold">{activePreset}</span>
-                  </p>
-                </div>
+              {/* Preset info cards — show all required checks */}
+              <div className="space-y-2 max-h-[240px] overflow-y-auto pr-1">
+                {presetConfigs.map((config) => (
+                  <div
+                    key={config.preset}
+                    className="flex items-start gap-3 p-3 rounded-lg border border-purple-500/20 bg-purple-500/5"
+                  >
+                    <span className="text-lg mt-0.5 shrink-0" role="img" aria-label="preset icon">
+                      {config.icon}
+                    </span>
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="text-sm font-medium">{config.label}</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        {config.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
               </div>
+
+              {activePresets.length > 1 && (
+                <p className="text-xs text-purple-600 dark:text-purple-400 font-medium text-center">
+                  All {activePresets.length} checks must pass to complete this task
+                </p>
+              )}
 
               {/* Error message */}
               {verificationError && (
@@ -197,7 +205,7 @@ export function HumanityVerificationModal({
             <div
               className="flex-1"
               onClick={() => {
-                // Store preset + context BEFORE the SDK triggers the redirect
+                // Store presets + context BEFORE the SDK triggers the redirect
                 storeContextBeforeRedirect()
                 setIsRedirecting(true)
               }}
