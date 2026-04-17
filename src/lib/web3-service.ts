@@ -737,7 +737,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              campaignId: campaignId,
+              campaignId: Number(campaignId),
               taskIndex: taskIndex,
               taskType: task.type,
               discordInviteLink: task.discordInviteLink,
@@ -766,7 +766,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              campaignId: campaignId,
+              campaignId: Number(campaignId),
               taskIndex: taskIndex,
               taskType: task.type,
               metadata: {
@@ -806,7 +806,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              campaignId: campaignId,
+              campaignId: Number(campaignId),
               taskIndex: taskIndex,
               taskType: task.type,
               telegramChatId: task.verificationData, // Form stores chat ID in verificationData
@@ -842,7 +842,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              campaignId: campaignId,
+              // Convert BigInt to Number so JSON.stringify doesn't throw
+              campaignId: Number(campaignId),
               taskIndex: taskIndex,
               taskType: task.type,
               metadata: {
@@ -850,7 +851,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               },
             }),
           })
-          console.log(`✅ Humanity preset '${presetToStore}' stored for task index ${taskIndex}`)
+          console.log(`✅ Humanity preset '${presetToStore}' stored for task index ${taskIndex} (campaign ${Number(campaignId)})`)
         } catch (e) {
           console.warn('Failed to store humanity preset in database:', e)
         }
@@ -1051,7 +1052,7 @@ export const createCampaign = async (campaignData: any) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              campaignId: campaignId,
+              campaignId: Number(campaignId),
               taskIndex: taskIndex,
               taskType: task.type,
               discordInviteLink: task.discordInviteLink,
@@ -1075,7 +1076,7 @@ export const createCampaign = async (campaignData: any) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              campaignId: campaignId,
+              campaignId: Number(campaignId),
               taskIndex: taskIndex,
               taskType: task.type,
               metadata: {
@@ -1125,7 +1126,7 @@ export const createCampaign = async (campaignData: any) => {
           })
 
           const requestBody = {
-            campaignId: campaignId,
+            campaignId: Number(campaignId),
             taskIndex: taskIndex,
             taskType: task.type,
             telegramChatId: task.verificationData, // Form stores chat ID in verificationData
@@ -1187,6 +1188,30 @@ export const createCampaign = async (campaignData: any) => {
           verificationData: task.verificationData,
           telegramInviteLink: task.telegramInviteLink,
         })
+      }
+
+      // Store humanity preset in database for HUMANITY_VERIFICATION tasks
+      if (task.type === 'HUMANITY_VERIFICATION') {
+        try {
+          const taskIndex = campaignData.tasks.indexOf(task)
+          const presetToStore = (task as any).humanityPreset ?? 'is_human'
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              // Convert BigInt to Number so JSON.stringify doesn't throw
+              campaignId: Number(campaignId),
+              taskIndex: taskIndex,
+              taskType: task.type,
+              metadata: {
+                humanityPreset: presetToStore,
+              },
+            }),
+          })
+          console.log(`✅ Humanity preset '${presetToStore}' stored for task index ${taskIndex} (campaign ${Number(campaignId)})`)
+        } catch (e) {
+          console.warn('Failed to store humanity preset in database:', e)
+        }
       }
     }
 
