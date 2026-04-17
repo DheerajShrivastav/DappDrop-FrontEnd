@@ -24,8 +24,8 @@ export type Task = {
     tokenSymbol?: string
     amount?: string
     amountDisplay?: string
-    /** For HUMANITY_VERIFICATION tasks: which preset to verify against */
-    humanityPreset?: string
+    /** For HUMANITY_VERIFICATION tasks: which preset(s) to verify against */
+    humanityPreset?: string | string[]
   }
 }
 

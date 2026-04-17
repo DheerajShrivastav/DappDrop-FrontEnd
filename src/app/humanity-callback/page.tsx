@@ -54,18 +54,25 @@ function CallbackContent() {
       try {
         setStatus('Verifying identity...')
 
-        // Read the preset that was stored before the OAuth redirect.
-        // Falls back to 'is_human' if no preset was stored (backward compat).
-        const storedPreset = sessionStorage.getItem('humanity_preset') ?? 'is_human'
+        // Read the presets that were stored before the OAuth redirect.
+        // May be a JSON array (new) or a plain string (old campaigns).
+        const storedRaw = sessionStorage.getItem('humanity_preset') ?? 'is_human'
+        let storedPresets: string[]
+        try {
+          const parsed = JSON.parse(storedRaw)
+          storedPresets = Array.isArray(parsed) ? parsed : [parsed]
+        } catch {
+          // Old format: plain string like "is_human"
+          storedPresets = [storedRaw]
+        }
 
-        // Client-side verify for UX feedback only; server will re-validate
-        await verify(storedPreset)
+        // Client-side verify the first preset for UX feedback only
+        await verify(storedPresets[0])
 
         setStatus('Saving verification...')
 
-        // Send accessToken + preset to backend for server-side verification.
-        // The server validates the token against the Humanity Protocol
-        // and determines isHuman — we do NOT send a client-side isHuman flag.
+        // Send accessToken + all presets to backend for server-side verification.
+        // The server validates the token against each preset.
         const walletAddress = sessionStorage.getItem('humanity_wallet_address')
         let serverIsHuman = false
         let serverVerifiedAt: string | undefined
@@ -77,7 +84,7 @@ function CallbackContent() {
             body: JSON.stringify({
               walletAddress,
               accessToken,
-              preset: storedPreset,
+              preset: storedPresets,
             }),
           })
           const data = await response.json()

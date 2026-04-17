@@ -837,7 +837,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       if (task.type === 'HUMANITY_VERIFICATION') {
         try {
           const taskIndex = campaignData.tasks.indexOf(task)
-          const presetToStore = (task as any).humanityPreset ?? 'is_human'
+          const rawPreset = (task as any).humanityPreset
+          const presetToStore = Array.isArray(rawPreset) && rawPreset.length > 0 ? rawPreset : [rawPreset ?? 'is_human']
           await fetch('/api/campaign-task-metadata', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -851,7 +852,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               },
             }),
           })
-          console.log(`✅ Humanity preset '${presetToStore}' stored for task index ${taskIndex} (campaign ${Number(campaignId)})`)
+          console.log(`✅ Humanity presets ${JSON.stringify(presetToStore)} stored for task index ${taskIndex} (campaign ${Number(campaignId)})`)
         } catch (e) {
           console.warn('Failed to store humanity preset in database:', e)
         }
@@ -1194,7 +1195,8 @@ export const createCampaign = async (campaignData: any) => {
       if (task.type === 'HUMANITY_VERIFICATION') {
         try {
           const taskIndex = campaignData.tasks.indexOf(task)
-          const presetToStore = (task as any).humanityPreset ?? 'is_human'
+          const rawPreset = (task as any).humanityPreset
+          const presetToStore = Array.isArray(rawPreset) && rawPreset.length > 0 ? rawPreset : [rawPreset ?? 'is_human']
           await fetch('/api/campaign-task-metadata', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1208,7 +1210,7 @@ export const createCampaign = async (campaignData: any) => {
               },
             }),
           })
-          console.log(`✅ Humanity preset '${presetToStore}' stored for task index ${taskIndex} (campaign ${Number(campaignId)})`)
+          console.log(`✅ Humanity presets ${JSON.stringify(presetToStore)} stored for task index ${taskIndex} (campaign ${Number(campaignId)})`)
         } catch (e) {
           console.warn('Failed to store humanity preset in database:', e)
         }

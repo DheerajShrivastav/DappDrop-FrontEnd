@@ -25,28 +25,40 @@ export async function POST(request: Request) {
 
     const validAddress = validateWalletAddress(walletAddress)
 
-    // Server-side verification: accessToken is validated against the
-    // Humanity Protocol inside saveHumanityVerification. The client-provided
-    // isHuman field (if any) is intentionally ignored.
-    const result = await saveHumanityVerification(validAddress, accessToken, preset)
+    // Normalize preset to an array (supports both single string and array)
+    const presets: string[] = Array.isArray(preset) ? preset : [preset]
 
-    if (result.error) {
-      return NextResponse.json(
-        {
-          success: false,
-          isHuman: result.is_human,
-          walletAddress: result.wallet_address,
-          error: result.error,
-        },
-        { status: 403 },
-      )
+    // Verify each preset — all must pass for the user to be considered verified.
+    // We verify the first preset with saveHumanityVerification (which also persists),
+    // then verify any additional presets.
+    let allPassed = true
+    let lastVerifiedAt: string | undefined
+
+    for (const p of presets) {
+      const result = await saveHumanityVerification(validAddress, accessToken, p)
+
+      if (result.error || !result.is_human) {
+        return NextResponse.json(
+          {
+            success: false,
+            isHuman: false,
+            walletAddress: result.wallet_address,
+            error: result.error || `Verification failed for preset: ${p}`,
+            failedPreset: p,
+          },
+          { status: 403 },
+        )
+      }
+
+      lastVerifiedAt = result.verified_at
     }
 
     return NextResponse.json({
       success: true,
-      isHuman: result.is_human,
-      walletAddress: result.wallet_address,
-      verifiedAt: result.verified_at,
+      isHuman: true,
+      walletAddress: validAddress,
+      verifiedAt: lastVerifiedAt,
+      presetsVerified: presets,
     })
   } catch (error: any) {
     console.error('Humanity verification API error:', error)

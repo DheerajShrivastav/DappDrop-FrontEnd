@@ -120,6 +120,30 @@ export function getScopesForPreset(preset: string): string[] {
   return getPresetConfig(preset)?.requiredScopes ?? ['openid', 'identity:read']
 }
 
+/**
+ * Merge and deduplicate OAuth scopes required for multiple presets.
+ * E.g. ['is_human', 'is_21_plus'] → ['openid', 'identity:read', 'identity:date_of_birth']
+ */
+export function getScopesForPresets(presets: string[]): string[] {
+  const scopeSet = new Set<string>()
+  for (const preset of presets) {
+    for (const scope of getScopesForPreset(preset)) {
+      scopeSet.add(scope)
+    }
+  }
+  return Array.from(scopeSet)
+}
+
+/**
+ * Normalize a preset value that may be a single string or an array to always be an array.
+ * Handles backward compatibility with old campaigns that stored a single string.
+ */
+export function normalizePresets(value: string | string[] | undefined | null): string[] {
+  if (!value) return [DEFAULT_PRESET]
+  if (Array.isArray(value)) return value.length > 0 ? value : [DEFAULT_PRESET]
+  return [value]
+}
+
 /** Validates that a string is a known preset key. */
 export function isValidPreset(preset: string): preset is HumanityPreset {
   return HUMANITY_PRESETS.some((p) => p.preset === preset)
