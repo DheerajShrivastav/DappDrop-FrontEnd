@@ -1,4 +1,4 @@
-'use client'
+// Server Component — no client hooks needed
 import type {ElementType} from 'react'
 import { format } from 'date-fns'
 import {
