@@ -117,8 +117,8 @@ const taskSchema = z
     amountDisplay: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    // Validate payment fields when paymentRequired is true
-    if (data.paymentRequired) {
+    // Validate payment fields when paymentRequired is true and task is ONCHAIN_TX
+    if (data.type === 'ONCHAIN_TX' && data.paymentRequired) {
       // Validate paymentRecipient
       if (!data.paymentRecipient || data.paymentRecipient.trim() === '') {
         ctx.addIssue({
@@ -152,6 +152,40 @@ const taskSchema = z
             path: ['amount'],
           })
         }
+      }
+    }
+
+    if (data.type === 'JOIN_DISCORD') {
+      if (!data.verificationData || data.verificationData.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Discord Server ID is required.',
+          path: ['verificationData'],
+        })
+      }
+      if (!data.discordInviteLink || data.discordInviteLink.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Discord Invite Link is required.',
+          path: ['discordInviteLink'],
+        })
+      }
+    }
+
+    if (data.type === 'JOIN_TELEGRAM') {
+      if (!data.verificationData || data.verificationData.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Telegram Channel/Group ID is required.',
+          path: ['verificationData'],
+        })
+      }
+      if (!data.telegramInviteLink || data.telegramInviteLink.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Telegram Invite Link is required.',
+          path: ['telegramInviteLink'],
+        })
       }
     }
   })
