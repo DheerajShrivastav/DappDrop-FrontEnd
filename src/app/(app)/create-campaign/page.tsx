@@ -367,28 +367,22 @@ export default function CreateCampaignPage() {
         console.log(
           '✅ Campaign was created successfully, skipping image cleanup',
         )
-        // IMPORTANT: Use ref to get the latest value, not the stale closure value
-        if (campaignCreatedRef.current) {
-          console.log(
-            '✅ Campaign was created successfully, skipping image cleanup',
-          )
-          return
-        }
-
-        // If user navigates away and there's an uploaded image that wasn't used
-        const imageUrl = uploadedImageUrlRef.current || form.getValues('imageUrl')
-        if (
-          imageUrl &&
-          imageUrl !== 'https://placehold.co/600x400' &&
-          imageUrl.includes('utfs.io')
-        ) {
-          // Only cleanup if it's an UploadThing URL (not external URL)
-          console.log('🗑️ Cleaning up orphaned image on unmount:', imageUrl)
-          console.log('🗑️ Cleaning up orphaned image on unmount:', imageUrl)
-          cleanupOrphanedImage(imageUrl)
-        }
+        return
       }
-    }, [])
+
+      // If user navigates away and there's an uploaded image that wasn't used
+      const imageUrl = uploadedImageUrlRef.current || form.getValues('imageUrl')
+      if (
+        imageUrl &&
+        imageUrl !== 'https://placehold.co/600x400' &&
+        imageUrl.includes('utfs.io')
+      ) {
+        // Only cleanup if it's an UploadThing URL (not external URL)
+        console.log('🗑️ Cleaning up orphaned image on unmount:', imageUrl)
+        cleanupOrphanedImage(imageUrl)
+      }
+    }
+  }, [])
 
   const cleanupOrphanedImage = async (imageUrl: string) => {
     try {
@@ -631,1005 +625,818 @@ export default function CreateCampaignPage() {
                           : step === s.id
                             ? 'bg-primary/20 border-2 border-primary text-primary'
                             : 'bg-secondary',
-                            : 'bg-secondary',
                       )}
                     >
-                    {step > s.id ? <Check className="w-6 h-6" /> : s.id}
-                  </span>
+                      {step > s.id ? <Check className="w-6 h-6" /> : s.id}
+                    </span>
                   </li>
                 ))}
-            </ol>
+              </ol>
             </div>
           )}
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            {step === 0 && (
-              <section className="space-y-6 animate-in fade-in-50">
-                <h2 className="text-xl font-semibold border-b pb-2 flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" /> Generate with
-                  AI
-                </h2>
-                <div className="p-6 border-dashed border-2 rounded-lg bg-secondary/50">
-                  <p className="mb-1 text-sm font-medium">
-                    Describe your project
-                  </p>
-                  <Textarea
-                    placeholder="E.g., 'My project is a decentralized lending protocol on Sepolia that allows users to borrow against their NFTs...'"
-                    value={aiPrompt}
-                    onChange={(e) => {
-                      setAiPrompt(e.target.value)
-                      if (generationError) setGenerationError(null)
-                    }}
-                    rows={4}
-                    className="bg-card"
-                    disabled={isGenerating}
-                  />
-                  <div className="flex items-center justify-between mt-2">
-                    <p className="text-xs text-muted-foreground">
-                      Our AI will draft a campaign title, description, and tasks
-                      for you.
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              {step === 0 && (
+                <section className="space-y-6 animate-in fade-in-50">
+                  <h2 className="text-xl font-semibold border-b pb-2 flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" /> Generate with
+                    AI
+                  </h2>
+                  <div className="p-6 border-dashed border-2 rounded-lg bg-secondary/50">
+                    <p className="mb-1 text-sm font-medium">
+                      Describe your project
                     </p>
-                    <p className={cn(
-                      'text-xs tabular-nums',
-                      aiPrompt.trim().length < 20 ? 'text-muted-foreground' : 'text-green-500',
-                    )}>
-                      {aiPrompt.trim().length}/20 min
-                    </p>
-                  </div>
-
-                  {/* Generation stage progress */}
-                  {isGenerating && generationStage && (
-                    <div className="mt-4 p-4 rounded-lg bg-card border animate-in fade-in-50">
-                      <div className="flex items-center gap-3">
-                        <div className="relative">
-                          <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">
-                            {generationStage === 'planning' && '🧠 Analyzing your project...'}
-                            {generationStage === 'generating' && '✍️ Writing campaign content...'}
-                            {generationStage === 'validating' && '🔍 Reviewing quality...'}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {generationStage === 'planning' && 'Deciding campaign strategy, target audience, and task types'}
-                            {generationStage === 'generating' && 'Crafting title, description, and tasks based on the plan'}
-                            {generationStage === 'validating' && 'Checking for quality, accuracy, and consistency'}
-                          </p>
-                        </div>
-                      </div>
-                      {/* Stage dots */}
-                      <div className="flex items-center gap-2 mt-3">
-                        {(['planning', 'generating', 'validating'] as const).map((stage, idx) => (
-                          <React.Fragment key={stage}>
-                            <div className={cn(
-                              'h-2 w-2 rounded-full transition-colors duration-300',
-                              generationStage === stage
-                                ? 'bg-primary animate-pulse'
-                                : (['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
-                                  ? 'bg-primary'
-                                  : 'bg-muted'),
-                            )} />
-                            {idx < 2 && (
-                              <div className={cn(
-                                'h-0.5 flex-1 rounded transition-colors duration-300',
-                                ['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
-                                  ? 'bg-primary'
-                                  : 'bg-muted',
-                              )} />
-                            )}
-                          </React.Fragment>
-                        ))}
-                      </div>
-                      <div className="flex justify-between mt-1">
-                        <span className="text-[10px] text-muted-foreground">Plan</span>
-                        <span className="text-[10px] text-muted-foreground">Generate</span>
-                        <span className="text-[10px] text-muted-foreground">Validate</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Error display with retry */}
-                  {generationError && !isGenerating && (
-                    <div className="mt-4 p-4 rounded-lg border border-destructive/50 bg-destructive/5 animate-in fade-in-50">
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5">
-                          {generationError.category === 'rate_limit' && <Clock className="h-5 w-5 text-amber-500" />}
-                          {generationError.category === 'network' && <Wifi className="h-5 w-5 text-destructive" />}
-                          {!['rate_limit', 'network'].includes(generationError.category) && <AlertCircle className="h-5 w-5 text-destructive" />}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-destructive">
-                            {generationError.message}
-                          </p>
-                          {generationError.retryable && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="mt-2"
-                              onClick={handleGenerate}
-                            >
-                              <RefreshCw className="mr-2 h-3 w-3" />
-                              Try Again
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex justify-end gap-4 mt-4">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setStep(1)}
+                    <Textarea
+                      placeholder="E.g., 'My project is a decentralized lending protocol on Sepolia that allows users to borrow against their NFTs...'"
+                      value={aiPrompt}
+                      onChange={(e) => {
+                        setAiPrompt(e.target.value)
+                        if (generationError) setGenerationError(null)
+                      }}
+                      rows={4}
+                      className="bg-card"
                       disabled={isGenerating}
-                    >
-                      Skip &amp; Create Manually
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={handleGenerate}
-                      disabled={isGenerating || aiPrompt.trim().length < 20}
-                    >
-                      {isGenerating ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Sparkles className="mr-2 h-4 w-4" />
-                      )}
-                      {isGenerating ? 'Generating...' : 'Generate Campaign'}
-                    </Button>
-                  </div>
-                </div>
-              </section>
-            )}
-            {step === 1 && (
-              <section className="space-y-6 animate-in fade-in-50">
-                <h2 className="text-xl font-semibold border-b pb-2">
-                  {steps[0].name}
-                </h2>
-                <FormField
-                  control={form.control}
-                  name="title"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Campaign Title</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="E.g., Awesome Project Token Launch"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="shortDescription"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Short Description</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="A brief, catchy description for the campaign card."
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="description"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Detailed Description</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Explain your campaign in detail for the main page."
-                          rows={5}
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="dates"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-col">
-                      <FormLabel>Campaign Duration</FormLabel>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={'outline'}
-                              className={cn(
-                                'w-full justify-start text-left font-normal',
-                                !field.value?.from && 'text-muted-foreground',
-                                !field.value?.from && 'text-muted-foreground',
-                              )}
-                            >
-                              <CalendarIcon className="mr-2 h-4 w-4" />
-                              {field.value?.from ? (
-                                field.value.to ? (
-                                  <>
-                                    {format(
-                                      field.value.from,
-                                      'LLL dd, y HH:mm',
-                                      'LLL dd, y HH:mm',
-                                    )}{' '}
-                                    -{' '}
-                                    {format(
-                                      field.value.to,
-                                      'LLL dd, y HH:mm',
-                                      'LLL dd, y HH:mm',
-                                    )}
-                                  </>
-                                ) : (
-                                  format(field.value.from, 'LLL dd, y HH:mm')
-                                )
-                              ) : (
-                                <span>Pick a date range</span>
-                              )}
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="range"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            initialFocus
-                            numberOfMonths={2}
-                          />
-                          <div className="p-4 border-t grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label htmlFor="start-time-h">Start Time</Label>
-                              <div className="flex gap-2">
-                                <Input
-                                  type="number"
-                                  id="start-time-h"
-                                  min="0"
-                                  max="23"
-                                  className="w-16"
-                                  placeholder="HH"
-                                  value={dates?.from?.getHours() ?? 0}
-                                  onChange={(e) => {
-                                    const newHour = parseInt(
-                                      e.target.value,
-                                      10,
-                                      10,
-                                    )
-                                    if (!isNaN(newHour))
-                                      field.onChange({
-                                        ...dates,
-                                        from: setHours(
-                                          dates.from ?? new Date(),
-                                          newHour,
-                                          newHour,
-                                        ),
-                                      })
-                                  }}
-                                />
-                                <Input
-                                  type="number"
-                                  id="start-time-m"
-                                  min="0"
-                                  max="59"
-                                  className="w-16"
-                                  placeholder="MM"
-                                  value={dates?.from?.getMinutes() ?? 0}
-                                  onChange={(e) => {
-                                    const newMin = parseInt(
-                                      e.target.value,
-                                      10,
-                                      10,
-                                    )
-                                    if (!isNaN(newMin))
-                                      field.onChange({
-                                        ...dates,
-                                        from: setMinutes(
-                                          dates.from ?? new Date(),
-                                          newMin,
-                                          newMin,
-                                        ),
-                                      })
-                                  }}
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="end-time-h">End Time</Label>
-                              <div className="flex gap-2">
-                                <Input
-                                  type="number"
-                                  id="end-time-h"
-                                  min="0"
-                                  max="23"
-                                  className="w-16"
-                                  placeholder="HH"
-                                  value={dates?.to?.getHours() ?? 0}
-                                  onChange={(e) => {
-                                    const newHour = parseInt(
-                                      e.target.value,
-                                      10,
-                                      10,
-                                    )
-                                    if (!isNaN(newHour))
-                                      field.onChange({
-                                        ...dates,
-                                        to: setHours(
-                                          dates.to ?? new Date(),
-                                          newHour,
-                                          newHour,
-                                        ),
-                                      })
-                                  }}
-                                />
-                                <Input
-                                  type="number"
-                                  id="end-time-m"
-                                  min="0"
-                                  max="59"
-                                  className="w-16"
-                                  placeholder="MM"
-                                  value={dates?.to?.getMinutes() ?? 0}
-                                  onChange={(e) => {
-                                    const newMin = parseInt(
-                                      e.target.value,
-                                      10,
-                                      10,
-                                    )
-                                    if (!isNaN(newMin))
-                                      field.onChange({
-                                        ...dates,
-                                        to: setMinutes(
-                                          dates.to ?? new Date(),
-                                          newMin,
-                                          newMin,
-                                        ),
-                                      })
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="imageUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Campaign Image</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="https://example.com/image.png"
-                          {...field}
-                          value={uploadedImageUrl || field.value}
-                          onChange={(e) => {
-                            field.onChange(e)
-                            setUploadedImageUrl(null)
-                          }}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Enter an image URL or upload an image below.
-                      </FormDescription>
-                      <FormMessage />
+                    />
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Our AI will draft a campaign title, description, and tasks
+                        for you.
+                      </p>
+                      <p className={cn(
+                        'text-xs tabular-nums',
+                        aiPrompt.trim().length < 20 ? 'text-muted-foreground' : 'text-green-500',
+                      )}>
+                        {aiPrompt.trim().length}/20 min
+                      </p>
+                    </div>
 
-                      {/* Image Upload Section */}
-                      <div className="mt-4 p-4 border rounded-lg bg-muted/50">
-                        <p className="text-sm text-muted-foreground mb-3">
-                          Or upload an image (max 4MB):
-                        </p>
-                        <CampaignImageUpload
-                          onUploadComplete={(url) => {
-                            setUploadedImageUrl(url)
-                            form.setValue('imageUrl', url)
-                          }}
-                        />
-                        {uploadedImageUrl && (
-                          <div className="mt-3 p-2 bg-green-500/10 border border-green-500/20 rounded text-sm text-green-600">
-                            ✓ Image uploaded. You can change it after campaign
-                            creation.
+                    {/* Generation stage progress */}
+                    {isGenerating && generationStage && (
+                      <div className="mt-4 p-4 rounded-lg bg-card border animate-in fade-in-50">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
                           </div>
-                        )}
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">
+                              {generationStage === 'planning' && '🧠 Analyzing your project...'}
+                              {generationStage === 'generating' && '✍️ Writing campaign content...'}
+                              {generationStage === 'validating' && '🔍 Reviewing quality...'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {generationStage === 'planning' && 'Deciding campaign strategy, target audience, and task types'}
+                              {generationStage === 'generating' && 'Crafting title, description, and tasks based on the plan'}
+                              {generationStage === 'validating' && 'Checking for quality, accuracy, and consistency'}
+                            </p>
+                          </div>
+                        </div>
+                        {/* Stage dots */}
+                        <div className="flex items-center gap-2 mt-3">
+                          {(['planning', 'generating', 'validating'] as const).map((stage, idx) => (
+                            <React.Fragment key={stage}>
+                              <div className={cn(
+                                'h-2 w-2 rounded-full transition-colors duration-300',
+                                generationStage === stage
+                                  ? 'bg-primary animate-pulse'
+                                  : (['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
+                                    ? 'bg-primary'
+                                    : 'bg-muted'),
+                              )} />
+                              {idx < 2 && (
+                                <div className={cn(
+                                  'h-0.5 flex-1 rounded transition-colors duration-300',
+                                  ['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
+                                    ? 'bg-primary'
+                                    : 'bg-muted',
+                                )} />
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                        <div className="flex justify-between mt-1">
+                          <span className="text-[10px] text-muted-foreground">Plan</span>
+                          <span className="text-[10px] text-muted-foreground">Generate</span>
+                          <span className="text-[10px] text-muted-foreground">Validate</span>
+                        </div>
                       </div>
-                    </FormItem>
-                  )}
-                />
-              </section>
-            )}
+                    )}
 
-            {step === 2 && (
-              <section className="space-y-6 animate-in fade-in-50">
-                <h2 className="text-xl font-semibold border-b pb-2">
-                  {steps[1].name}
-                </h2>
+                    {/* Error display with retry */}
+                    {generationError && !isGenerating && (
+                      <div className="mt-4 p-4 rounded-lg border border-destructive/50 bg-destructive/5 animate-in fade-in-50">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5">
+                            {generationError.category === 'rate_limit' && <Clock className="h-5 w-5 text-amber-500" />}
+                            {generationError.category === 'network' && <Wifi className="h-5 w-5 text-destructive" />}
+                            {!['rate_limit', 'network'].includes(generationError.category) && <AlertCircle className="h-5 w-5 text-destructive" />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-destructive">
+                              {generationError.message}
+                            </p>
+                            {generationError.retryable && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={handleGenerate}
+                              >
+                                <RefreshCw className="mr-2 h-3 w-3" />
+                                Try Again
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-                {/* Discord Bot Warning - Show if Discord tasks exist but bot URL is not configured */}
-                {tasks.some((task) => task.type === 'JOIN_DISCORD') &&
-                  !config.discordBotInviteUrl && (
-                    <Alert
-                      variant="destructive"
-                      className="border-red-200 bg-red-50"
-                    >
-                      <Bot className="h-4 w-4" />
-                      <AlertTitle>Discord Bot Not Configured</AlertTitle>
-                      <AlertDescription>
-                        You have Discord join tasks but the bot invite URL is
-                        not configured. Discord verification will not work
-                        until the bot is properly set up. Please contact
-                        support to configure the Discord bot.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                {/* Telegram Bot Warning - Show if Telegram tasks exist but bot username is not configured */}
-                {tasks.some((task) => task.type === 'JOIN_TELEGRAM') &&
-                  !config.telegramBotUsername && (
-                    <Alert
-                      variant="destructive"
-                      className="border-orange-200 bg-orange-50"
-                    >
-                      <Bot className="h-4 w-4" />
-                      <AlertTitle>Telegram Bot Not Configured</AlertTitle>
-                      <AlertDescription>
-                        You have Telegram join tasks but the bot username is
-                        not configured. Telegram verification will not work
-                        until the bot is properly set up. Please contact
-                        support to configure the Telegram bot.
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                {fields.map((field, index) => (
-                  <div
-                    key={field.id}
-                    className="flex flex-col gap-4 p-4 border rounded-md"
-                  >
-                    <div className="flex gap-4 items-start">
-                      <FormField
-                        control={form.control}
-                        name={`tasks.${index}.type`}
-                        render={({ field }) => (
-                          <FormItem className="w-1/3">
-                            <FormLabel>Type</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select task type" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                {TASK_TYPE_OPTIONS.map((opt) => (
-                                  <SelectItem
-                                    key={opt.value}
-                                    value={opt.value}
-                                  >
-                                    {opt.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name={`tasks.${index}.description`}
-                        render={({ field }) => (
-                          <FormItem className="flex-1">
-                            <FormLabel>Description</FormLabel>
-                            <FormControl>
-                              <Input
-                                placeholder={`E.g., Follow @project on X`}
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                    <div className="flex justify-end gap-4 mt-4">
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon"
-                        className="mt-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => remove(index)}
-                        disabled={fields.length <= 1}
+                        onClick={() => setStep(1)}
+                        disabled={isGenerating}
                       >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Remove Task</span>
+                        Skip &amp; Create Manually
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={handleGenerate}
+                        disabled={isGenerating || aiPrompt.trim().length < 20}
+                      >
+                        {isGenerating ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-2 h-4 w-4" />
+                        )}
+                        {isGenerating ? 'Generating...' : 'Generate Campaign'}
                       </Button>
                     </div>
-
-                    {tasks[index].type === 'JOIN_DISCORD' && (
-                      <div className="space-y-4">
-                        <FormField
-                          control={form.control}
-                          name={`tasks.${index}.verificationData`}
-                          render={({ field }) => (
-                            <FormItem className="flex-1">
-                              <FormLabel>Discord Server ID</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., 1024849645714206720"
-                                  {...field}
-                                  value={field.value ?? ''}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                The Discord server ID used for verification
-                                purposes.
-                              </FormDescription>
-                              <details className="mt-2">
-                                <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
-                                  How to get your Discord Server ID
-                                </summary>
-                                <div className="mt-2 text-xs space-y-1 text-muted-foreground">
-                                  <p>
-                                    1. Enable Developer Mode in Discord
-                                    Settings → Advanced → Developer Mode
-                                  </p>
-                                  <p>2. Right-click your server name</p>
-                                  <p>3. Click "Copy Server ID"</p>
-                                </div>
-                              </details>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`tasks.${index}.discordInviteLink`}
-                          render={({ field }) => (
-                            <FormItem className="flex-1">
-                              <FormLabel>Discord Invite Link</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., https://discord.gg/yourcode or just 'yourcode'"
-                                  {...field}
-                                  value={field.value ?? ''}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                The invite link participants will use to join
-                                your Discord server
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        {/* Discord Bot Setup Instructions */}
-                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
-                          <div className="flex items-center gap-2 text-blue-800">
-                            <Bot className="h-5 w-5" />
-                            <h4 className="font-semibold">
-                              Required: Add DappDrop Bot to Your Server
-                            </h4>
-                          </div>
-                          <p className="text-sm text-blue-700">
-                            To enable automatic verification of Discord join
-                            tasks, you must add our bot to your Discord
-                            server.
-                          </p>
-                          <div className="flex flex-col gap-2">
-                            {config.discordBotInviteUrl ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="w-fit bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
-                                onClick={() =>
-                                  window.open(
-                                    config.discordBotInviteUrl!,
-                                    '_blank',
-                                    '_blank',
-                                  )
-                                }
-                              >
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                Add DappDrop Bot to Server
-                              </Button>
-                            ) : (
-                              <p className="text-sm text-blue-600 font-medium">
-                                Discord bot invite URL not configured. Please
-                                contact support.
-                              </p>
-                            )}
-                            <div className="text-xs text-blue-600 space-y-1">
-                              <p>
-                                <strong>Required Permissions:</strong>
-                              </p>
-                              <ul className="list-disc list-inside ml-2 space-y-0.5">
-                                <li>View Server Members</li>
-                                <li>Read Message History</li>
-                              </ul>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                  </div>
+                </section>
+              )}
+              {step === 1 && (
+                <section className="space-y-6 animate-in fade-in-50">
+                  <h2 className="text-xl font-semibold border-b pb-2">
+                    {steps[0].name}
+                  </h2>
+                  <FormField
+                    control={form.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Campaign Title</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="E.g., Awesome Project Token Launch"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-
-                    {tasks[index].type === 'JOIN_TELEGRAM' && (
-                      <div className="space-y-4">
-                        <FormField
-                          control={form.control}
-                          name={`tasks.${index}.verificationData`}
-                          render={({ field }) => (
-                            <FormItem className="flex-1">
-                              <FormLabel>Telegram Channel/Group ID</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., @yourchannel or -100123456789"
-                                  {...field}
-                                  value={field.value ?? ''}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                The Telegram channel/group ID or username
-                                (with @) used for verification
-                              </FormDescription>
-                              <details className="mt-2">
-                                <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
-                                  How to get your Telegram Channel/Group ID
-                                </summary>
-                                <div className="mt-2 text-xs space-y-1 text-muted-foreground">
-                                  <p>
-                                    <strong>
-                                      For Channels with username:
-                                    </strong>{' '}
-                                    Use @channelname
-                                  </p>
-                                  <p>
-                                    <strong>
-                                      For Groups/Channels without username:
-                                    </strong>
-                                  </p>
-                                  <p>
-                                    1. Add @userinfobot to your group/channel
-                                  </p>
-                                  <p>2. The bot will show the chat ID</p>
-                                  <p>3. Use the ID (starts with -100)</p>
-                                </div>
-                              </details>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        <FormField
-                          control={form.control}
-                          name={`tasks.${index}.telegramInviteLink`}
-                          render={({ field }) => (
-                            <FormItem className="flex-1">
-                              <FormLabel>Telegram Invite Link</FormLabel>
-                              <FormControl>
-                                <Input
-                                  placeholder="e.g., https://t.me/yourchannel or https://t.me/+invitecode"
-                                  {...field}
-                                  value={field.value ?? ''}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                The invite link participants will use to join
-                                your Telegram channel/group
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-
-                        {/* Telegram Bot Setup Instructions */}
-                        <div className="p-4 bg-sky-50 border border-sky-200 rounded-lg space-y-3">
-                          <div className="flex items-center gap-2 text-sky-800">
-                            <Bot className="h-5 w-5" />
-                            <h4 className="font-semibold">
-                              Required: Add DappDrop Bot to Your Channel/Group
-                            </h4>
-                          </div>
-                          <p className="text-sm text-sky-700">
-                            To enable automatic verification of Telegram join
-                            tasks, you must add our bot to your Telegram
-                            channel/group.
-                          </p>
-                          <div className="flex flex-col gap-2">
-                            {config.telegramBotUsername ? (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="w-fit bg-white border-sky-300 text-sky-700 hover:bg-sky-50"
-                                onClick={() =>
-                                  window.open(
-                                    `https://t.me/${config.telegramBotUsername}`,
-                                    '_blank',
-                                    '_blank',
-                                  )
-                                }
-                              >
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                Add @{config.telegramBotUsername} to
-                                Channel/Group
-                              </Button>
-                            ) : (
-                              <p className="text-sm text-sky-600 font-medium">
-                                Telegram bot username not configured. Please
-                                contact support.
-                              </p>
-                            )}
-                            <div className="text-xs text-sky-600 space-y-1">
-                              <p>
-                                <strong>Required Permissions:</strong>
-                              </p>
-                              <ul className="list-disc list-inside ml-2 space-y-0.5">
-                                <li>Read Messages</li>
-                                <li>See Members List (for groups)</li>
-                              </ul>
-                              <p className="mt-2">
-                                <strong>Note:</strong> For channels, make sure
-                                the bot is added as an admin. For groups, it
-                                can be a regular member.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+                  />
+                  <FormField
+                    control={form.control}
+                    name="shortDescription"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Short Description</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="A brief, catchy description for the campaign card."
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-
-                    {tasks[index].type === 'ONCHAIN_TX' && (
-                      <div className="space-y-4">
-                        <FormField
-                          control={form.control}
-                          name={`tasks.${index}.paymentRequired`}
-                          render={({ field }) => (
-                            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                              <FormControl>
-                                <Checkbox
-                                  checked={field.value}
-                                  onCheckedChange={field.onChange}
-                                />
-                              </FormControl>
-                              <div className="space-y-1 leading-none">
-                                <FormLabel>Payment Required</FormLabel>
-                                <FormDescription>
-                                  Check this box if this task requires a
-                                  crypto payment to complete
-                                </FormDescription>
+                  />
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Detailed Description</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Explain your campaign in detail for the main page."
+                            rows={5}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="dates"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Campaign Duration</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant={'outline'}
+                                className={cn(
+                                  'w-full justify-start text-left font-normal',
+                                  !field.value?.from && 'text-muted-foreground',
+                                )}
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {field.value?.from ? (
+                                  field.value.to ? (
+                                    <>
+                                      {format(
+                                        field.value.from,
+                                        'LLL dd, y HH:mm',
+                                      )}{' '}
+                                      -{' '}
+                                      {format(
+                                        field.value.to,
+                                        'LLL dd, y HH:mm',
+                                      )}
+                                    </>
+                                  ) : (
+                                    format(field.value.from, 'LLL dd, y HH:mm')
+                                  )
+                                ) : (
+                                  <span>Pick a date range</span>
+                                )}
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="range"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              initialFocus
+                              numberOfMonths={2}
+                            />
+                            <div className="p-4 border-t grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="start-time-h">Start Time</Label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    type="number"
+                                    id="start-time-h"
+                                    min="0"
+                                    max="23"
+                                    className="w-16"
+                                    placeholder="HH"
+                                    value={dates?.from?.getHours() ?? 0}
+                                    onChange={(e) => {
+                                      const newHour = parseInt(
+                                        e.target.value,
+                                        10,
+                                      )
+                                      if (!isNaN(newHour))
+                                        field.onChange({
+                                          ...dates,
+                                          from: setHours(
+                                            dates.from ?? new Date(),
+                                            newHour,
+                                          ),
+                                        })
+                                    }}
+                                  />
+                                  <Input
+                                    type="number"
+                                    id="start-time-m"
+                                    min="0"
+                                    max="59"
+                                    className="w-16"
+                                    placeholder="MM"
+                                    value={dates?.from?.getMinutes() ?? 0}
+                                    onChange={(e) => {
+                                      const newMin = parseInt(
+                                        e.target.value,
+                                        10,
+                                      )
+                                      if (!isNaN(newMin))
+                                        field.onChange({
+                                          ...dates,
+                                          from: setMinutes(
+                                            dates.from ?? new Date(),
+                                            newMin,
+                                          ),
+                                        })
+                                    }}
+                                  />
+                                </div>
                               </div>
-                            </FormItem>
-                          )}
-                        />
+                              <div className="space-y-2">
+                                <Label htmlFor="end-time-h">End Time</Label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    type="number"
+                                    id="end-time-h"
+                                    min="0"
+                                    max="23"
+                                    className="w-16"
+                                    placeholder="HH"
+                                    value={dates?.to?.getHours() ?? 0}
+                                    onChange={(e) => {
+                                      const newHour = parseInt(
+                                        e.target.value,
+                                        10,
+                                      )
+                                      if (!isNaN(newHour))
+                                        field.onChange({
+                                          ...dates,
+                                          to: setHours(
+                                            dates.to ?? new Date(),
+                                            newHour,
+                                          ),
+                                        })
+                                    }}
+                                  />
+                                  <Input
+                                    type="number"
+                                    id="end-time-m"
+                                    min="0"
+                                    max="59"
+                                    className="w-16"
+                                    placeholder="MM"
+                                    value={dates?.to?.getMinutes() ?? 0}
+                                    onChange={(e) => {
+                                      const newMin = parseInt(
+                                        e.target.value,
+                                        10,
+                                      )
+                                      if (!isNaN(newMin))
+                                        field.onChange({
+                                          ...dates,
+                                          to: setMinutes(
+                                            dates.to ?? new Date(),
+                                            newMin,
+                                          ),
+                                        })
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="imageUrl"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Campaign Image</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://example.com/image.png"
+                            {...field}
+                            value={uploadedImageUrl || field.value}
+                            onChange={(e) => {
+                              field.onChange(e)
+                              setUploadedImageUrl(null)
+                            }}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Enter an image URL or upload an image below.
+                        </FormDescription>
+                        <FormMessage />
 
-                        {tasks[index].paymentRequired && (
-                          <TooltipProvider>
-                            <div className="space-y-3 p-5 bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200/60 rounded-xl shadow-sm">
-                              <div className="flex items-center justify-between mb-1">
-                                <h4 className="font-semibold text-purple-900 flex items-center gap-2">
-                                  💰 Payment Configuration
-                                </h4>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="text-purple-600 hover:text-purple-800 transition-colors"
+                        {/* Image Upload Section */}
+                        <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Or upload an image (max 4MB):
+                          </p>
+                          <CampaignImageUpload
+                            onUploadComplete={(url) => {
+                              setUploadedImageUrl(url)
+                              form.setValue('imageUrl', url)
+                            }}
+                          />
+                          {uploadedImageUrl && (
+                            <div className="mt-3 p-2 bg-green-500/10 border border-green-500/20 rounded text-sm text-green-600">
+                              ✓ Image uploaded. You can change it after campaign
+                              creation.
+                            </div>
+                          )}
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                </section>
+              )}
+
+              {step === 2 && (
+                <section className="space-y-6 animate-in fade-in-50">
+                  <h2 className="text-xl font-semibold border-b pb-2">
+                    {steps[1].name}
+                  </h2>
+
+                  {/* Discord Bot Warning - Show if Discord tasks exist but bot URL is not configured */}
+                  {tasks.some((task) => task.type === 'JOIN_DISCORD') &&
+                    !config.discordBotInviteUrl && (
+                      <Alert
+                        variant="destructive"
+                        className="border-red-200 bg-red-50"
+                      >
+                        <Bot className="h-4 w-4" />
+                        <AlertTitle>Discord Bot Not Configured</AlertTitle>
+                        <AlertDescription>
+                          You have Discord join tasks but the bot invite URL is
+                          not configured. Discord verification will not work
+                          until the bot is properly set up. Please contact
+                          support to configure the Discord bot.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                  {/* Telegram Bot Warning - Show if Telegram tasks exist but bot username is not configured */}
+                  {tasks.some((task) => task.type === 'JOIN_TELEGRAM') &&
+                    !config.telegramBotUsername && (
+                      <Alert
+                        variant="destructive"
+                        className="border-orange-200 bg-orange-50"
+                      >
+                        <Bot className="h-4 w-4" />
+                        <AlertTitle>Telegram Bot Not Configured</AlertTitle>
+                        <AlertDescription>
+                          You have Telegram join tasks but the bot username is
+                          not configured. Telegram verification will not work
+                          until the bot is properly set up. Please contact
+                          support to configure the Telegram bot.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                  {fields.map((field, index) => (
+                    <div
+                      key={field.id}
+                      className="flex flex-col gap-4 p-4 border rounded-md"
+                    >
+                      <div className="flex gap-4 items-start">
+                        <FormField
+                          control={form.control}
+                          name={`tasks.${index}.type`}
+                          render={({ field }) => (
+                            <FormItem className="w-1/3">
+                              <FormLabel>Type</FormLabel>
+                              <Select
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select task type" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {TASK_TYPE_OPTIONS.map((opt) => (
+                                    <SelectItem
+                                      key={opt.value}
+                                      value={opt.value}
                                     >
-                                      <Info className="h-4 w-4" />
-                                    </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs">
-                                    <p className="text-sm">
-                                      Payments are verified automatically via
-                                      blockchain transaction scan. Users
-                                      submit their transaction hash after
-                                      payment.
+                                      {opt.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name={`tasks.${index}.description`}
+                          render={({ field }) => (
+                            <FormItem className="flex-1">
+                              <FormLabel>Description</FormLabel>
+                              <FormControl>
+                                <Input
+                                  placeholder={`E.g., Follow @project on X`}
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="mt-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => remove(index)}
+                          disabled={fields.length <= 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Remove Task</span>
+                        </Button>
+                      </div>
+
+                      {tasks[index].type === 'JOIN_DISCORD' && (
+                        <div className="space-y-4">
+                          <FormField
+                            control={form.control}
+                            name={`tasks.${index}.verificationData`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel>Discord Server ID</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="e.g., 1024849645714206720"
+                                    {...field}
+                                    value={field.value ?? ''}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  The Discord server ID used for verification
+                                  purposes.
+                                </FormDescription>
+                                <details className="mt-2">
+                                  <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                                    How to get your Discord Server ID
+                                  </summary>
+                                  <div className="mt-2 text-xs space-y-1 text-muted-foreground">
+                                    <p>
+                                      1. Enable Developer Mode in Discord
+                                      Settings → Advanced → Developer Mode
                                     </p>
-                                  </TooltipContent>
-                                </Tooltip>
+                                    <p>2. Right-click your server name</p>
+                                    <p>3. Click "Copy Server ID"</p>
+                                  </div>
+                                </details>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`tasks.${index}.discordInviteLink`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel>Discord Invite Link</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="e.g., https://discord.gg/yourcode or just 'yourcode'"
+                                    {...field}
+                                    value={field.value ?? ''}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  The invite link participants will use to join
+                                  your Discord server
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          {/* Discord Bot Setup Instructions */}
+                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-blue-800">
+                              <Bot className="h-5 w-5" />
+                              <h4 className="font-semibold">
+                                Required: Add DappDrop Bot to Your Server
+                              </h4>
+                            </div>
+                            <p className="text-sm text-blue-700">
+                              To enable automatic verification of Discord join
+                              tasks, you must add our bot to your Discord
+                              server.
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              {config.discordBotInviteUrl ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-fit bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
+                                  onClick={() =>
+                                    window.open(
+                                      config.discordBotInviteUrl!,
+                                      '_blank',
+                                    )
+                                  }
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  Add DappDrop Bot to Server
+                                </Button>
+                              ) : (
+                                <p className="text-sm text-blue-600 font-medium">
+                                  Discord bot invite URL not configured. Please
+                                  contact support.
+                                </p>
+                              )}
+                              <div className="text-xs text-blue-600 space-y-1">
+                                <p>
+                                  <strong>Required Permissions:</strong>
+                                </p>
+                                <ul className="list-disc list-inside ml-2 space-y-0.5">
+                                  <li>View Server Members</li>
+                                  <li>Read Message History</li>
+                                </ul>
                               </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                              <FormField
-                                control={form.control}
-                                name={`tasks.${index}.paymentRecipient`}
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-sm font-medium text-gray-900">
-                                      Recipient Wallet
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
-                                        className="font-mono text-sm"
-                                        {...field}
-                                        value={field.value ?? ''}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
+                      {tasks[index].type === 'JOIN_TELEGRAM' && (
+                        <div className="space-y-4">
+                          <FormField
+                            control={form.control}
+                            name={`tasks.${index}.verificationData`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel>Telegram Channel/Group ID</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="e.g., @yourchannel or -100123456789"
+                                    {...field}
+                                    value={field.value ?? ''}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  The Telegram channel/group ID or username
+                                  (with @) used for verification
+                                </FormDescription>
+                                <details className="mt-2">
+                                  <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                                    How to get your Telegram Channel/Group ID
+                                  </summary>
+                                  <div className="mt-2 text-xs space-y-1 text-muted-foreground">
+                                    <p>
+                                      <strong>
+                                        For Channels with username:
+                                      </strong>{' '}
+                                      Use @channelname
+                                    </p>
+                                    <p>
+                                      <strong>
+                                        For Groups/Channels without username:
+                                      </strong>
+                                    </p>
+                                    <p>
+                                      1. Add @userinfobot to your group/channel
+                                    </p>
+                                    <p>2. The bot will show the chat ID</p>
+                                    <p>3. Use the ID (starts with -100)</p>
+                                  </div>
+                                </details>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`tasks.${index}.telegramInviteLink`}
+                            render={({ field }) => (
+                              <FormItem className="flex-1">
+                                <FormLabel>Telegram Invite Link</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    placeholder="e.g., https://t.me/yourchannel or https://t.me/+invitecode"
+                                    {...field}
+                                    value={field.value ?? ''}
+                                  />
+                                </FormControl>
+                                <FormDescription>
+                                  The invite link participants will use to join
+                                  your Telegram channel/group
+                                </FormDescription>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
 
-                              <div className="grid grid-cols-2 gap-3">
-                                <FormField
-                                  control={form.control}
-                                  name={`tasks.${index}.network`}
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-sm font-medium text-gray-900">
-                                        Network
-                                      </FormLabel>
-                                      <Select
-                                        onValueChange={(value) => {
-                                          field.onChange(value)
-                                          // Set chainId based on network
-                                          const chainIds: Record<
-                                            string,
-                                            number
-                                          > = {
-                                            sepolia: 11155111,
-                                            ethereum: 1,
-                                            base: 8453,
-                                            polygon: 137,
-                                          }
-                                          form.setValue(
-                                            `tasks.${index}.chainId`,
-                                            chainIds[value],
-                                            chainIds[value],
-                                          )
-                                        }}
-                                        value={field.value || 'ethereum'}
-                                        defaultValue="ethereum"
+                          {/* Telegram Bot Setup Instructions */}
+                          <div className="p-4 bg-sky-50 border border-sky-200 rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-sky-800">
+                              <Bot className="h-5 w-5" />
+                              <h4 className="font-semibold">
+                                Required: Add DappDrop Bot to Your Channel/Group
+                              </h4>
+                            </div>
+                            <p className="text-sm text-sky-700">
+                              To enable automatic verification of Telegram join
+                              tasks, you must add our bot to your Telegram
+                              channel/group.
+                            </p>
+                            <div className="flex flex-col gap-2">
+                              {config.telegramBotUsername ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="w-fit bg-white border-sky-300 text-sky-700 hover:bg-sky-50"
+                                  onClick={() =>
+                                    window.open(
+                                      `https://t.me/${config.telegramBotUsername}`,
+                                      '_blank',
+                                    )
+                                  }
+                                >
+                                  <ExternalLink className="h-4 w-4 mr-2" />
+                                  Add @{config.telegramBotUsername} to
+                                  Channel/Group
+                                </Button>
+                              ) : (
+                                <p className="text-sm text-sky-600 font-medium">
+                                  Telegram bot username not configured. Please
+                                  contact support.
+                                </p>
+                              )}
+                              <div className="text-xs text-sky-600 space-y-1">
+                                <p>
+                                  <strong>Required Permissions:</strong>
+                                </p>
+                                <ul className="list-disc list-inside ml-2 space-y-0.5">
+                                  <li>Read Messages</li>
+                                  <li>See Members List (for groups)</li>
+                                </ul>
+                                <p className="mt-2">
+                                  <strong>Note:</strong> For channels, make sure
+                                  the bot is added as an admin. For groups, it
+                                  can be a regular member.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {tasks[index].type === 'ONCHAIN_TX' && (
+                        <div className="space-y-4">
+                          <FormField
+                            control={form.control}
+                            name={`tasks.${index}.paymentRequired`}
+                            render={({ field }) => (
+                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                                <FormControl>
+                                  <Checkbox
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                                <div className="space-y-1 leading-none">
+                                  <FormLabel>Payment Required</FormLabel>
+                                  <FormDescription>
+                                    Check this box if this task requires a
+                                    crypto payment to complete
+                                  </FormDescription>
+                                </div>
+                              </FormItem>
+                            )}
+                          />
+
+                          {tasks[index].paymentRequired && (
+                            <TooltipProvider>
+                              <div className="space-y-3 p-5 bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200/60 rounded-xl shadow-sm">
+                                <div className="flex items-center justify-between mb-1">
+                                  <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                                    💰 Payment Configuration
+                                  </h4>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="text-purple-600 hover:text-purple-800 transition-colors"
                                       >
-                                        <FormControl>
-                                          <SelectTrigger>
-                                            <SelectValue placeholder="Ethereum" />
-                                          </SelectTrigger>
-                                        </FormControl>
-                                        <SelectContent>
-                                          <SelectItem value="ethereum">
-                                            🔷 Ethereum
-                                          </SelectItem>
-                                          <SelectItem value="base">
-                                            🔵 Base
-                                          </SelectItem>
-                                          <SelectItem value="polygon">
-                                            🟣 Polygon
-                                          </SelectItem>
-                                          <SelectItem value="sepolia">
-                                            🧪 Sepolia
-                                          </SelectItem>
-                                        </SelectContent>
-                                      </Select>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
+                                        <Info className="h-4 w-4" />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-xs">
+                                      <p className="text-sm">
+                                        Payments are verified automatically via
+                                        blockchain transaction scan. Users
+                                        submit their transaction hash after
+                                        payment.
+                                      </p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </div>
 
                                 <FormField
                                   control={form.control}
-                                  name={`tasks.${index}.tokenSymbol`}
+                                  name={`tasks.${index}.paymentRecipient`}
                                   render={({ field }) => (
                                     <FormItem>
                                       <FormLabel className="text-sm font-medium text-gray-900">
-                                        Token
+                                        Recipient Wallet
                                       </FormLabel>
                                       <FormControl>
                                         <Input
-                                          placeholder="ETH, USDC, DAI..."
-                                          className="uppercase"
-                                          {...field}
-                                          value={field.value ?? ''}
-                                        />
-                                      </FormControl>
-                                      <FormMessage />
-                                    </FormItem>
-                                  )}
-                                />
-                              </div>
-
-                              <FormField
-                                control={form.control}
-                                name={`tasks.${index}.tokenAddress`}
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                                      Token Contract
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <span className="text-xs text-purple-600 cursor-help">
-                                            (optional)
-                                          </span>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p className="text-sm max-w-xs">
-                                            Leave empty for native tokens
-                                            (ETH, MATIC). For ERC-20 tokens,
-                                            enter the contract address.
-                                          </p>
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    </FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        placeholder="0x... or leave empty for native token"
-                                        className="font-mono text-sm"
-                                        {...field}
-                                        value={field.value ?? ''}
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <div className="grid grid-cols-2 gap-3">
-                                <FormField
-                                  control={form.control}
-                                  name={`tasks.${index}.amount`}
-                                  render={({ field }) => (
-                                    <FormItem>
-                                      <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
-                                        Amount (ETH)
-                                        <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <Info className="h-3 w-3 text-gray-400 cursor-help" />
-                                          </TooltipTrigger>
-                                          <TooltipContent>
-                                            <p className="text-sm">
-                                              Enter amount in ETH (e.g., 0.001
-                                              ETH)
-                                              Enter amount in ETH (e.g., 0.001
-                                              ETH)
-                                            </p>
-                                          </TooltipContent>
-                                        </Tooltip>
-                                      </FormLabel>
-                                      <FormControl>
-                                        <Input
-                                          type="number"
-                                          step="any"
-                                          min="0"
-                                          placeholder="0.001"
+                                          placeholder="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
                                           className="font-mono text-sm"
                                           {...field}
                                           value={field.value ?? ''}
-                                          onChange={(e) => {
-                                            field.onChange(e)
-                                            // Auto-populate display format
-                                            const tokenSymbol =
-                                              form.getValues(
-                                                `tasks.${index}.tokenSymbol`,
-                                              ) || 'ETH'
-                                            const tokenSymbol =
-                                              form.getValues(
-                                                `tasks.${index}.tokenSymbol`,
-                                              ) || 'ETH'
-                                            if (e.target.value) {
-                                              form.setValue(
-                                                `tasks.${index}.amountDisplay`,
-                                                `${e.target.value} ${tokenSymbol}`,
-                                              )
-                                              form.setValue(
-                                                `tasks.${index}.amountDisplay`,
-                                                `${e.target.value} ${tokenSymbol}`,
-                                              )
-                                            }
-                                          }}
                                         />
                                       </FormControl>
                                       <FormMessage />
@@ -1637,28 +1444,109 @@ export default function CreateCampaignPage() {
                                   )}
                                 />
 
+                                <div className="grid grid-cols-2 gap-3">
+                                  <FormField
+                                    control={form.control}
+                                    name={`tasks.${index}.network`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-sm font-medium text-gray-900">
+                                          Network
+                                        </FormLabel>
+                                        <Select
+                                          onValueChange={(value) => {
+                                            field.onChange(value)
+                                            // Set chainId based on network
+                                            const chainIds: Record<
+                                              string,
+                                              number
+                                            > = {
+                                              sepolia: 11155111,
+                                              ethereum: 1,
+                                              base: 8453,
+                                              polygon: 137,
+                                            }
+                                            form.setValue(
+                                              `tasks.${index}.chainId`,
+                                              chainIds[value],
+                                            )
+                                          }}
+                                          value={field.value || 'ethereum'}
+                                          defaultValue="ethereum"
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger>
+                                              <SelectValue placeholder="Ethereum" />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            <SelectItem value="ethereum">
+                                              🔷 Ethereum
+                                            </SelectItem>
+                                            <SelectItem value="base">
+                                              🔵 Base
+                                            </SelectItem>
+                                            <SelectItem value="polygon">
+                                              🟣 Polygon
+                                            </SelectItem>
+                                            <SelectItem value="sepolia">
+                                              🧪 Sepolia
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name={`tasks.${index}.tokenSymbol`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-sm font-medium text-gray-900">
+                                          Token
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="ETH, USDC, DAI..."
+                                            className="uppercase"
+                                            {...field}
+                                            value={field.value ?? ''}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+
                                 <FormField
                                   control={form.control}
-                                  name={`tasks.${index}.amountDisplay`}
+                                  name={`tasks.${index}.tokenAddress`}
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
-                                        Display Format
+                                      <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                        Token Contract
                                         <Tooltip>
                                           <TooltipTrigger asChild>
-                                            <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                                            <span className="text-xs text-purple-600 cursor-help">
+                                              (optional)
+                                            </span>
                                           </TooltipTrigger>
                                           <TooltipContent>
-                                            <p className="text-sm">
-                                              Human-readable format shown to
-                                              users (auto-filled)
+                                            <p className="text-sm max-w-xs">
+                                              Leave empty for native tokens
+                                              (ETH, MATIC). For ERC-20 tokens,
+                                              enter the contract address.
                                             </p>
                                           </TooltipContent>
                                         </Tooltip>
                                       </FormLabel>
                                       <FormControl>
                                         <Input
-                                          placeholder="0.001 ETH"
+                                          placeholder="0x... or leave empty for native token"
+                                          className="font-mono text-sm"
                                           {...field}
                                           value={field.value ?? ''}
                                         />
@@ -1667,365 +1555,443 @@ export default function CreateCampaignPage() {
                                     </FormItem>
                                   )}
                                 />
-                              </div>
 
-                              <div className="flex items-center gap-2 pt-1 text-xs text-purple-700 bg-purple-100/50 px-3 py-2 rounded-md border border-purple-200/50">
-                                <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
-                                <span>
-                                  Payments verified automatically via
-                                  blockchain scan
-                                </span>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <FormField
+                                    control={form.control}
+                                    name={`tasks.${index}.amount`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                          Amount (ETH)
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p className="text-sm">
+                                                Enter amount in ETH (e.g., 0.001
+                                                ETH)
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            type="number"
+                                            step="any"
+                                            min="0"
+                                            placeholder="0.001"
+                                            className="font-mono text-sm"
+                                            {...field}
+                                            value={field.value ?? ''}
+                                            onChange={(e) => {
+                                              field.onChange(e)
+                                              // Auto-populate display format
+                                              const tokenSymbol =
+                                                form.getValues(
+                                                  `tasks.${index}.tokenSymbol`,
+                                                ) || 'ETH'
+                                              if (e.target.value) {
+                                                form.setValue(
+                                                  `tasks.${index}.amountDisplay`,
+                                                  `${e.target.value} ${tokenSymbol}`,
+                                                )
+                                              }
+                                            }}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+
+                                  <FormField
+                                    control={form.control}
+                                    name={`tasks.${index}.amountDisplay`}
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                          Display Format
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                              <p className="text-sm">
+                                                Human-readable format shown to
+                                                users (auto-filled)
+                                              </p>
+                                            </TooltipContent>
+                                          </Tooltip>
+                                        </FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            placeholder="0.001 ETH"
+                                            {...field}
+                                            value={field.value ?? ''}
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                </div>
+
+                                <div className="flex items-center gap-2 pt-1 text-xs text-purple-700 bg-purple-100/50 px-3 py-2 rounded-md border border-purple-200/50">
+                                  <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span>
+                                    Payments verified automatically via
+                                    blockchain scan
+                                  </span>
+                                </div>
                               </div>
+                            </TooltipProvider>
+                          )}
+                        </div>
+                      )}
+
+                      {tasks[index].type === 'HUMANITY_VERIFICATION' && (
+                        <div className="space-y-4">
+                          <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3 dark:bg-purple-950/20 dark:border-purple-800/40">
+                            <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
+                              <ShieldCheck className="h-5 w-5" />
+                              <h4 className="font-semibold">Verification Presets</h4>
                             </div>
-                          </TooltipProvider>
-                        )}
-                      </div>
-                    )}
+                            <p className="text-sm text-purple-700 dark:text-purple-400">
+                              Select one or more Humanity Protocol checks users
+                              must pass to complete this task.
+                            </p>
+                            <FormField
+                              control={form.control}
+                              name={`tasks.${index}.humanityPreset`}
+                              render={({ field }) => {
+                                const selected: string[] = Array.isArray(field.value) ? field.value : field.value ? [field.value] : ['is_human']
 
-                    {tasks[index].type === 'HUMANITY_VERIFICATION' && (
-                      <div className="space-y-4">
-                        <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3 dark:bg-purple-950/20 dark:border-purple-800/40">
-                          <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
-                            <ShieldCheck className="h-5 w-5" />
-                            <h4 className="font-semibold">Verification Presets</h4>
-                          </div>
-                          <p className="text-sm text-purple-700 dark:text-purple-400">
-                            Select one or more Humanity Protocol checks users
-                            must pass to complete this task.
-                          </p>
-                          <FormField
-                            control={form.control}
-                            name={`tasks.${index}.humanityPreset`}
-                            render={({ field }) => {
-                              const selected: string[] = Array.isArray(field.value) ? field.value : field.value ? [field.value] : ['is_human']
+                                const toggle = (preset: string) => {
+                                  const next = selected.includes(preset)
+                                    ? selected.filter((p) => p !== preset)
+                                    : [...selected, preset]
+                                  // Ensure at least one preset is always selected
+                                  field.onChange(next.length > 0 ? next : ['is_human'])
+                                }
 
-                              const toggle = (preset: string) => {
-                                const next = selected.includes(preset)
-                                  ? selected.filter((p) => p !== preset)
-                                  : [...selected, preset]
-                                // Ensure at least one preset is always selected
-                                field.onChange(next.length > 0 ? next : ['is_human'])
-                              }
+                                // Group presets by category
+                                const categories = [
+                                  { key: 'identity', label: 'Identity' },
+                                  { key: 'age', label: 'Age Verification' },
+                                  { key: 'kyc', label: 'KYC' },
+                                  { key: 'financial', label: 'Financial' },
+                                ] as const
 
-                              // Group presets by category
-                              const categories = [
-                                { key: 'identity', label: 'Identity' },
-                                { key: 'age', label: 'Age Verification' },
-                                { key: 'kyc', label: 'KYC' },
-                                { key: 'financial', label: 'Financial' },
-                              ] as const
-
-                              return (
-                                <FormItem className="space-y-3">
-                                  <FormLabel>
-                                    Required Checks ({selected.length} selected)
-                                  </FormLabel>
-                                  {categories.map((cat) => {
-                                    const presets = HUMANITY_PRESETS.filter(
-                                      (p) => p.category === cat.key,
-                                    )
-                                    if (presets.length === 0) return null
-                                    return (
-                                      <div key={cat.key} className="space-y-1.5">
-                                        <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
-                                          {cat.label}
-                                        </p>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                          {presets.map((p) => {
-                                            const isChecked = selected.includes(p.preset)
-                                            return (
-                                              <label
-                                                key={p.preset}
-                                                className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isChecked
-                                                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 ring-1 ring-purple-500/30'
-                                                    : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/10'
-                                                  }`}
-                                              >
-                                                <Checkbox
-                                                  checked={isChecked}
-                                                  onCheckedChange={() => toggle(p.preset)}
-                                                  className="mt-0.5"
-                                                />
-                                                <div className="space-y-0.5 flex-1 min-w-0">
-                                                  <div className="flex items-center gap-1.5">
-                                                    <span className="text-sm">{p.icon}</span>
-                                                    <span className="text-sm font-medium truncate">
-                                                      {p.label}
-                                                    </span>
+                                return (
+                                  <FormItem className="space-y-3">
+                                    <FormLabel>
+                                      Required Checks ({selected.length} selected)
+                                    </FormLabel>
+                                    {categories.map((cat) => {
+                                      const presets = HUMANITY_PRESETS.filter(
+                                        (p) => p.category === cat.key,
+                                      )
+                                      if (presets.length === 0) return null
+                                      return (
+                                        <div key={cat.key} className="space-y-1.5">
+                                          <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
+                                            {cat.label}
+                                          </p>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {presets.map((p) => {
+                                              const isChecked = selected.includes(p.preset)
+                                              return (
+                                                <label
+                                                  key={p.preset}
+                                                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isChecked
+                                                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 ring-1 ring-purple-500/30'
+                                                      : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/10'
+                                                    }`}
+                                                >
+                                                  <Checkbox
+                                                    checked={isChecked}
+                                                    onCheckedChange={() => toggle(p.preset)}
+                                                    className="mt-0.5"
+                                                  />
+                                                  <div className="space-y-0.5 flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="text-sm">{p.icon}</span>
+                                                      <span className="text-sm font-medium truncate">
+                                                        {p.label}
+                                                      </span>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-snug">
+                                                      {p.description}
+                                                    </p>
                                                   </div>
-                                                  <p className="text-xs text-muted-foreground leading-snug">
-                                                    {p.description}
-                                                  </p>
-                                                </div>
-                                              </label>
-                                            )
-                                          })}
+                                                </label>
+                                              )
+                                            })}
+                                          </div>
                                         </div>
-                                      </div>
-                                    )
-                                  })}
-                                  <FormDescription>
-                                    Users must pass <strong>all</strong> selected checks to complete this task.
-                                  </FormDescription>
-                                  <FormMessage />
-                                </FormItem>
-                              )
-                            }}
-                          />
+                                      )
+                                    })}
+                                    <FormDescription>
+                                      Users must pass <strong>all</strong> selected checks to complete this task.
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )
+                              }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    append({
-                      type: 'SOCIAL_FOLLOW',
-                      description: '',
-                      verificationData: '',
-                      discordInviteLink: '',
-                      telegramInviteLink: '',
-                    })
-                  }
-                >
-                  <Plus className="mr-2 h-4 w-4" /> Add Task
-                </Button>
-              </section>
-            )}
-
-            {step === 3 && (
-              <section className="space-y-6 animate-in fade-in-50">
-                <h2 className="text-xl font-semibold border-b pb-2">
-                  {steps[2].name}
-                </h2>
-                <FormField
-                  control={form.control}
-                  name="reward.type"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <FormLabel>Reward Type</FormLabel>
-                      <FormControl>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          defaultValue={field.value}
-                          className="flex flex-col space-y-1"
-                        >
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl>
-                              <RadioGroupItem value="ERC20" />
-                            </FormControl>
-                            <FormLabel className="font-normal">
-                              ERC20 Token (Fungible)
-                            </FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl>
-                              <RadioGroupItem value="ERC721" />
-                            </FormControl>
-                            <FormLabel className="font-normal">
-                              ERC721 Token (NFT)
-                            </FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-3 space-y-0">
-                            <FormControl>
-                              <RadioGroupItem value="None" />
-                            </FormControl>
-                            <FormLabel className="font-normal">
-                              None (Text description)
-                            </FormLabel>
-                          </FormItem>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                {rewardType !== 'None' && (
-                  <FormField
-                    control={form.control}
-                    name="reward.tokenAddress"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Token Contract Address</FormLabel>
-                        <FormControl>
-                          <Input placeholder="0x..." {...field} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-                {rewardType === 'ERC20' && (
-                  <FormField
-                    control={form.control}
-                    name="reward.amount"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Amount per Participant</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="1000"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-                {rewardType === 'None' && (
-                  <FormField
-                    control={form.control}
-                    name="reward.name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Reward Description</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="e.g., A special role in our Discord"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-              </section>
-            )}
-
-            {step === 4 && (
-              <section className="space-y-6 animate-in fade-in-50">
-                <h2 className="text-xl font-semibold border-b pb-2">
-                  {steps[3].name} &amp; Create
-                </h2>
-                <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-6">
-                  <h3 className="font-semibold text-lg">
-                    {form.getValues('title')}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {form.getValues('shortDescription')}
-                  </p>
-                  <div className="text-sm">
-                    <strong>Reward:</strong>{' '}
-                    {form.getValues('reward.type') === 'ERC20'
-                      ? `${form.getValues(
-                        'reward.amount',
-                      )} tokens from contract `
-                            'reward.amount',
-                          )} tokens from contract `
-                    : form.getValues('reward.type') === 'ERC721'
-                    ? `1 NFT from contract `
-                    : `${(form.getValues('reward') as any).name}`}
-                    {form.getValues('reward.type') !== 'None' && (
-                      <code className="text-xs bg-muted p-1 rounded">
-                        {(form.getValues('reward') as any).tokenAddress}
-                      </code>
-                    )}
-                  </div>
-                  <div className="text-sm">
-                    <strong>Tasks:</strong>
-                    <ul className="list-disc pl-5 mt-1 space-y-1">
-                      {form.getValues('tasks').map((task, i) => (
-                        <li key={i}>
-                          [
-                          {
-                            TASK_TYPE_OPTIONS.find(
-                              (t) => t.value === task.type,
-                              (t) => t.value === task.type,
-                            )?.label
-                          }
-                          ] {task.description}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Campaign Mode Selection */}
-                  <div className="mt-6 p-4 border rounded-lg bg-muted/30">
-                    <h3 className="font-medium mb-3">Campaign Activation</h3>
-                    <div className="space-y-2">
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="createMode"
-                          value="activate"
-                          checked={createMode === 'activate'}
-                          onChange={(e) => setCreateMode('activate')}
-                          className="text-primary focus:ring-primary"
-                        />
-                        <div>
-                          <span className="font-medium">
-                            Create & Activate
-                          </span>
-                          <p className="text-xs text-muted-foreground">
-                            Campaign becomes active immediately (recommended)
-                          </p>
-                        </div>
-                      </label>
-                      <label className="flex items-center space-x-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="createMode"
-                          value="draft"
-                          checked={createMode === 'draft'}
-                          onChange={(e) => setCreateMode('draft')}
-                          className="text-primary focus:ring-primary"
-                        />
-                        <div>
-                          <span className="font-medium">Create as Draft</span>
-                          <p className="text-xs text-muted-foreground">
-                            Campaign stays in draft mode until manually opened
-                          </p>
-                        </div>
-                      </label>
+                      )}
                     </div>
-                  </div>
-
-                  <p className="text-xs pt-4 text-center text-muted-foreground">
-                    {createMode === 'activate'
-                      ? 'Your campaign will be created and become active based on your selected dates.'
-                      : 'Your campaign will be created in draft mode. You will need to open it manually for participants to join.'}
-                  </p>
-                </div>
-              </section>
-            )}
-
-            {step > 0 && (
-              <div className="flex justify-between pt-4 mt-8 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={prevStep}
-                  disabled={step === 1}
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Previous
-                </Button>
-
-                {step < 4 ? (
-                  <Button type="button" onClick={nextStep}>
-                    Next
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      append({
+                        type: 'SOCIAL_FOLLOW',
+                        description: '',
+                        verificationData: '',
+                        discordInviteLink: '',
+                        telegramInviteLink: '',
+                      })
+                    }
+                  >
+                    <Plus className="mr-2 h-4 w-4" /> Add Task
                   </Button>
-                ) : (
-                  <Button type="submit" disabled={isLoading}>
-                    {isLoading && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                </section>
+              )}
+
+              {step === 3 && (
+                <section className="space-y-6 animate-in fade-in-50">
+                  <h2 className="text-xl font-semibold border-b pb-2">
+                    {steps[2].name}
+                  </h2>
+                  <FormField
+                    control={form.control}
+                    name="reward.type"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormLabel>Reward Type</FormLabel>
+                        <FormControl>
+                          <RadioGroup
+                            onValueChange={field.onChange}
+                            defaultValue={field.value}
+                            className="flex flex-col space-y-1"
+                          >
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value="ERC20" />
+                              </FormControl>
+                              <FormLabel className="font-normal">
+                                ERC20 Token (Fungible)
+                              </FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value="ERC721" />
+                              </FormControl>
+                              <FormLabel className="font-normal">
+                                ERC721 Token (NFT)
+                              </FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-3 space-y-0">
+                              <FormControl>
+                                <RadioGroupItem value="None" />
+                              </FormControl>
+                              <FormLabel className="font-normal">
+                                None (Text description)
+                              </FormLabel>
+                            </FormItem>
+                          </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
                     )}
-                    Create Campaign
+                  />
+                  {rewardType !== 'None' && (
+                    <FormField
+                      control={form.control}
+                      name="reward.tokenAddress"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Token Contract Address</FormLabel>
+                          <FormControl>
+                            <Input placeholder="0x..." {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {rewardType === 'ERC20' && (
+                    <FormField
+                      control={form.control}
+                      name="reward.amount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Amount per Participant</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              placeholder="1000"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {rewardType === 'None' && (
+                    <FormField
+                      control={form.control}
+                      name="reward.name"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Reward Description</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="e.g., A special role in our Discord"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </section>
+              )}
+
+              {step === 4 && (
+                <section className="space-y-6 animate-in fade-in-50">
+                  <h2 className="text-xl font-semibold border-b pb-2">
+                    {steps[3].name} &amp; Create
+                  </h2>
+                  <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-6">
+                    <h3 className="font-semibold text-lg">
+                      {form.getValues('title')}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      {form.getValues('shortDescription')}
+                    </p>
+                    <div className="text-sm">
+                      <strong>Reward:</strong>{' '}
+                      {form.getValues('reward.type') === 'ERC20'
+                        ? `${form.getValues(
+                          'reward.amount',
+                        )} tokens from contract `
+                        : form.getValues('reward.type') === 'ERC721'
+                          ? `1 NFT from contract `
+                          : `${(form.getValues('reward') as any).name}`}
+                      {form.getValues('reward.type') !== 'None' && (
+                        <code className="text-xs bg-muted p-1 rounded">
+                          {(form.getValues('reward') as any).tokenAddress}
+                        </code>
+                      )}
+                    </div>
+                    <div className="text-sm">
+                      <strong>Tasks:</strong>
+                      <ul className="list-disc pl-5 mt-1 space-y-1">
+                        {form.getValues('tasks').map((task, i) => (
+                          <li key={i}>
+                            [
+                            {
+                              TASK_TYPE_OPTIONS.find(
+                                (t) => t.value === task.type,
+                              )?.label
+                            }
+                            ] {task.description}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Campaign Mode Selection */}
+                    <div className="mt-6 p-4 border rounded-lg bg-muted/30">
+                      <h3 className="font-medium mb-3">Campaign Activation</h3>
+                      <div className="space-y-2">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="createMode"
+                            value="activate"
+                            checked={createMode === 'activate'}
+                            onChange={(e) => setCreateMode('activate')}
+                            className="text-primary focus:ring-primary"
+                          />
+                          <div>
+                            <span className="font-medium">
+                              Create & Activate
+                            </span>
+                            <p className="text-xs text-muted-foreground">
+                              Campaign becomes active immediately (recommended)
+                            </p>
+                          </div>
+                        </label>
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="createMode"
+                            value="draft"
+                            checked={createMode === 'draft'}
+                            onChange={(e) => setCreateMode('draft')}
+                            className="text-primary focus:ring-primary"
+                          />
+                          <div>
+                            <span className="font-medium">Create as Draft</span>
+                            <p className="text-xs text-muted-foreground">
+                              Campaign stays in draft mode until manually opened
+                            </p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+
+                    <p className="text-xs pt-4 text-center text-muted-foreground">
+                      {createMode === 'activate'
+                        ? 'Your campaign will be created and become active based on your selected dates.'
+                        : 'Your campaign will be created in draft mode. You will need to open it manually for participants to join.'}
+                    </p>
+                  </div>
+                </section>
+              )}
+
+              {step > 0 && (
+                <div className="flex justify-between pt-4 mt-8 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={prevStep}
+                    disabled={step === 1}
+                  >
+                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    Previous
                   </Button>
-                )}
-              </div>
-            )}
-          </form>
-        </Form>
-      </CardContent>
-    </Card>
-    </div >
+
+                  {step < 4 ? (
+                    <Button type="button" onClick={nextStep}>
+                      Next
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button type="submit" disabled={isLoading}>
+                      {isLoading && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Create Campaign
+                    </Button>
+                  )}
+                </div>
+              )}
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
