@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     const {
       taskType,
+      taskType,
       campaignId: campaignIdRaw,
       taskId,
       userAddress,
@@ -24,6 +25,10 @@ export async function POST(request: Request) {
     } = body
 
     // Normalize to numbers
+    const campaignId =
+      typeof campaignIdRaw === 'number'
+        ? campaignIdRaw
+        : parseInt(campaignIdRaw, 10)
     const campaignId =
       typeof campaignIdRaw === 'number'
         ? campaignIdRaw
@@ -56,6 +61,13 @@ export async function POST(request: Request) {
       )
     }
 
+    if (!taskType) {
+      return NextResponse.json(
+        { error: 'taskType is required in the request body' },
+        { status: 400 }
+      )
+    }
+
     // Simple task type detection without heavy validation
     const isDiscordTask = taskType === 'JOIN_DISCORD'
     const isTelegramTask = taskType === 'JOIN_TELEGRAM'
@@ -72,8 +84,20 @@ export async function POST(request: Request) {
           internalError: true,
         })
       }
+      // Discord verification - use stored server ID from dedicated column
+      const discordServerId = taskMetadata?.discordServerId
+
+      if (!discordServerId) {
+        return NextResponse.json({
+          success: false,
+          verified: false,
+          message: 'Discord server ID not found for this task',
+          internalError: true,
+        })
+      }
 
       isVerified = await verifyDiscordJoin(
+        discordUsername,
         discordUsername,
         discordServerId,
         discordId

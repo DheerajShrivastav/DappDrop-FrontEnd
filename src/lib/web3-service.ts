@@ -742,6 +742,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               taskType: task.type,
               discordInviteLink: task.discordInviteLink,
               discordServerId: task.verificationData,
+              discordServerId: task.verificationData,
             }),
           })
           console.log(
@@ -1057,6 +1058,7 @@ export const createCampaign = async (campaignData: any) => {
               taskIndex: taskIndex,
               taskType: task.type,
               discordInviteLink: task.discordInviteLink,
+              discordServerId: task.verificationData,
               discordServerId: task.verificationData,
             }),
           })
@@ -1382,8 +1384,12 @@ export const openCampaign = async (
     // Convert campaignId from string to number for smart contract calls
     const campaignIdNumber = parseInt(campaignId, 10)
     console.log(`Opening campaign ${campaignIdNumber}...`)
+    // Convert campaignId from string to number for smart contract calls
+    const campaignIdNumber = parseInt(campaignId, 10)
+    console.log(`Opening campaign ${campaignIdNumber}...`)
 
     // Get the current campaign data to check its status and times
+    const campaignData = await contractWithSigner.getCampaign(campaignIdNumber)
     const campaignData = await contractWithSigner.getCampaign(campaignIdNumber)
 
     // Check if the campaign is already open (status 1 = Open)
@@ -1408,6 +1414,7 @@ export const openCampaign = async (
 
     try {
       // Try to open the campaign
+      const tx = await contractWithSigner.openCampaign(campaignIdNumber)
       const tx = await contractWithSigner.openCampaign(campaignIdNumber)
       await tx.wait()
 
@@ -1480,6 +1487,9 @@ export const endCampaign = async (campaignId: string) => {
     // Convert campaignId from string to number for smart contract calls
     const campaignIdNumber = parseInt(campaignId, 10)
     const tx = await contractWithSigner.endCampaign(campaignIdNumber)
+    // Convert campaignId from string to number for smart contract calls
+    const campaignIdNumber = parseInt(campaignId, 10)
+    const tx = await contractWithSigner.endCampaign(campaignIdNumber)
     await tx.wait()
     toast({
       title: 'Campaign Ended',
@@ -1526,6 +1536,7 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
 
     console.log('Attempting to complete task:', {
       campaignId: campaignIdNumber,
+      campaignId: campaignIdNumber,
       taskIndex,
       userAddress: await signer.getAddress(),
     })
@@ -1556,6 +1567,8 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
 
     // The smart contract completeTask function only takes campaignId and taskIndex
     // It automatically uses msg.sender (the connected wallet) as the participant
+    console.log('Calling smart contract completeTask...', { campaignIdNumber, taskIndex })
+    const tx = await contractWithSigner.completeTask(campaignIdNumber, taskIndex)
     console.log('Calling smart contract completeTask...', { campaignIdNumber, taskIndex })
     const tx = await contractWithSigner.completeTask(campaignIdNumber, taskIndex)
 

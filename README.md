@@ -1,6 +1,6 @@
-# DApp Drop Zone - A Web3 Campaign Platform
+# DApp Drop - A Web3 Campaign Platform
 
-This is a Next.js application for creating and participating in airdrop campaigns, built with Firebase Studio. It allows users to create campaigns with specific tasks and rewards, and for participants to complete those tasks to earn rewards on the Sepolia testnet.
+This is a Next.js application for creating and participating in airdrop campaigns. It allows users to create campaigns with specific tasks and rewards, and for participants to complete those tasks to earn rewards on the Sepolia testnet.
 
 ## Features
 
