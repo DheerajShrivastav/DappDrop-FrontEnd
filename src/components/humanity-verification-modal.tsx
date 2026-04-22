@@ -214,11 +214,9 @@ export function HumanityVerificationModal({
                 scopes={requiredScopes}
                 mode="redirect"
                 onError={handleAuthError}
-                variant="primary"
-                size="sm"
                 label="Connect Humanity Account"
                 disabled={!isConnected}
-                className="w-full"
+                className="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 h-9 px-3 bg-purple-600 text-primary-foreground hover:bg-purple-700 [&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0"
               />
             </div>
           )}
