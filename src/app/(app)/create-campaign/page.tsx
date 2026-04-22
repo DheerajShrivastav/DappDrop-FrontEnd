@@ -78,6 +78,12 @@ import {
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
+import {
+  parseCampaignGenerationError,
+  type GenerationStage,
+} from '@/ai/flows/generate-campaign.errors'
+import { AlertCircle, Wifi, Clock, RefreshCw } from 'lucide-react'
+import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
@@ -98,6 +104,8 @@ const taskSchema = z
     verificationData: z.string().optional(),
     discordInviteLink: z.string().optional(),
     telegramInviteLink: z.string().optional(),
+    // Humanity Protocol presets for HUMANITY_VERIFICATION tasks (multi-select)
+    humanityPreset: z.array(z.string()).optional(),
     // Payment metadata fields for ONCHAIN_TX tasks
     paymentRequired: z.boolean().optional(),
     paymentRecipient: z.string().optional(),
@@ -109,8 +117,8 @@ const taskSchema = z
     amountDisplay: z.string().optional(),
   })
   .superRefine((data, ctx) => {
-    // Validate payment fields when paymentRequired is true
-    if (data.paymentRequired) {
+    // Validate payment fields when paymentRequired is true and task is ONCHAIN_TX
+    if (data.type === 'ONCHAIN_TX' && data.paymentRequired) {
       // Validate paymentRecipient
       if (!data.paymentRecipient || data.paymentRecipient.trim() === '') {
         ctx.addIssue({
@@ -144,6 +152,40 @@ const taskSchema = z
             path: ['amount'],
           })
         }
+      }
+    }
+
+    if (data.type === 'JOIN_DISCORD') {
+      if (!data.verificationData || data.verificationData.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Discord Server ID is required.',
+          path: ['verificationData'],
+        })
+      }
+      if (!data.discordInviteLink || data.discordInviteLink.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Discord Invite Link is required.',
+          path: ['discordInviteLink'],
+        })
+      }
+    }
+
+    if (data.type === 'JOIN_TELEGRAM') {
+      if (!data.verificationData || data.verificationData.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Telegram Channel/Group ID is required.',
+          path: ['verificationData'],
+        })
+      }
+      if (!data.telegramInviteLink || data.telegramInviteLink.trim() === '') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Telegram Invite Link is required.',
+          path: ['telegramInviteLink'],
+        })
       }
     }
   })
@@ -205,6 +247,12 @@ export default function CreateCampaignPage() {
   const [step, setStep] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [generationStage, setGenerationStage] = useState<GenerationStage | null>(null)
+  const [generationError, setGenerationError] = useState<{
+    message: string
+    retryable: boolean
+    category: string
+  } | null>(null)
   const [isBecomingHost, setIsBecomingHost] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [createMode, setCreateMode] = useState<'draft' | 'activate'>('activate')
@@ -403,36 +451,94 @@ export default function CreateCampaignPage() {
       })
       return
     }
+    if (aiPrompt.trim().length < 20) {
+      toast({
+        variant: 'destructive',
+        title: 'Description Too Short',
+        description: 'Please provide at least 20 characters so the AI has enough context to work with.',
+      })
+      return
+    }
     setIsGenerating(true)
+    setGenerationError(null)
+    setGenerationStage('planning')
+    // Hoist timer IDs so the finally block can always clear them
+    let stageTimer1: ReturnType<typeof setTimeout> | undefined
+    let stageTimer2: ReturnType<typeof setTimeout> | undefined
     try {
+      // The server action handles all stages internally.
+      // We simulate stage transitions based on typical timing.
+      stageTimer1 = setTimeout(() => setGenerationStage('generating'), 8000)
+      stageTimer2 = setTimeout(() => setGenerationStage('validating'), 25000)
+
       const result = await generateCampaign(aiPrompt)
+
       const currentValues = form.getValues()
       form.reset({
-        ...currentValues, // Keep existing values for reward, dates, etc.
+        ...currentValues,
         title: result.title,
         shortDescription: result.shortDescription,
         description: result.description,
         tasks: result.tasks,
       })
       toast({
-        title: 'Campaign Drafted!',
-        description: 'The campaign details have been filled in for you.',
+        title: '✨ Campaign Drafted!',
+        description: 'AI has generated your campaign. Review and customize the details below.',
       })
-      setStep(1) // Move to the first step of the form
+      setStep(1)
     } catch (e: any) {
       console.error('Error generating campaign:', e)
-      // Extract user-friendly error message
-      const errorMessage =
-        e?.message ||
-        e?.originalMessage ||
-        'Could not generate the campaign. Please try again.'
+
+      let errorTitle = 'Generation Failed'
+      let errorMessage = 'Something went wrong. Please try again.'
+      let retryable = true
+      let category = 'unknown'
+
+      const parsed = parseCampaignGenerationError(e)
+      if (parsed) {
+        errorMessage = parsed.userMessage
+        retryable = parsed.retryable
+        category = parsed.category
+
+        switch (parsed.category) {
+          case 'rate_limit':
+            errorTitle = '⏳ AI Service Busy'
+            break
+          case 'config':
+            errorTitle = '🔑 Configuration Error'
+            break
+          case 'network':
+            errorTitle = '🌐 Connection Error'
+            break
+          case 'validation':
+            errorTitle = '📝 Invalid Input'
+            break
+          case 'api_error':
+            errorTitle = '🤖 AI Service Error'
+            break
+          default:
+            errorTitle = '❌ Generation Failed'
+        }
+      } else {
+        errorMessage =
+          e?.message ||
+          e?.originalMessage ||
+          'Could not generate the campaign. Please try again.'
+      }
+
+      setGenerationError({ message: errorMessage, retryable, category })
+
       toast({
         variant: 'destructive',
-        title: 'AI Generation Failed',
+        title: errorTitle,
         description: errorMessage,
+        duration: 8000,
       })
     } finally {
+      clearTimeout(stageTimer1)
+      clearTimeout(stageTimer2)
       setIsGenerating(false)
+      setGenerationStage(null)
     }
   }
 
@@ -543,31 +649,128 @@ export default function CreateCampaignPage() {
                     <Textarea
                       placeholder="E.g., 'My project is a decentralized lending protocol on Sepolia that allows users to borrow against their NFTs...'"
                       value={aiPrompt}
-                      onChange={(e) => setAiPrompt(e.target.value)}
+                      onChange={(e) => {
+                        setAiPrompt(e.target.value)
+                        if (generationError) setGenerationError(null)
+                      }}
                       rows={4}
                       className="bg-card"
+                      disabled={isGenerating}
                     />
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Our AI will draft a campaign title, description, and tasks
-                      for you.
-                    </p>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-muted-foreground">
+                        Our AI will draft a campaign title, description, and tasks
+                        for you.
+                      </p>
+                      <p className={cn(
+                        'text-xs tabular-nums',
+                        aiPrompt.trim().length < 20 ? 'text-muted-foreground' : 'text-green-500',
+                      )}>
+                        {aiPrompt.trim().length}/20 min
+                      </p>
+                    </div>
+
+                    {/* Generation stage progress */}
+                    {isGenerating && generationStage && (
+                      <div className="mt-4 p-4 rounded-lg bg-card border animate-in fade-in-50">
+                        <div className="flex items-center gap-3">
+                          <div className="relative">
+                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium">
+                              {generationStage === 'planning' && '🧠 Analyzing your project...'}
+                              {generationStage === 'generating' && '✍️ Writing campaign content...'}
+                              {generationStage === 'validating' && '🔍 Reviewing quality...'}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {generationStage === 'planning' && 'Deciding campaign strategy, target audience, and task types'}
+                              {generationStage === 'generating' && 'Crafting title, description, and tasks based on the plan'}
+                              {generationStage === 'validating' && 'Checking for quality, accuracy, and consistency'}
+                            </p>
+                          </div>
+                        </div>
+                        {/* Stage dots */}
+                        <div className="flex items-center gap-2 mt-3">
+                          {(['planning', 'generating', 'validating'] as const).map((stage, idx) => (
+                            <React.Fragment key={stage}>
+                              <div className={cn(
+                                'h-2 w-2 rounded-full transition-colors duration-300',
+                                generationStage === stage
+                                  ? 'bg-primary animate-pulse'
+                                  : (['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
+                                    ? 'bg-primary'
+                                    : 'bg-muted'),
+                              )} />
+                              {idx < 2 && (
+                                <div className={cn(
+                                  'h-0.5 flex-1 rounded transition-colors duration-300',
+                                  ['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
+                                    ? 'bg-primary'
+                                    : 'bg-muted',
+                                )} />
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                        <div className="flex justify-between mt-1">
+                          <span className="text-[10px] text-muted-foreground">Plan</span>
+                          <span className="text-[10px] text-muted-foreground">Generate</span>
+                          <span className="text-[10px] text-muted-foreground">Validate</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Error display with retry */}
+                    {generationError && !isGenerating && (
+                      <div className="mt-4 p-4 rounded-lg border border-destructive/50 bg-destructive/5 animate-in fade-in-50">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5">
+                            {generationError.category === 'rate_limit' && <Clock className="h-5 w-5 text-amber-500" />}
+                            {generationError.category === 'network' && <Wifi className="h-5 w-5 text-destructive" />}
+                            {!['rate_limit', 'network'].includes(generationError.category) && <AlertCircle className="h-5 w-5 text-destructive" />}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-destructive">
+                              {generationError.message}
+                            </p>
+                            {generationError.retryable && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="mt-2"
+                                onClick={handleGenerate}
+                              >
+                                <RefreshCw className="mr-2 h-3 w-3" />
+                                Try Again
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex justify-end gap-4 mt-4">
                       <Button
                         type="button"
                         variant="ghost"
                         onClick={() => setStep(1)}
+                        disabled={isGenerating}
                       >
                         Skip &amp; Create Manually
                       </Button>
                       <Button
                         type="button"
                         onClick={handleGenerate}
-                        disabled={isGenerating}
+                        disabled={isGenerating || aiPrompt.trim().length < 20}
                       >
-                        {isGenerating && (
+                        {isGenerating ? (
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-2 h-4 w-4" />
                         )}
-                        Generate Campaign
+                        {isGenerating ? 'Generating...' : 'Generate Campaign'}
                       </Button>
                     </div>
                   </div>
@@ -1447,6 +1650,100 @@ export default function CreateCampaignPage() {
                           )}
                         </div>
                       )}
+
+                      {tasks[index].type === 'HUMANITY_VERIFICATION' && (
+                        <div className="space-y-4">
+                          <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3 dark:bg-purple-950/20 dark:border-purple-800/40">
+                            <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
+                              <ShieldCheck className="h-5 w-5" />
+                              <h4 className="font-semibold">Verification Presets</h4>
+                            </div>
+                            <p className="text-sm text-purple-700 dark:text-purple-400">
+                              Select one or more Humanity Protocol checks users
+                              must pass to complete this task.
+                            </p>
+                            <FormField
+                              control={form.control}
+                              name={`tasks.${index}.humanityPreset`}
+                              render={({ field }) => {
+                                const selected: string[] = Array.isArray(field.value) ? field.value : field.value ? [field.value] : ['is_human']
+
+                                const toggle = (preset: string) => {
+                                  const next = selected.includes(preset)
+                                    ? selected.filter((p) => p !== preset)
+                                    : [...selected, preset]
+                                  // Ensure at least one preset is always selected
+                                  field.onChange(next.length > 0 ? next : ['is_human'])
+                                }
+
+                                // Group presets by category
+                                const categories = [
+                                  { key: 'identity', label: 'Identity' },
+                                  { key: 'age', label: 'Age Verification' },
+                                  { key: 'kyc', label: 'KYC' },
+                                  { key: 'financial', label: 'Financial' },
+                                ] as const
+
+                                return (
+                                  <FormItem className="space-y-3">
+                                    <FormLabel>
+                                      Required Checks ({selected.length} selected)
+                                    </FormLabel>
+                                    {categories.map((cat) => {
+                                      const presets = HUMANITY_PRESETS.filter(
+                                        (p) => p.category === cat.key,
+                                      )
+                                      if (presets.length === 0) return null
+                                      return (
+                                        <div key={cat.key} className="space-y-1.5">
+                                          <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
+                                            {cat.label}
+                                          </p>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {presets.map((p) => {
+                                              const isChecked = selected.includes(p.preset)
+                                              return (
+                                                <label
+                                                  key={p.preset}
+                                                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isChecked
+                                                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 ring-1 ring-purple-500/30'
+                                                      : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/10'
+                                                    }`}
+                                                >
+                                                  <Checkbox
+                                                    checked={isChecked}
+                                                    onCheckedChange={() => toggle(p.preset)}
+                                                    className="mt-0.5"
+                                                  />
+                                                  <div className="space-y-0.5 flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                      <span className="text-sm">{p.icon}</span>
+                                                      <span className="text-sm font-medium truncate">
+                                                        {p.label}
+                                                      </span>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground leading-snug">
+                                                      {p.description}
+                                                    </p>
+                                                  </div>
+                                                </label>
+                                              )
+                                            })}
+                                          </div>
+                                        </div>
+                                      )
+                                    })}
+                                    <FormDescription>
+                                      Users must pass <strong>all</strong> selected checks to complete this task.
+                                    </FormDescription>
+                                    <FormMessage />
+                                  </FormItem>
+                                )
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                   <Button
@@ -1586,8 +1883,8 @@ export default function CreateCampaignPage() {
                       <strong>Reward:</strong>{' '}
                       {form.getValues('reward.type') === 'ERC20'
                         ? `${form.getValues(
-                            'reward.amount',
-                          )} tokens from contract `
+                          'reward.amount',
+                        )} tokens from contract `
                         : form.getValues('reward.type') === 'ERC721'
                           ? `1 NFT from contract `
                           : `${(form.getValues('reward') as any).name}`}

@@ -1,3 +1,5 @@
+export type { HumanityPreset } from './humanity-presets'
+
 export type TaskType =
   | 'SOCIAL_FOLLOW'
   | 'JOIN_DISCORD'
@@ -22,6 +24,8 @@ export type Task = {
     tokenSymbol?: string
     amount?: string
     amountDisplay?: string
+    /** For HUMANITY_VERIFICATION tasks: which preset(s) to verify against */
+    humanityPreset?: string | string[]
   }
 }
 
@@ -135,9 +139,11 @@ export interface CampaignSyncRequest {
   campaignId?: string
 }
 
-// Humanity Protocol types
+// Humanity Protocol types (v2 - OAuth SDK based)
 export interface HumanityVerificationRequest {
   walletAddress: string
+  accessToken?: string
+  isHuman?: boolean
 }
 
 export interface HumanityVerificationResponse {
@@ -152,4 +158,18 @@ export interface HumanityCachedVerification {
   isHuman: boolean
   verifiedAt: Date
   expiresAt: Date
+}
+
+export interface HumanityPresetResult {
+  preset: string
+  status: 'valid' | 'invalid'
+  value: boolean | string | null
+  expiresAt?: string
+}
+
+export interface HumanityOAuthResult {
+  isHuman: boolean
+  accessToken: string
+  presets: HumanityPresetResult[]
+  verifiedAt: string
 }

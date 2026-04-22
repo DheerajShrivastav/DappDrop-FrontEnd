@@ -4,6 +4,7 @@ import {
   verifyDiscordJoin,
   verifyTelegramJoin,
 } from '@/lib/verification-service'
+import { isUserVerified } from '@/lib/humanity-service'
 import { prisma } from '@/lib/prisma'
 import { getCampaignById } from '@/lib/web3-service'
 import type { Campaign } from '@/lib/types'
@@ -55,9 +56,16 @@ export async function POST(request: Request) {
       )
     }
 
+    if (!taskType) {
+      return NextResponse.json(
+        { error: 'taskType is required in the request body' },
+        { status: 400 }
+      )
+    }
+
     // Simple task type detection without heavy validation
-    const isDiscordTask = taskType === 'DISCORD_JOIN'
-    const isTelegramTask = taskType === 'TELEGRAM_JOIN'
+    const isDiscordTask = taskType === 'JOIN_DISCORD'
+    const isTelegramTask = taskType === 'JOIN_TELEGRAM'
 
     if (isDiscordTask) {
       // Discord verification - use stored server ID from dedicated column
@@ -192,93 +200,34 @@ export async function POST(request: Request) {
       })
 
       if (effectiveTaskType === 'HUMANITY_VERIFICATION' && userAddress) {
-        // Create request-origin-safe URL for internal API calls
-        const baseUrl = new URL('/api/verify-humanity', request.url)
-
+        // In v2, verification happens via OAuth flow on the client.
+        // Here we just check the cached DB status (set by the OAuth callback).
         try {
-          console.log('Performing humanity verification for:', userAddress)
+          const isHuman = await isUserVerified(userAddress)
+          isVerified = isHuman
 
-          // For task verification, we want to force a fresh check
-          // This ensures users who just completed verification can immediately complete tasks
-          const verifyResponse = await fetch(baseUrl.toString(), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              walletAddress: userAddress,
-              forceRefresh: true, // Force fresh verification for task completion
-            }),
-          })
-
-          let verificationResult = {
-            success: false,
-            isHuman: false,
-            error: null as string | null,
-            internalError: false,
-          }
-
-          if (verifyResponse.ok) {
-            const verifyData = await verifyResponse.json()
-            console.log('Fresh verification result for task:', verifyData)
-
-            if (verifyData.success) {
-              verificationResult = {
-                success: true,
-                isHuman: verifyData.isHuman,
-                error: verifyData.error || null,
-                internalError: false,
-              }
-            } else {
-              verificationResult = {
-                success: false,
-                isHuman: false,
-                error: verifyData.error || 'Verification service error',
-                internalError: true,
-              }
-            }
-          } else {
-            console.error(
-              'Humanity verification API call failed:',
-              verifyResponse.status,
-              verifyResponse.statusText
-            )
-            verificationResult = {
-              success: false,
-              isHuman: false,
-              error: `Verification service unavailable (${verifyResponse.status})`,
-              internalError: true,
-            }
-          }
-
-          isVerified = verificationResult.isHuman
-
-          // Return detailed response for humanity verification
           return NextResponse.json({
-            success: verificationResult.success,
+            success: true,
             verified: isVerified,
             message: isVerified
               ? 'Humanity verification successful'
-              : verificationResult.error || 'Humanity verification failed',
-            internalError: verificationResult.internalError,
+              : 'Not verified. Please complete Humanity Protocol verification first.',
             verificationDetails: {
               taskType: effectiveTaskType,
               walletAddress: userAddress,
-              isHuman: verificationResult.isHuman,
+              isHuman,
             },
           })
         } catch (error: any) {
-          console.error(
-            'Network/infrastructure error during humanity verification:',
-            error
-          )
+          console.error('Error checking humanity verification:', error)
           return NextResponse.json(
             {
               success: false,
               verified: false,
-              message: 'Infrastructure error during verification',
-              internalError: true,
-              error: error.message || 'Network error',
+              message: 'Error checking verification status',
+              error: error.message || 'Database error',
             },
-            { status: 500 }
+            { status: 500 },
           )
         }
       } else if (

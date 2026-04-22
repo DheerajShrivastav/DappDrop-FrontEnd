@@ -1,9 +1,5 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Web3Provider } from '@/context/web3-provider';
-import { WalletProvider } from '@/context/wallet-provider';
-import Header from '@/components/header';
-import Footer from '@/components/footer';
 import { Toaster } from '@/components/ui/toaster';
 import { Inter, Space_Grotesk } from 'next/font/google'
 
@@ -37,16 +33,9 @@ export default function RootLayout({
     return (
         <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`} style={{ scrollBehavior: 'smooth' }} suppressHydrationWarning>
             <body className="font-body antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
-                <Web3Provider>
-                    <WalletProvider>
-                        <Header />
-                        <main className="flex-grow">{children}</main>
-                        <Footer />
-                        <Toaster />
-                    </WalletProvider>
-                </Web3Provider>
+                {children}
+                <Toaster />
             </body>
         </html>
     );
 }
-

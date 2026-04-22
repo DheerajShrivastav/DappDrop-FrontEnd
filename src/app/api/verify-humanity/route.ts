@@ -1,78 +1,94 @@
 // src/app/api/verify-humanity/route.ts
 import { NextResponse } from 'next/server'
-import { verifyHumanity, isUserVerified } from '@/lib/humanity-service'
+import {
+  saveHumanityVerification,
+  isUserVerified,
+} from '@/lib/humanity-service'
 import { validateWalletAddress } from '@/lib/validation-utils'
 
 /**
  * POST /api/verify-humanity
- * Verify a wallet address using Humanity Protocol
+ * Save verification result from the Humanity Protocol OAuth SDK flow.
+ * Called by the client after completing OAuth + verifyPresets.
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { walletAddress, forceRefresh } = body
+    const { walletAddress, accessToken, preset = 'is_human' } = body
 
-    // Validate and sanitize wallet address
+    if (!accessToken) {
+      return NextResponse.json(
+        { success: false, error: 'Access token is required for verification' },
+        { status: 400 },
+      )
+    }
+
     const validAddress = validateWalletAddress(walletAddress)
 
-    console.log(
-      'Verifying humanity for wallet:',
-      validAddress,
-      forceRefresh ? '(force refresh)' : '(using cache)'
-    )
-    const result = await verifyHumanity(validAddress, forceRefresh || false)
+    // Normalize preset to an array (supports both single string and array)
+    const presets: string[] = Array.isArray(preset) ? preset : [preset]
 
-    // Check if verification was successful (no error in response)
-    if (result.error) {
-      console.log('Verification completed with error:', result.error)
-      return NextResponse.json({
-        success: true, // API call succeeded
-        isHuman: result.is_human, // but verification failed
-        walletAddress: result.wallet_address,
-        error: result.error,
-      })
+    // Verify each preset — all must pass for the user to be considered verified.
+    // We verify the first preset with saveHumanityVerification (which also persists),
+    // then verify any additional presets.
+    let allPassed = true
+    let lastVerifiedAt: string | undefined
+
+    for (const p of presets) {
+      const result = await saveHumanityVerification(validAddress, accessToken, p)
+
+      if (result.error || !result.is_human) {
+        return NextResponse.json(
+          {
+            success: false,
+            isHuman: false,
+            walletAddress: result.wallet_address,
+            error: result.error || `Verification failed for preset: ${p}`,
+            failedPreset: p,
+          },
+          { status: 403 },
+        )
+      }
+
+      lastVerifiedAt = result.verified_at
     }
 
     return NextResponse.json({
       success: true,
-      isHuman: result.is_human,
-      walletAddress: result.wallet_address,
-      verifiedAt: result.verified_at,
+      isHuman: true,
+      walletAddress: validAddress,
+      verifiedAt: lastVerifiedAt,
+      presetsVerified: presets,
     })
   } catch (error: any) {
     console.error('Humanity verification API error:', error)
 
-    // Handle validation errors
     if (
       error.message?.includes('required') ||
       error.message?.includes('Invalid')
     ) {
       return NextResponse.json(
         { success: false, error: error.message },
-        { status: 400 }
-     )
+        { status: 400 },
+      )
     }
 
     return NextResponse.json(
-      {
-        success: false,
-        error: error.message || 'Failed to verify humanity',
-      },
-      { status: 500 }
+      { success: false, error: error.message || 'Failed to save verification' },
+      { status: 500 },
     )
   }
 }
 
 /**
  * GET /api/verify-humanity?walletAddress=0x...
- * Check cached verification status
+ * Check cached verification status (unchanged from v1)
  */
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const walletAddress = searchParams.get('walletAddress')
 
-    // Validate and sanitize wallet address
     const validAddress = validateWalletAddress(walletAddress || '')
 
     const isVerified = await isUserVerified(validAddress)
@@ -85,7 +101,6 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Humanity verification check error:', error)
 
-    // Handle validation errors
     if (
       error.message?.includes('required') ||
       error.message?.includes('Invalid')
@@ -93,9 +108,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 })
     }
 
-     return NextResponse.json(
-        { success: false, error: error.message },
-        { status: 400 }
-      )
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 400 },
+    )
   }
 }

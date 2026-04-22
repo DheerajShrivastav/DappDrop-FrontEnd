@@ -96,7 +96,7 @@ export default function Home() {
               size="lg"
               variant="outline"
               asChild
-              className="h-14 px-10 text-lg font-semibold border-2 border-slate-200 hover:border-primary hover:bg-slate-50 rounded-xl interactive-lift"
+              className="h-14 px-10 text-lg font-semibold border-2 border-slate-200 hover:border-primary hover:bg-slate-50 hover:text-primary rounded-xl interactive-lift"
             >
               <Link href="/create-campaign">
                 <PlusCircle className="mr-2 h-5 w-5" />

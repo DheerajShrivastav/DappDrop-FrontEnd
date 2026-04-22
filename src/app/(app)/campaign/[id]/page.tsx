@@ -2,10 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import Image from 'next/image'
-import { format } from 'date-fns'
 import Link from 'next/link'
-import { motion } from 'framer-motion'
+import dynamic from 'next/dynamic'
 
 import type {
   Campaign,
@@ -15,7 +13,6 @@ import type {
 } from '@/lib/types'
 import { useWallet } from '@/context/wallet-provider'
 import { useToast } from '@/hooks/use-toast'
-import { truncateAddress } from '@/lib/utils'
 import {
   getCampaignByIdWithMetadata,
   hasParticipated,
@@ -30,61 +27,12 @@ import {
 import { Button } from '@/components/ui/button'
 import {
   Card,
-  CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
-  CardFooter,
 } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import {
-  Calendar,
-  CheckCircle,
-  Clock,
-  Gift,
-  Loader2,
-  Users,
-  Info,
-  ShieldCheck,
-  Twitter,
-  MessageSquare,
-  Bot,
-  Share2,
-  Award,
-  Trophy,
-  RefreshCw,
-  ImageIcon,
-  ArrowLeft,
-  ExternalLink,
-  Rocket,
-  XCircle,
-} from 'lucide-react'
-import { Progress } from '@/components/ui/progress'
-import { CampaignAnalytics } from '@/components/campaign-analytics'
-import { DiscordAuthButton } from '@/components/discord-auth-button'
-import { TaskVerificationForm } from '@/components/task-verification-form'
-import { HumanityVerificationModal } from '@/components/humanity-verification-modal'
-import { CampaignImageUpload } from '@/components/campaign-image-upload'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { Loader2 } from 'lucide-react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -96,24 +44,35 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 
-const TaskIcon = ({ type }: { type: TaskType['type'] }) => {
-  switch (type) {
-    case 'SOCIAL_FOLLOW':
-      return <Twitter className="h-5 w-5 text-primary" />
-    case 'JOIN_DISCORD':
-      return <MessageSquare className="h-5 w-5 text-indigo-600" />
-    case 'JOIN_TELEGRAM':
-      return <Bot className="h-5 w-5 text-blue-600" />
-    case 'RETWEET':
-      return <Twitter className="h-5 w-5 text-primary" />
-    case 'ONCHAIN_TX':
-      return <ShieldCheck className="h-5 w-5 text-green-600" />
-    case 'HUMANITY_VERIFICATION':
-      return <ShieldCheck className="h-5 w-5 text-purple-600" />
-    default:
-      return <Bot className="h-5 w-5 text-muted-foreground" />
-  }
-}
+// Extracted sub-components
+import { CampaignHero } from './_components/campaign-hero'
+import { CampaignSidebar } from './_components/campaign-sidebar'
+import { TaskList } from './_components/task-list'
+
+// Lazy-load heavy dialog components (only loaded when opened)
+const TaskVerificationForm = dynamic(
+  () =>
+    import('@/components/task-verification-form').then(
+      (mod) => ({ default: mod.TaskVerificationForm })
+    ),
+  { ssr: false }
+)
+
+const HumanityVerificationModal = dynamic(
+  () =>
+    import('@/components/humanity-verification-modal').then(
+      (mod) => ({ default: mod.HumanityVerificationModal })
+    ),
+  { ssr: false }
+)
+
+const CampaignAnalytics = dynamic(
+  () =>
+    import('@/components/campaign-analytics').then(
+      (mod) => ({ default: mod.CampaignAnalytics })
+    ),
+  { ssr: false }
+)
 
 export default function CampaignDetailsPage() {
   const params = useParams()
@@ -194,7 +153,7 @@ export default function CampaignDetailsPage() {
     }
   }
 
-  // Handler for task verification - Complete implementation from old file
+  // Handler for task verification
   const handleTaskVerification = async (
     taskId: string,
     taskType: TaskType['type'],
@@ -487,7 +446,6 @@ export default function CampaignDetailsPage() {
           if (storedVerification) {
             try {
               const verificationData = JSON.parse(storedVerification)
-              // Update completed tasks if we have a stored verification
               if (verificationData.verified) {
                 setUserTasks((prevTasks) =>
                   prevTasks.map((t) =>
@@ -506,7 +464,6 @@ export default function CampaignDetailsPage() {
           if (storedVerification) {
             try {
               const verificationData = JSON.parse(storedVerification)
-              // Update completed tasks if we have a stored verification
               if (verificationData.verified) {
                 setUserTasks((prevTasks) =>
                   prevTasks.map((t) =>
@@ -530,8 +487,128 @@ export default function CampaignDetailsPage() {
     }
   }, [address, isConnected])
 
-  // [KEEPING ALL OTHER EXISTING useEffects AND HANDLER FUNCTIONS]
-  // ... (All the existing logic will remain)
+  // Handle return from Humanity OAuth redirect flow
+  useEffect(() => {
+    const result = sessionStorage.getItem('humanity_verification_result')
+    if (!result) return
+    if (!address || !isConnected || !campaign) return
+
+    try {
+      const verification = JSON.parse(result)
+      sessionStorage.removeItem('humanity_verification_result')
+
+      const taskContextRaw = sessionStorage.getItem('humanity_task_context')
+      sessionStorage.removeItem('humanity_task_context')
+      sessionStorage.removeItem('humanity_wallet_address')
+
+      if (verification.isHuman) {
+        setUserHumanityStatus(true)
+
+        if (taskContextRaw) {
+          const taskContext = JSON.parse(taskContextRaw)
+          if (taskContext.campaignId === campaignId && taskContext.taskId) {
+            const taskIndex = campaign.tasks.findIndex(
+              (task) => task.id === taskContext.taskId,
+            )
+            if (taskIndex !== -1) {
+              completeTask(campaignId, taskIndex)
+                .then(() => {
+                  setUserTasks((prevTasks) =>
+                    prevTasks.map((task) =>
+                      task.taskId === taskContext.taskId
+                        ? { ...task, completed: true }
+                        : task,
+                    ),
+                  )
+                  fetchAllCampaignData()
+                  if (!isJoined) setIsJoined(true)
+                  toast({
+                    title: 'Task Completed!',
+                    description:
+                      'Humanity verification successful and task marked complete.',
+                  })
+                })
+                .catch((err: any) => {
+                  console.error('Error completing task after OAuth:', err)
+                  toast({
+                    variant: 'destructive',
+                    title: 'Task Completion Failed',
+                    description:
+                      err.message || 'Verified but could not complete task on blockchain.',
+                  })
+                })
+              return
+            }
+          }
+        }
+
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Verification Failed',
+          description: 'Humanity Protocol did not verify this wallet as human. Please ensure you have completed Palm verification.',
+        })
+      }
+    } catch (e) {
+      console.error('Error processing humanity verification result:', e)
+    }
+  }, [address, isConnected, campaign, campaignId])
+
+  // Handle humanity verification completion (kept for direct calls)
+  const handleHumanityVerificationComplete = async (isHuman: boolean) => {
+    if (!isHuman) {
+      toast({
+        variant: 'destructive',
+        title: 'Verification Failed',
+        description: 'You are not verified as human by Humanity Protocol.',
+      })
+      return
+    }
+
+    setUserHumanityStatus(true)
+
+    if (verifyingTaskId && campaign) {
+      const taskIndex = campaign.tasks.findIndex(
+        (task) => task.id === verifyingTaskId,
+      )
+      if (taskIndex !== -1) {
+        try {
+          await completeTask(campaignId, taskIndex)
+          setUserTasks((prevTasks) =>
+            prevTasks.map((task) =>
+              task.taskId === verifyingTaskId
+                ? { ...task, completed: true }
+                : task,
+            ),
+          )
+          await fetchAllCampaignData()
+          if (!isJoined) setIsJoined(true)
+          toast({
+            title: 'Task Completed!',
+            description:
+              'Humanity verification successful and task marked complete.',
+          })
+        } catch (err: any) {
+          console.warn('Error completing task on blockchain:', err?.message || err)
+          toast({
+            variant: 'destructive',
+            title: 'Task Completion Failed',
+            description:
+              err.message || 'Verified but could not complete task on blockchain.',
+          })
+        }
+      }
+    } else {
+      toast({
+        title: 'Verification Successful!',
+        description: 'Your wallet is verified as human.',
+      })
+    }
+
+    setIsHumanityModalOpen(false)
+    setVerifyingTaskId(null)
+    setVerifyingTaskType(null)
+  }
 
   const handleShare = () => {
     if (navigator.share) {
@@ -559,13 +636,11 @@ export default function CampaignDetailsPage() {
     })
   }
 
-  // Handler to open campaign action confirmation dialog
   const openCampaignActionDialog = (action: 'launch' | 'end') => {
     setCampaignActionToConfirm(action)
     setIsCampaignActionDialogOpen(true)
   }
 
-  // Handler to confirm and execute campaign action (launch/end)
   const handleConfirmCampaignAction = async () => {
     if (!campaignActionToConfirm || !campaign) return
 
@@ -612,151 +687,6 @@ export default function CampaignDetailsPage() {
     campaign &&
     address?.toLowerCase() === campaign.host.toLowerCase()
 
-  // Verify user with Humanity Protocol
-  const handleVerifyHumanity = async (walletAddress?: string) => {
-    console.log('🚀 handleVerifyHumanity called with:', walletAddress)
-    const addressToVerify = walletAddress || address
-    if (!addressToVerify) {
-      console.log('❌ No wallet address provided')
-      toast({
-        variant: 'destructive',
-        title: 'No Wallet Address',
-        description: 'Please provide a wallet address to verify.',
-      })
-      return
-    }
-
-    console.log('🔍 Verifying humanity for address:', addressToVerify)
-    setIsCheckingHumanity(true)
-    try {
-      const response = await fetch('/api/verify-humanity', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ walletAddress: addressToVerify }),
-      })
-
-      console.log(
-        '📡 API response status:',
-        response.status,
-        response.statusText,
-      )
-      const data = await response.json()
-      console.log('📄 Raw API Response:', JSON.stringify(data, null, 2))
-
-      if (data.success) {
-        console.log(
-          '✅ API success=true, isHuman value:',
-          data.isHuman,
-          typeof data.isHuman,
-        )
-        setUserHumanityStatus(data.isHuman)
-
-        if (data.isHuman) {
-          console.log('🎉 SHOWING SUCCESS TOAST - data.isHuman is truthy')
-
-          // Complete the task on blockchain if we have a verifying task ID
-          if (verifyingTaskId && campaign) {
-            try {
-              const taskIndex = campaign.tasks.findIndex(
-                (task) => task.id === verifyingTaskId,
-              )
-              if (taskIndex !== -1) {
-                console.log(
-                  '🔗 Completing humanity verification task on blockchain...',
-                  { campaignId, taskIndex },
-                )
-                await completeTask(campaignId, taskIndex)
-
-                // Update local state to mark task as completed
-                setUserTasks((prevTasks) =>
-                  prevTasks.map((task) =>
-                    task.taskId === verifyingTaskId
-                      ? { ...task, completed: true }
-                      : task,
-                  ),
-                )
-
-                // Refresh campaign data to update participant count and other blockchain data
-                await fetchAllCampaignData()
-
-                if (!isJoined) {
-                  setIsJoined(true)
-                }
-
-                toast({
-                  title: 'Task Completed!',
-                  description: `Address ${addressToVerify.slice(
-                    0,
-                    6,
-                  )}...${addressToVerify.slice(
-                    -4,
-                  )} is verified as human and task has been marked complete.`,
-                })
-              } else {
-                console.error(
-                  '❌ Could not find task index for verifyingTaskId:',
-                  verifyingTaskId,
-                )
-                toast({
-                  title: 'Verification Successful!',
-                  description: `Address ${addressToVerify.slice(
-                    0,
-                    6,
-                  )}...${addressToVerify.slice(-4)} is verified as human.`,
-                })
-              }
-            } catch (taskError: any) {
-              console.error(
-                '❌ Error completing task on blockchain:',
-                taskError,
-              )
-              toast({
-                variant: 'destructive',
-                title: 'Task Completion Failed',
-                description:
-                  taskError.message ||
-                  'Could not complete task on blockchain. Please try again.',
-              })
-            }
-          } else {
-            toast({
-              title: 'Verification Successful!',
-              description: `Address ${addressToVerify.slice(
-                0,
-                6,
-              )}...${addressToVerify.slice(-4)} is verified as human.`,
-            })
-          }
-
-          setIsHumanityModalOpen(false)
-          // Reset verifying task state
-          setVerifyingTaskId(null)
-          setVerifyingTaskType(null)
-        } else {
-          toast({
-            variant: 'destructive',
-            title: 'Not Verified',
-            description: `Address ${addressToVerify.slice(
-              0,
-              6,
-            )}...${addressToVerify.slice(
-              -4,
-            )} is not verified. Please complete verification on Humanity Protocol first.`,
-          })
-        }
-      }
-    } catch (error) {
-      console.error('Error verifying Humanity:', error)
-      toast({
-        variant: 'destructive',
-        title: 'Verification Failed',
-        description: 'Could not verify Humanity status. Please try again.',
-      })
-    } finally {
-      setIsCheckingHumanity(false)
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -788,331 +718,52 @@ export default function CampaignDetailsPage() {
     )
   }
 
-  const completedTasksCount = userTasks.filter((ut) => ut.completed).length
-  const progressPercentage = (completedTasksCount / campaign.tasks.length) * 100
-  const allTasksCompleted = completedTasksCount === campaign.tasks.length
-
-  // Debug logging
-  console.log('Campaign data:', {
-    id: campaign.id,
-    title: campaign.title,
-    imageUrl: campaign.imageUrl,
-    hasImageUrl: !!campaign.imageUrl,
-  })
-
   return (
     <div className="min-h-screen bg-gradient-soft">
       {/* Hero Section */}
-      <motion.div
-        className="relative h-[400px] w-full overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6 }}
-      >
-        {campaign.imageUrl && !campaign.imageUrl.includes('placehold.co') && (
-          <Image
-            src={campaign.imageUrl}
-            alt={campaign.title}
-            fill
-            className="object-cover"
-            priority
-            unoptimized={campaign.imageUrl.startsWith('http')}
-            onError={(e) => {
-              console.error('❌ Image failed to load:', campaign.imageUrl)
-              console.error('Error details:', e)
-            }}
-            onLoad={() => {
-              console.log('✅ Image loaded successfully:', campaign.imageUrl)
-            }}
-          />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent" />
-
-        {/* Back Button */}
-        <div className="absolute top-6 left-6">
-          <Button
-            variant="secondary"
-            size="sm"
-            asChild
-            className="backdrop-blur-sm bg-white/90 hover:bg-white"
-          >
-            <Link href="/">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Link>
-          </Button>
-        </div>
-
-        {/* Campaign Title Overlay */}
-        <div className="absolute bottom-0 left-0 right-0 p-8">
-          <div className="container mx-auto">
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.2, duration: 0.6 }}
-            >
-              <Badge className="mb-4 bg-white/20 backdrop-blur-sm text-white border-white/30">
-                {campaign.status}
-              </Badge>
-              <h1 className="text-4xl md:text-5xl font-headline font-bold text-white mb-3">
-                {campaign.title}
-              </h1>
-              <p className="text-lg text-white/90 max-w-3xl">
-                {campaign.longDescription}
-              </p>
-            </motion.div>
-          </div>
-        </div>
-      </motion.div>
+      <CampaignHero campaign={campaign} />
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column - Tasks */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Progress Card */}
-            {role === 'participant' && (
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.3, duration: 0.6 }}
-              >
-                <Card className="card-modern">
-                  <CardContent className="pt-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="font-headline font-semibold text-lg">
-                          Your Progress
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {completedTasksCount} of {campaign.tasks.length} tasks
-                          completed
-                        </p>
-                      </div>
-                      <div className="text-3xl font-bold text-primary">
-                        {Math.round(progressPercentage)}%
-                      </div>
-                    </div>
-                    <Progress value={progressPercentage} className="h-3" />
-                  </CardContent>
-                </Card>
-              </motion.div>
-            )}
-
-            {/* Tasks List */}
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.4, duration: 0.6 }}
-            >
-              <Card className="card-modern">
-                <CardHeader>
-                  <CardTitle className="font-headline">
-                    Tasks to Complete
-                  </CardTitle>
-                  <CardDescription>
-                    Complete all tasks to be eligible for rewards
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {campaign.tasks.map((task, index) => {
-                    const userTask = userTasks.find(
-                      (ut) => ut.taskId === task.id,
-                    )
-                    const isCompleted = userTask?.completed
-
-                    return (
-                      <motion.div
-                        key={task.id}
-                        initial={{ x: -20, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        transition={{ delay: 0.5 + index * 0.1, duration: 0.4 }}
-                        className={`p-4 rounded-xl border-2 transition-all ${
-                          isCompleted
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-white border-slate-200 hover:border-primary hover:shadow-card'
-                        }`}
-                      >
-                        <div className="flex items-start gap-4">
-                          <div
-                            className={`p-3 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-slate-100'}`}
-                          >
-                            {isCompleted ? (
-                              <CheckCircle className="h-5 w-5 text-green-600" />
-                            ) : (
-                              <TaskIcon type={task.type} />
-                            )}
-                          </div>
-                          <div className="flex-1">
-                            <h4 className="font-semibold mb-1">
-                              {task.description}
-                            </h4>
-                            {task.type === 'ONCHAIN_TX' &&
-                              task.metadata?.paymentRequired && (
-                                <Badge variant="outline" className="text-xs">
-                                  💰 {task.metadata.amountDisplay} on{' '}
-                                  {task.metadata.network}
-                                </Badge>
-                              )}
-                          </div>
-                          {role === 'participant' &&
-                            !isCompleted &&
-                            campaign.status === 'Open' && (
-                              <Button
-                                size="sm"
-                                className="shimmer"
-                                onClick={() =>
-                                  handleOpenVerifyDialog(task.id, task.type)
-                                }
-                              >
-                                Verify
-                              </Button>
-                            )}
-                          {isCompleted && (
-                            <Badge className="bg-green-600">
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Done
-                            </Badge>
-                          )}
-                        </div>
-                      </motion.div>
-                    )
-                  })}
-                </CardContent>
-              </Card>
-            </motion.div>
+            <TaskList
+              campaign={campaign}
+              userTasks={userTasks}
+              role={role}
+              onOpenVerifyDialog={handleOpenVerifyDialog}
+            />
 
             {/* Participant Analytics - Only for Host */}
             {isHostOfCampaign && (
-              <motion.div
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: 0.5, duration: 0.6 }}
-              >
-                <CampaignAnalytics
-                  campaign={campaign}
-                  participants={participants}
-                  participantAddresses={participantAddresses}
-                  isLoading={isLoading}
-                />
-              </motion.div>
+              <CampaignAnalytics
+                campaign={campaign}
+                participants={participants}
+                participantAddresses={participantAddresses}
+                isLoading={isLoading}
+              />
             )}
           </div>
 
           {/* Right Column - Info Sidebar */}
           <div className="space-y-6">
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.5, duration: 0.6 }}
-            >
-              <Card className="card-modern sticky top-6">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="font-headline">
-                      Campaign Info
-                    </CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={handleRefresh}
-                      disabled={isRefreshing}
-                    >
-                      <RefreshCw
-                        className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
-                      />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Participants */}
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-                    <Users className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="text-sm font-medium">Participants</p>
-                      <p className="text-2xl font-bold">
-                        {participantAddresses.length}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* End Date */}
-                  <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-                    <Calendar className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="text-sm font-medium">Ends On</p>
-                      <p className="font-semibold">
-                        {format(new Date(campaign.endDate), 'MMM dd, yyyy')}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Reward */}
-                  <div className="flex items-center gap-3 p-3 bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg border border-primary/20">
-                    <Gift className="h-5 w-5 text-primary" />
-                    <div>
-                      <p className="text-sm font-medium">Reward</p>
-                      <p className="font-semibold">{campaign.reward.name}</p>
-                    </div>
-                  </div>
-
-                  {/* Share Button */}
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={handleShare}
-                  >
-                    <Share2 className="h-4 w-4 mr-2" />
-                    Share Campaign
-                  </Button>
-
-                  {/* Host Controls - Launch/End Campaign */}
-                  {isHostOfCampaign && (
-                    <div className="pt-4 border-t space-y-2">
-                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
-                        Host Controls
-                      </p>
-                      {campaign.status === 'Draft' && (
-                        <Button
-                          className="w-full bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors"
-                          onClick={() => openCampaignActionDialog('launch')}
-                          disabled={isUpdatingCampaign}
-                        >
-                          {isUpdatingCampaign &&
-                          campaignActionToConfirm === 'launch' ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <Rocket className="h-4 w-4 mr-2" />
-                          )}
-                          Launch Campaign
-                        </Button>
-                      )}
-                      {campaign.status === 'Open' && (
-                        <Button
-                          variant="destructive"
-                          className="w-full"
-                          onClick={() => openCampaignActionDialog('end')}
-                          disabled={isUpdatingCampaign}
-                        >
-                          {isUpdatingCampaign &&
-                          campaignActionToConfirm === 'end' ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : (
-                            <XCircle className="h-4 w-4 mr-2" />
-                          )}
-                          End Campaign
-                        </Button>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </motion.div>
+            <CampaignSidebar
+              campaign={campaign}
+              participantCount={participantAddresses.length}
+              isHostOfCampaign={!!isHostOfCampaign}
+              isRefreshing={isRefreshing}
+              isUpdatingCampaign={isUpdatingCampaign}
+              campaignActionToConfirm={campaignActionToConfirm}
+              onShare={handleShare}
+              onRefresh={handleRefresh}
+              onCampaignAction={openCampaignActionDialog}
+            />
           </div>
         </div>
       </div>
 
-      {/* Task Verification Dialog */}
+      {/* Task Verification Dialog - Lazy loaded */}
       {verifyingTaskType && (
         <TaskVerificationForm
           isOpen={isVerifyDialogOpen}
@@ -1124,12 +775,19 @@ export default function CampaignDetailsPage() {
         />
       )}
 
-      {/* Humanity Verification Modal */}
+      {/* Humanity Verification Modal - Lazy loaded */}
       <HumanityVerificationModal
         isOpen={isHumanityModalOpen}
         onOpenChange={setIsHumanityModalOpen}
-        onVerify={handleVerifyHumanity}
-        isVerifying={isCheckingHumanity}
+        campaignId={campaignId}
+        taskId={verifyingTaskId || undefined}
+        isVerified={userHumanityStatus === true}
+        onVerificationComplete={handleHumanityVerificationComplete}
+        preset={
+          verifyingTaskId
+            ? (campaign?.tasks.find((t) => t.id === verifyingTaskId)?.metadata?.humanityPreset ?? 'is_human')
+            : 'is_human'
+        }
       />
 
       {/* Campaign Action Confirmation Dialog */}
