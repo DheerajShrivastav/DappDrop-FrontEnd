@@ -20,6 +20,7 @@ import {
 import { useWallet } from '@/context/wallet-provider'
 import {
   HumanityConnect,
+  useHumanityOptional,
   type HumanityReactError,
 } from '@humanity-org/react-sdk'
 import {
@@ -55,8 +56,15 @@ export function HumanityVerificationModal({
   preset,
 }: HumanityVerificationModalProps) {
   const { address, isConnected } = useWallet()
+  const humanityCtx = useHumanityOptional()
   const [isRedirecting, setIsRedirecting] = useState(false)
-  const [verificationError, setVerificationError] = useState<string | null>(null)
+  const [verificationError, setVerificationError] = useState<string | null>(
+    // If the Humanity provider is not available (env vars missing on deployment),
+    // show an error immediately instead of letting HumanityConnect crash.
+    humanityCtx === null
+      ? 'Humanity Protocol is not configured. Please ensure NEXT_PUBLIC_HUMANITY_CLIENT_ID and NEXT_PUBLIC_HUMANITY_REDIRECT_URI are set in the environment.'
+      : null,
+  )
 
   // Normalize to array and resolve configs + merged scopes
   const activePresets = normalizePresets(preset)
@@ -201,7 +209,7 @@ export function HumanityVerificationModal({
             {isVerified ? 'Close' : 'Cancel'}
           </Button>
 
-          {!isVerified && !isRedirecting && (
+          {!isVerified && !isRedirecting && humanityCtx !== null && (
             <div
               className="flex-1"
               onClick={() => {
