@@ -1679,9 +1679,7 @@ export default function CreateCampaignPage() {
                                 // Group presets by category
                                 const categories = [
                                   { key: 'identity', label: 'Identity' },
-                                  { key: 'age', label: 'Age Verification' },
                                   { key: 'kyc', label: 'KYC' },
-                                  { key: 'financial', label: 'Financial' },
                                 ] as const
 
                                 return (
