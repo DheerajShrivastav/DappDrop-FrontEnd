@@ -40,41 +40,48 @@ Unlike traditional airdrop platforms plagued by bots and multi-account farming, 
 ## Features
 
 ### 🛡️ Sybil-Resistant Verification
+
 - **Humanity Protocol OAuth** — Palm biometric scanning via the `@humanity-org/react-sdk`
 - **Configurable Presets** — Choose from `is_human`, `palm_verified`, or `kyc_passed` per task
 - **24-Hour Caching** — Verification results cached server-side to avoid repeated checks
 - **Rate Limiting** — Built-in protection against verification abuse
 
 ### 🔗 On-Chain Campaign Engine
+
 - **Smart Contract Backend** — Campaigns, tasks, and rewards managed by Solidity contracts on Ethereum
 - **ERC-20 & ERC-721 Rewards** — Distribute fungible tokens or NFTs to verified participants
 - **Role-Based Access** — Separate Host (campaign creator) and Participant flows
 - **Campaign Lifecycle** — Draft → Open → Ended states with host controls
 
 ### ✅ Multi-Platform Task Verification
-| Task Type | Verification Method |
-|---|---|
-| **Discord** | Bot membership check + OAuth verification |
-| **Telegram** | Bot API member verification |
-| **Twitter/X** | Social follow verification |
-| **On-Chain Payment** | Transaction hash scanning across ETH, Base, Polygon, Sepolia |
-| **Humanity Verification** | Biometric palm scan via Humanity Protocol |
+
+| Task Type                 | Verification Method                                          |
+| ------------------------- | ------------------------------------------------------------ |
+| **Discord**               | Bot membership check + OAuth verification                    |
+| **Telegram**              | Bot API member verification                                  |
+| **Twitter/X**             | Social follow verification                                   |
+| **On-Chain Payment**      | Transaction hash scanning across ETH, Base, Polygon, Sepolia |
+| **Humanity Verification** | Biometric palm scan via Humanity Protocol                    |
 
 ### 🤖 AI-Powered Campaign Builder
+
 - **Gemini AI Integration** — Generate campaign titles, descriptions, and task structures from a prompt
 - **Structured Output** — AI produces ready-to-use campaign configurations
 
 ### 📊 Host Dashboard & Analytics
+
 - **Campaign Statistics** — Total campaigns, active campaigns, total participants at a glance
 - **Participant Analytics** — Per-participant task completion tracking and reward claim status
 - **Real-Time Refresh** — Pull latest data from blockchain with one click
 
 ### 🖼️ Campaign Media
+
 - **UploadThing Integration** — Drag-and-drop image uploads for campaign banners
 - **Automatic Cleanup** — Orphaned images cleaned up when campaigns are updated
 - **Wallet Signature Auth** — Secure upload authorization via wallet signatures
 
 ### ⚡ Performance Optimized
+
 - **Turbopack** — Lightning-fast dev server with `next dev --turbopack`
 - **Dynamic Imports** — Heavy components (modals, analytics) lazy-loaded on demand
 - **Optimized Package Imports** — Tree-shaken Radix UI, Lucide, ethers, and more
@@ -85,7 +92,7 @@ Unlike traditional airdrop platforms plagued by bots and multi-account farming, 
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                        FRONTEND (Next.js 15)                     │
 │                                                                  │
@@ -122,6 +129,7 @@ Unlike traditional airdrop platforms plagued by bots and multi-account farming, 
 ```
 
 **Key Design Decisions:**
+
 - **On-chain**: Campaign creation, task completion, reward distribution, participation records
 - **Off-chain**: Social verification proofs, campaign images, metadata caching, analytics
 - **Hybrid**: Task status checked via smart contract view functions for performance, with DB cache as fallback
@@ -130,27 +138,28 @@ Unlike traditional airdrop platforms plagued by bots and multi-account farming, 
 
 ## Tech Stack
 
-| Category | Technology |
-|---|---|
-| **Framework** | Next.js 15 (App Router, Turbopack) |
-| **Language** | TypeScript |
-| **Styling** | Tailwind CSS + Radix UI + shadcn/ui |
-| **Animations** | Framer Motion |
-| **Blockchain** | Ethers.js, Viem, Wagmi v2 |
-| **Wallet** | RainbowKit (MetaMask, WalletConnect, Coinbase, etc.) |
-| **Database** | PostgreSQL (Neon) + Prisma ORM |
-| **Auth** | NextAuth.js (Discord OAuth) + Wallet Signatures |
-| **Identity** | Humanity Protocol React SDK |
-| **AI** | Google Gemini (via Vercel AI SDK) |
-| **File Upload** | UploadThing |
-| **Forms** | React Hook Form + Zod validation |
-| **Deployment** | Vercel |
+| Category        | Technology                                           |
+| --------------- | ---------------------------------------------------- |
+| **Framework**   | Next.js 15 (App Router, Turbopack)                   |
+| **Language**    | TypeScript                                           |
+| **Styling**     | Tailwind CSS + Radix UI + shadcn/ui                  |
+| **Animations**  | Framer Motion                                        |
+| **Blockchain**  | Ethers.js, Viem, Wagmi v2                            |
+| **Wallet**      | RainbowKit (MetaMask, WalletConnect, Coinbase, etc.) |
+| **Database**    | PostgreSQL (Neon) + Prisma ORM                       |
+| **Auth**        | NextAuth.js (Discord OAuth) + Wallet Signatures      |
+| **Identity**    | Humanity Protocol React SDK                          |
+| **AI**          | Google Gemini (via Vercel AI SDK)                    |
+| **File Upload** | UploadThing                                          |
+| **Forms**       | React Hook Form + Zod validation                     |
+| **Deployment**  | Vercel                                               |
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
+
 - **Node.js** ≥ 18
 - **npm** or **yarn**
 - **PostgreSQL** database (or [Neon](https://neon.tech) serverless Postgres)
@@ -160,7 +169,7 @@ Unlike traditional airdrop platforms plagued by bots and multi-account farming, 
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/your-username/DappDrop-FrontEnd.git
+git clone https://github.com/DheerajShrivastav/DappDrop-FrontEnd.git
 cd DappDrop-FrontEnd
 npm install
 ```
@@ -192,34 +201,34 @@ Open [http://localhost:3000](http://localhost:3000) — you'll need a wallet con
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|---|---|---|
-| **Database** | | |
-| `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| **Blockchain** | | |
-| `NEXT_PUBLIC_CAMPAIGN_FACTORY_CONTRACT` | ✅ | Deployed smart contract address (Sepolia) |
-| `NEXT_PUBLIC_SEPOLIA_RPC_URL` | ✅ | Sepolia RPC endpoint (Alchemy, Infura, or public) |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | ✅ | WalletConnect Cloud project ID |
-| **AI** | | |
-| `GEMINI_API_KEY` | ✅ | [Google AI Studio](https://aistudio.google.com/app/apikey) API key |
-| **Auth** | | |
-| `NEXTAUTH_URL` | ✅ | Base URL (`http://localhost:3000` locally) |
-| `NEXTAUTH_SECRET` | ✅ | Random secret for NextAuth session signing |
-| **Discord** | | |
-| `DISCORD_CLIENT_ID` | ⚙️ | Discord application client ID |
-| `DISCORD_CLIENT_SECRET` | ⚙️ | Discord application secret |
-| `DISCORD_BOT_TOKEN` | ⚙️ | Discord bot token for membership verification |
-| `NEXT_PUBLIC_DISCORD_BOT_INVITE_URL` | ⚙️ | Bot invite URL for campaign hosts |
-| **Telegram** | | |
-| `TELEGRAM_BOT_TOKEN` | ⚙️ | Telegram bot token from [@BotFather](https://t.me/BotFather) |
-| `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` | ⚙️ | Bot username (without @) |
-| **Humanity Protocol** | | |
-| `NEXT_PUBLIC_HUMANITY_CLIENT_ID` | ⚙️ | App ID from [Humanity Developer Portal](https://developer.humanity.org) |
-| `NEXT_PUBLIC_HUMANITY_REDIRECT_URI` | ⚙️ | OAuth callback URL (e.g. `https://your-domain.com/humanity-callback`) |
-| `NEXT_PUBLIC_HUMANITY_ENVIRONMENT` | ⚙️ | `sandbox` or `production` |
-| **File Upload** | | |
-| `UPLOADTHING_SECRET` | ⚙️ | UploadThing API secret |
-| `UPLOADTHING_TOKEN` | ⚙️ | UploadThing app token |
+| Variable                                | Required | Description                                                             |
+| --------------------------------------- | -------- | ----------------------------------------------------------------------- |
+| **Database**                            |          |                                                                         |
+| `DATABASE_URL`                          | ✅       | PostgreSQL connection string                                            |
+| **Blockchain**                          |          |                                                                         |
+| `NEXT_PUBLIC_CAMPAIGN_FACTORY_CONTRACT` | ✅       | Deployed smart contract address (Sepolia)                               |
+| `NEXT_PUBLIC_SEPOLIA_RPC_URL`           | ✅       | Sepolia RPC endpoint (Alchemy, Infura, or public)                       |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`  | ✅       | WalletConnect Cloud project ID                                          |
+| **AI**                                  |          |                                                                         |
+| `GEMINI_API_KEY`                        | ✅       | [Google AI Studio](https://aistudio.google.com/app/apikey) API key      |
+| **Auth**                                |          |                                                                         |
+| `NEXTAUTH_URL`                          | ✅       | Base URL (`http://localhost:3000` locally)                              |
+| `NEXTAUTH_SECRET`                       | ✅       | Random secret for NextAuth session signing                              |
+| **Discord**                             |          |                                                                         |
+| `DISCORD_CLIENT_ID`                     | ⚙️       | Discord application client ID                                           |
+| `DISCORD_CLIENT_SECRET`                 | ⚙️       | Discord application secret                                              |
+| `DISCORD_BOT_TOKEN`                     | ⚙️       | Discord bot token for membership verification                           |
+| `NEXT_PUBLIC_DISCORD_BOT_INVITE_URL`    | ⚙️       | Bot invite URL for campaign hosts                                       |
+| **Telegram**                            |          |                                                                         |
+| `TELEGRAM_BOT_TOKEN`                    | ⚙️       | Telegram bot token from [@BotFather](https://t.me/BotFather)            |
+| `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME`     | ⚙️       | Bot username (without @)                                                |
+| **Humanity Protocol**                   |          |                                                                         |
+| `NEXT_PUBLIC_HUMANITY_CLIENT_ID`        | ⚙️       | App ID from [Humanity Developer Portal](https://developer.humanity.org) |
+| `NEXT_PUBLIC_HUMANITY_REDIRECT_URI`     | ⚙️       | OAuth callback URL (e.g. `https://your-domain.com/humanity-callback`)   |
+| `NEXT_PUBLIC_HUMANITY_ENVIRONMENT`      | ⚙️       | `sandbox` or `production`                                               |
+| **File Upload**                         |          |                                                                         |
+| `UPLOADTHING_SECRET`                    | ⚙️       | UploadThing API secret                                                  |
+| `UPLOADTHING_TOKEN`                     | ⚙️       | UploadThing app token                                                   |
 
 > ✅ = Required for basic functionality &nbsp;&nbsp; ⚙️ = Required for specific features
 
@@ -242,7 +251,7 @@ Open [http://localhost:3000](http://localhost:3000) — you'll need a wallet con
 
 ## Project Structure
 
-```
+```text
 src/
 ├── app/
 │   ├── (marketing)/         # Landing page, about, changelog (SSR)
@@ -276,11 +285,11 @@ src/
 
 Detailed docs are in the [`docs/`](./docs/) directory:
 
-| Category | Contents |
-|---|---|
+| Category                                 | Contents                                                         |
+| ---------------------------------------- | ---------------------------------------------------------------- |
 | [**Integrations**](./docs/integrations/) | Humanity Protocol, Discord, Telegram, UploadThing, Payment tasks |
-| [**Architecture**](./docs/architecture/) | System design, security, image management, blueprint |
-| [**Guides**](./docs/guides/) | API testing, verification workflows |
+| [**Architecture**](./docs/architecture/) | System design, security, image management, blueprint             |
+| [**Guides**](./docs/guides/)             | API testing, verification workflows                              |
 
 ---
 
