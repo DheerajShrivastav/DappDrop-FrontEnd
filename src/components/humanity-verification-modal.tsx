@@ -1,7 +1,7 @@
 // src/components/humanity-verification-modal.tsx
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -58,6 +58,8 @@ export function HumanityVerificationModal({
   const { address, isConnected } = useWallet()
   const humanityCtx = useHumanityOptional()
   const [isRedirecting, setIsRedirecting] = useState(false)
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [tokenExpired, setTokenExpired] = useState(false)
   const [verificationError, setVerificationError] = useState<string | null>(
     // If the Humanity provider is not available (env vars missing on deployment),
     // show an error immediately instead of letting HumanityConnect crash.
@@ -65,6 +67,33 @@ export function HumanityVerificationModal({
       ? 'Humanity Protocol is not configured. Please ensure NEXT_PUBLIC_HUMANITY_CLIENT_ID and NEXT_PUBLIC_HUMANITY_REDIRECT_URI are set in the environment.'
       : null,
   )
+
+  // Check if the SDK already has a valid session (user already authenticated)
+  // but respect the tokenExpired flag — if the token was rejected, fall back to redirect
+  const isAlreadyAuthenticated = !tokenExpired && humanityCtx?.isAuthenticated === true && !!humanityCtx?.accessToken
+
+  // Reset transient state when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setIsRedirecting(false)
+      setIsVerifying(false)
+      setTokenExpired(false)
+      if (humanityCtx !== null) setVerificationError(null)
+    }
+  }, [isOpen, humanityCtx])
+
+  // Safety timeout: if redirecting takes more than 5s, something went wrong
+  // (e.g. SDK is in "signed in" state and won't redirect)
+  useEffect(() => {
+    if (!isRedirecting) return
+    const timer = setTimeout(() => {
+      setIsRedirecting(false)
+      setVerificationError(
+        'Redirect did not complete. The Humanity SDK may already be signed in. Please use the "Verify Now" button below.',
+      )
+    }, 5000)
+    return () => clearTimeout(timer)
+  }, [isRedirecting])
 
   // Normalize to array and resolve configs + merged scopes
   const activePresets = normalizePresets(preset)
@@ -98,6 +127,60 @@ export function HumanityVerificationModal({
     }
     setVerificationError(error.message || 'Authentication failed. Please try again.')
   }
+
+  // When the SDK already has a session, we can verify server-side directly
+  // without needing a redirect. This handles the "Signed in" button case.
+  const handleDirectVerification = useCallback(async () => {
+    if (!humanityCtx?.accessToken || !address) return
+
+    setIsVerifying(true)
+    setVerificationError(null)
+
+    try {
+      // Call our server-side verification endpoint directly
+      const response = await fetch('/api/verify-humanity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          walletAddress: address,
+          accessToken: humanityCtx.accessToken,
+          preset: activePresets,
+        }),
+      })
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Server-side verification failed')
+      }
+
+      if (!data.isHuman) {
+        throw new Error('Humanity Protocol did not verify this wallet as human.')
+      }
+
+      // Notify parent component directly — don't rely on sessionStorage + useEffect
+      // which won't re-fire because closing the modal doesn't change the effect's deps.
+      if (onVerificationComplete) {
+        onVerificationComplete(true)
+      }
+    } catch (err: any) {
+      console.error('Direct verification error:', err)
+      const errMsg = err.message || ''
+
+      // If the token is expired/invalid, clear the SDK session and fall back to redirect
+      if (errMsg.includes('token') || errMsg.includes('expired') || errMsg.includes('invalid') || errMsg.includes('Access token')) {
+        setTokenExpired(true)
+        // Try to log out from the SDK to clear stale session
+        try {
+          if (humanityCtx?.logout) await humanityCtx.logout()
+        } catch { /* ignore logout errors */ }
+        setVerificationError('Session expired. Please click "Connect Humanity Account" to re-authenticate.')
+      } else {
+        setVerificationError(errMsg || 'Verification failed. Please try again.')
+      }
+    } finally {
+      setIsVerifying(false)
+    }
+  }, [humanityCtx?.accessToken, address, activePresets, onVerificationComplete])
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -180,20 +263,20 @@ export function HumanityVerificationModal({
                 </div>
               )}
 
-              {/* Redirecting state */}
-              {isRedirecting && (
-                <div className="flex items-center justify-center gap-2 py-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-purple-500" />
-                  <span className="text-sm text-muted-foreground">
-                    Redirecting to Humanity Protocol...
-                  </span>
-                </div>
-              )}
-
               {!isConnected && !isRedirecting && (
                 <p className="text-xs text-yellow-600 dark:text-yellow-400 text-center">
                   Please connect your wallet before verifying.
                 </p>
+              )}
+
+              {/* Show info when SDK is already authenticated */}
+              {isAlreadyAuthenticated && !isRedirecting && (
+                <div className="flex items-center gap-2 p-3 rounded-lg border border-blue-500/20 bg-blue-500/5">
+                  <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0" />
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    Already signed in with Humanity Protocol. Click &quot;Verify Now&quot; to complete.
+                  </p>
+                </div>
               )}
             </>
           )}
@@ -209,24 +292,61 @@ export function HumanityVerificationModal({
             {isVerified ? 'Close' : 'Cancel'}
           </Button>
 
-          {!isVerified && !isRedirecting && humanityCtx !== null && (
-            <div
-              className="flex-1"
-              onClick={() => {
-                // Store presets + context BEFORE the SDK triggers the redirect
-                storeContextBeforeRedirect()
-                setIsRedirecting(true)
-              }}
-            >
-              <HumanityConnect
-                scopes={requiredScopes}
-                mode="redirect"
-                onError={handleAuthError}
-                label="Connect Humanity Account"
-                disabled={!isConnected}
-                className="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 h-9 px-3 bg-purple-600 text-primary-foreground hover:bg-purple-700 [&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0"
-              />
-            </div>
+          {!isVerified && humanityCtx !== null && (
+            <>
+              {/* Primary path: if SDK already has a session, verify directly */}
+              {isAlreadyAuthenticated ? (
+                <Button
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white"
+                  disabled={!isConnected || isVerifying}
+                  onClick={handleDirectVerification}
+                >
+                  {isVerifying ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="h-4 w-4 mr-2" />
+                      Verify Now
+                    </>
+                  )}
+                </Button>
+              ) : (
+                /* Fallback: SDK not yet authenticated — use HumanityConnect redirect */
+                <div
+                  className="flex-1 relative"
+                  onClick={() => {
+                    if (isRedirecting) return
+                    // Store presets + context BEFORE the SDK triggers the redirect
+                    storeContextBeforeRedirect()
+                    // Delay state update slightly so the SDK's internal click handler
+                    // fires and initiates the redirect before React re-renders.
+                    setTimeout(() => setIsRedirecting(true), 100)
+                  }}
+                >
+                  {/* Always keep HumanityConnect mounted so the SDK can complete its redirect */}
+                  <div className={isRedirecting ? 'opacity-0 pointer-events-none' : ''}>
+                    <HumanityConnect
+                      scopes={requiredScopes}
+                      mode="redirect"
+                      onError={handleAuthError}
+                      label="Connect Humanity Account"
+                      disabled={!isConnected}
+                      className="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 h-9 px-3 bg-purple-600 text-primary-foreground hover:bg-purple-700 [&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0"
+                    />
+                  </div>
+                  {/* Overlay spinner when redirecting */}
+                  {isRedirecting && (
+                    <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-md bg-purple-600/70 text-primary-foreground text-sm font-medium cursor-wait">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Redirecting...
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
           {isVerified && onVerificationComplete && taskId && (

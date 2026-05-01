@@ -112,7 +112,6 @@ export default function CampaignDetailsPage() {
 
   // Humanity Protocol Verification State
   const [isHumanityModalOpen, setIsHumanityModalOpen] = useState(false)
-  const [isCheckingHumanity, setIsCheckingHumanity] = useState(false)
   const [userHumanityStatus, setUserHumanityStatus] = useState<boolean | null>(
     null,
   )
@@ -320,26 +319,6 @@ export default function CampaignDetailsPage() {
     }
   }
 
-  const checkHumanityStatus = async () => {
-    if (!address) return
-
-    setIsCheckingHumanity(true)
-    try {
-      const response = await fetch(
-        `/api/verify-humanity?walletAddress=${address}`,
-      )
-      const data = await response.json()
-
-      if (data.success) {
-        setUserHumanityStatus(data.isHuman)
-      }
-    } catch (error) {
-      console.error('Error checking Humanity status:', error)
-    } finally {
-      setIsCheckingHumanity(false)
-    }
-  }
-
   const fetchAllCampaignData = useCallback(
     async (forceRefresh: boolean = false) => {
       if (!campaignId) return
@@ -480,12 +459,11 @@ export default function CampaignDetailsPage() {
     }
   }, [campaign?.id, campaign?.tasks])
 
-  // Check Humanity verification status when wallet connects
-  useEffect(() => {
-    if (address && isConnected) {
-      checkHumanityStatus()
-    }
-  }, [address, isConnected])
+  // NOTE: We intentionally do NOT check the global humanity verification status
+  // on page load. The `userHumanityStatus` state is per-campaign — it should only
+  // be set to true after the user completes the Humanity OAuth flow FOR THIS campaign.
+  // The task completion status from the blockchain (in userTasks) is the source of
+  // truth for whether a humanity task has been completed.
 
   // Handle return from Humanity OAuth redirect flow
   useEffect(() => {
@@ -498,12 +476,31 @@ export default function CampaignDetailsPage() {
       sessionStorage.removeItem('humanity_verification_result')
 
       const taskContextRaw = sessionStorage.getItem('humanity_task_context')
+      // Read the stored wallet BEFORE removing it so we can compare
+      const storedWallet = sessionStorage.getItem('humanity_wallet_address')
       sessionStorage.removeItem('humanity_task_context')
       sessionStorage.removeItem('humanity_wallet_address')
 
-      if (verification.isHuman) {
-        setUserHumanityStatus(true)
+      // Security: ensure the wallet that initiated verification matches
+      // the currently connected wallet. Prevents cross-wallet exploitation.
+      if (
+        storedWallet &&
+        storedWallet.toLowerCase() !== address.toLowerCase()
+      ) {
+        console.warn(
+          'Humanity verification wallet mismatch:',
+          { stored: storedWallet, current: address },
+        )
+        toast({
+          variant: 'destructive',
+          title: 'Wallet Mismatch',
+          description:
+            'The wallet used for verification does not match your currently connected wallet. Please reconnect the correct wallet and try again.',
+        })
+        return
+      }
 
+      if (verification.isHuman) {
         if (taskContextRaw) {
           const taskContext = JSON.parse(taskContextRaw)
           if (taskContext.campaignId === campaignId && taskContext.taskId) {
@@ -511,8 +508,25 @@ export default function CampaignDetailsPage() {
               (task) => task.id === taskContext.taskId,
             )
             if (taskIndex !== -1) {
+              // Check if this task is already completed on-chain (e.g. from a prior attempt)
+              const alreadyDone = userTasks.find(
+                (ut) => ut.taskId === taskContext.taskId,
+              )?.completed
+
+              if (alreadyDone) {
+                // Task already completed — just update UI state
+                setUserHumanityStatus(true)
+                toast({
+                  title: 'Task Already Completed',
+                  description: 'This humanity verification task was already completed.',
+                })
+                return
+              }
+
               completeTask(campaignId, taskIndex)
                 .then(() => {
+                  // Only mark as verified AFTER the on-chain call succeeds
+                  setUserHumanityStatus(true)
                   setUserTasks((prevTasks) =>
                     prevTasks.map((task) =>
                       task.taskId === taskContext.taskId
@@ -528,19 +542,48 @@ export default function CampaignDetailsPage() {
                       'Humanity verification successful and task marked complete.',
                   })
                 })
-                .catch((err: any) => {
+                .catch(async (err: any) => {
                   console.error('Error completing task after OAuth:', err)
-                  toast({
-                    variant: 'destructive',
-                    title: 'Task Completion Failed',
-                    description:
-                      err.message || 'Verified but could not complete task on blockchain.',
-                  })
+                  const errMsg = err.message || ''
+                  // On any contract revert, re-check blockchain to see if the task
+                  // was actually already completed (error.reason can be null for custom errors)
+                  let taskAlreadyDone = false
+                  try {
+                    const status = await getUserTaskCompletionStatus(campaignId, address, campaign.tasks)
+                    taskAlreadyDone = status[taskContext.taskId] === true
+                  } catch { /* ignore re-check errors */ }
+
+                  if (taskAlreadyDone || errMsg.includes('already completed') || errMsg.includes('TaskAlreadyCompleted')) {
+                    setUserHumanityStatus(true)
+                    setUserTasks((prevTasks) =>
+                      prevTasks.map((task) =>
+                        task.taskId === taskContext.taskId
+                          ? { ...task, completed: true }
+                          : task,
+                      ),
+                    )
+                    toast({
+                      title: 'Task Already Completed',
+                      description: 'This task was already completed on the blockchain.',
+                    })
+                  } else {
+                    // Reset so the user can retry
+                    setUserHumanityStatus(null)
+                    toast({
+                      variant: 'destructive',
+                      title: 'Task Completion Failed',
+                      description:
+                        errMsg || 'Verified but could not complete task on blockchain. Please try again.',
+                    })
+                  }
                 })
               return
             }
           }
         }
+
+        // No task context — just mark identity as verified
+        setUserHumanityStatus(true)
 
       } else {
         toast({
@@ -565,37 +608,75 @@ export default function CampaignDetailsPage() {
       return
     }
 
-    setUserHumanityStatus(true)
-
     if (verifyingTaskId && campaign) {
       const taskIndex = campaign.tasks.findIndex(
         (task) => task.id === verifyingTaskId,
       )
       if (taskIndex !== -1) {
-        try {
-          await completeTask(campaignId, taskIndex)
-          setUserTasks((prevTasks) =>
-            prevTasks.map((task) =>
-              task.taskId === verifyingTaskId
-                ? { ...task, completed: true }
-                : task,
-            ),
-          )
-          await fetchAllCampaignData()
-          if (!isJoined) setIsJoined(true)
+        // Check if this task is already completed on-chain
+        const alreadyDone = userTasks.find(
+          (ut) => ut.taskId === verifyingTaskId,
+        )?.completed
+
+        if (alreadyDone) {
+          setUserHumanityStatus(true)
           toast({
-            title: 'Task Completed!',
-            description:
-              'Humanity verification successful and task marked complete.',
+            title: 'Task Already Completed',
+            description: 'This humanity verification task was already completed.',
           })
-        } catch (err: any) {
-          console.warn('Error completing task on blockchain:', err?.message || err)
-          toast({
-            variant: 'destructive',
-            title: 'Task Completion Failed',
-            description:
-              err.message || 'Verified but could not complete task on blockchain.',
-          })
+        } else {
+          try {
+            await completeTask(campaignId, taskIndex)
+            // Only mark verified AFTER on-chain call succeeds
+            setUserHumanityStatus(true)
+            setUserTasks((prevTasks) =>
+              prevTasks.map((task) =>
+                task.taskId === verifyingTaskId
+                  ? { ...task, completed: true }
+                  : task,
+              ),
+            )
+            await fetchAllCampaignData()
+            if (!isJoined) setIsJoined(true)
+            toast({
+              title: 'Task Completed!',
+              description:
+                'Humanity verification successful and task marked complete.',
+            })
+          } catch (err: any) {
+            console.warn('Error completing task on blockchain:', err?.message || err)
+            const errMsg = err.message || ''
+            // Re-check blockchain to see if task was actually completed
+            let taskAlreadyDone = false
+            try {
+              const status = await getUserTaskCompletionStatus(campaignId, address!, campaign.tasks)
+              taskAlreadyDone = status[verifyingTaskId] === true
+            } catch { /* ignore re-check errors */ }
+
+            if (taskAlreadyDone || errMsg.includes('already completed') || errMsg.includes('TaskAlreadyCompleted')) {
+              setUserHumanityStatus(true)
+              setUserTasks((prevTasks) =>
+                prevTasks.map((task) =>
+                  task.taskId === verifyingTaskId
+                    ? { ...task, completed: true }
+                    : task,
+                ),
+              )
+              toast({
+                title: 'Task Already Completed',
+                description: 'This task was already completed on the blockchain.',
+              })
+            } else {
+              // Reset so user can retry
+              setUserHumanityStatus(null)
+              toast({
+                variant: 'destructive',
+                title: 'Task Completion Failed',
+                description:
+                  errMsg || 'Verified but could not complete task on blockchain. Please try again.',
+              })
+            }
+          }
         }
       }
     } else {

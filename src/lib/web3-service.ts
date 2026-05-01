@@ -1523,11 +1523,12 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
 
     // Convert campaignId from string to number for all smart contract calls
     const campaignIdNumber = parseInt(campaignId, 10)
+    const userAddress = await signer.getAddress()
 
     console.log('Attempting to complete task:', {
       campaignId: campaignIdNumber,
       taskIndex,
-      userAddress: await signer.getAddress(),
+      userAddress,
     })
 
     // First, let's check the campaign status and other details
@@ -1536,6 +1537,7 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     console.log('Campaign data before task completion:', {
       id: campaignData.id.toString(),
       status: campaignData.status.toString(),
+      host: campaignData.host,
       tasksLength: campaignData.tasks.length,
       requestedTaskIndex: taskIndex,
     })
@@ -1552,6 +1554,30 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       throw new Error(
         `Invalid task index ${taskIndex}. Campaign has ${campaignData.tasks.length} tasks.`
       )
+    }
+
+    // Check if the user is the campaign host — the contract rejects hosts
+    // completing their own tasks (Web3Campaigns__PosterCannotAcceptOwnTask)
+    if (campaignData.host && userAddress.toLowerCase() === campaignData.host.toLowerCase()) {
+      throw new Error(
+        'Campaign hosts cannot complete tasks on their own campaign. Please use a different wallet.'
+      )
+    }
+
+    // Check if the task is already completed on-chain
+    try {
+      const alreadyCompleted = await contractToRead.hasCompletedTask(
+        campaignIdNumber,
+        userAddress,
+        taskIndex,
+      )
+      if (alreadyCompleted) {
+        throw new Error('You have already completed this task.')
+      }
+    } catch (checkErr: any) {
+      // If it's our own error, re-throw. Otherwise ignore and let the contract call handle it.
+      if (checkErr.message === 'You have already completed this task.') throw checkErr
+      console.warn('Pre-check hasCompletedTask failed, proceeding anyway:', checkErr?.message)
     }
 
     // The smart contract completeTask function only takes campaignId and taskIndex
@@ -1583,6 +1609,8 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
         description = 'You have already completed this task.'
       } else if (error.reason.includes('TaskNotFound')) {
         description = 'Task not found in this campaign.'
+      } else if (error.reason.includes('PosterCannotAcceptOwnTask')) {
+        description = 'Campaign hosts cannot complete tasks on their own campaign.'
       } else if (error.reason.includes('Too many rapid actions')) {
         description = 'Please wait 30 seconds between actions.'
       } else if (
@@ -1594,8 +1622,13 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       } else {
         description += ` Reason: ${error.reason}`
       }
-    } else if (error.message) {
-      description += ` Error: ${error.message}`
+    } else if (error.message && !error.message.includes('missing revert data')) {
+      // Use the message only if it's our own pre-check error, not the raw ethers CALL_EXCEPTION
+      description = error.message
+    } else {
+      // Custom error with no reason (null revert data) — try to give a useful message
+      description = 'Transaction rejected by the smart contract. Possible reasons: ' +
+        'campaign host cannot complete own tasks, task already completed, or campaign is not active.'
     }
 
     console.error('Parsed error description:', description)
