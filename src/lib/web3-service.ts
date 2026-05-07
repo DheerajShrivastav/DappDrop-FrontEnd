@@ -99,23 +99,15 @@ const mapContractDataToCampaign = (
   ]
 
   // Use stored reward name if available, otherwise fall back to generated text
-  let rewardName =
-    campaignMetadata?.rewardName || `Reward for ${contractData.name}`
-  if (
-    !campaignMetadata?.rewardName &&
-    Number(contractData.reward.rewardType) === 2
-  ) {
+  let rewardName = campaignMetadata?.rewardName || `Reward for ${contractData.name}`
+  if (!campaignMetadata?.rewardName && Number(contractData.reward.rewardType) === 2) {
     // "None" type - use a more descriptive fallback
     rewardName = 'A special off-chain reward'
   }
 
   // Use stored descriptions if available, otherwise fall back to generated placeholders
-  const shortDescription =
-    campaignMetadata?.shortDescription ||
-    `A campaign hosted by ${contractData.host}`
-  const longDescription =
-    campaignMetadata?.longDescription ||
-    `A campaign hosted by ${contractData.host} with the name ${contractData.name}. More details can be found on the blockchain.`
+  const shortDescription = campaignMetadata?.shortDescription || `A campaign hosted by ${contractData.host}`
+  const longDescription = campaignMetadata?.longDescription || `A campaign hosted by ${contractData.host} with the name ${contractData.name}. More details can be found on the blockchain.`
 
   // Use the actual dates from the blockchain
   let startDate = new Date(Number(contractData.startTime) * 1000)
