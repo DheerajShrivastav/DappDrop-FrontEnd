@@ -78,7 +78,12 @@ const mapContractDataToCampaign = (
   contractData: any,
   id: number,
   taskMetadata?: Array<{ taskIndex: number; discordInviteLink?: string }>,
-  imageUrl?: string
+  imageUrl?: string,
+  campaignMetadata?: {
+    shortDescription?: string | null
+    longDescription?: string | null
+    rewardName?: string | null
+  }
 ): Campaign => {
   const statusMap = ['Draft', 'Open', 'Ended', 'Closed']
   const rewardTypeMap = ['ERC20', 'ERC721', 'None']
@@ -91,11 +96,16 @@ const mapContractDataToCampaign = (
     'ONCHAIN_TX',
   ]
 
-  let rewardName = `Reward for ${contractData.name}`
-  if (Number(contractData.reward.rewardType) === 2) {
-    // "None" type
+  // Use stored reward name if available, otherwise fall back to generated text
+  let rewardName = campaignMetadata?.rewardName || `Reward for ${contractData.name}`
+  if (!campaignMetadata?.rewardName && Number(contractData.reward.rewardType) === 2) {
+    // "None" type - use a more descriptive fallback
     rewardName = 'A special off-chain reward'
   }
+
+  // Use stored descriptions if available, otherwise fall back to generated placeholders
+  const shortDescription = campaignMetadata?.shortDescription || `A campaign hosted by ${contractData.host}`
+  const longDescription = campaignMetadata?.longDescription || `A campaign hosted by ${contractData.host} with the name ${contractData.name}. More details can be found on the blockchain.`
 
   // Use the actual dates from the blockchain
   let startDate = new Date(Number(contractData.startTime) * 1000)
@@ -116,8 +126,8 @@ const mapContractDataToCampaign = (
   return {
     id: id.toString(),
     title: contractData.name,
-    description: `A campaign hosted by ${contractData.host}`, // Short description placeholder
-    longDescription: `A campaign hosted by ${contractData.host} with the name ${contractData.name}. More details can be found on the blockchain.`, // Long description placeholder
+    description: shortDescription,
+    longDescription: longDescription,
     startDate,
     endDate,
     status: statusMap[Number(contractData.status)] as
@@ -363,14 +373,22 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
         if (Number(campaignData.status) !== 3) {
           // Not 'Closed'
 
-          // Fetch image URL from database if available
+          // Fetch image URL and metadata from database if available
           let imageUrl: string | undefined
+          let campaignMeta: { shortDescription?: string; longDescription?: string; rewardName?: string } | undefined
           if (typeof window !== 'undefined') {
             try {
               const imageResponse = await fetch(`/api/campaigns/${i}/image`)
               if (imageResponse.ok) {
                 const imageData = await imageResponse.json()
                 imageUrl = imageData.imageUrl
+                if (imageData.shortDescription || imageData.longDescription || imageData.rewardName) {
+                  campaignMeta = {
+                    shortDescription: imageData.shortDescription,
+                    longDescription: imageData.longDescription,
+                    rewardName: imageData.rewardName,
+                  }
+                }
               }
             } catch (e) {
               // Silently fail if image fetch fails
@@ -381,7 +399,8 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
             campaignData,
             i,
             undefined,
-            imageUrl
+            imageUrl,
+            campaignMeta
           )
 
           campaigns.push(campaign)
@@ -442,14 +461,22 @@ export const getCampaignsByHostAddress = async (
         try {
           const campaignData = await contractToUse.getCampaign(id)
 
-          // Fetch image URL from database if available
+          // Fetch image URL and metadata from database if available
           let imageUrl: string | undefined
+          let campaignMeta: { shortDescription?: string; longDescription?: string; rewardName?: string } | undefined
           if (typeof window !== 'undefined') {
             try {
               const imageResponse = await fetch(`/api/campaigns/${id}/image`)
               if (imageResponse.ok) {
                 const imageData = await imageResponse.json()
                 imageUrl = imageData.imageUrl
+                if (imageData.shortDescription || imageData.longDescription || imageData.rewardName) {
+                  campaignMeta = {
+                    shortDescription: imageData.shortDescription,
+                    longDescription: imageData.longDescription,
+                    rewardName: imageData.rewardName,
+                  }
+                }
               }
             } catch (e) {
               // Silently fail if image fetch fails
@@ -460,7 +487,8 @@ export const getCampaignsByHostAddress = async (
             campaignData,
             id,
             undefined,
-            imageUrl
+            imageUrl,
+            campaignMeta
           )
 
           return campaign
@@ -519,8 +547,9 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
       totalParticipants: Number(campaignData.totalParticipants),
     })
 
-    // Fetch image URL from database if available
+    // Fetch image URL and metadata from database if available
     let imageUrl: string | undefined
+    let campaignMeta: { shortDescription?: string; longDescription?: string; rewardName?: string } | undefined
     if (typeof window !== 'undefined') {
       try {
 
@@ -529,6 +558,13 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
         if (imageResponse.ok) {
           const imageData = await imageResponse.json()
           imageUrl = imageData.imageUrl
+          if (imageData.shortDescription || imageData.longDescription || imageData.rewardName) {
+            campaignMeta = {
+              shortDescription: imageData.shortDescription,
+              longDescription: imageData.longDescription,
+              rewardName: imageData.rewardName,
+            }
+          }
         } else {
           console.warn(`⚠️ Image API returned non-OK status: ${imageResponse.status}`)
         }
@@ -542,7 +578,8 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
       campaignData,
       parseInt(id),
       undefined,
-      imageUrl
+      imageUrl,
+      campaignMeta
     )
     console.log(`Mapped campaign data for ${id}:`, {
       id: campaign.id,
@@ -895,12 +932,9 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     // 4. If the start time is in the future, the campaign will be in Draft status and can be opened later
     // If the start time is now or very soon, it should automatically become Active
 
-    // Save image URL to database if provided
-    if (
-      campaignData.imageUrl &&
-      campaignData.imageUrl !== 'https://placehold.co/600x400'
-    ) {
-      console.log('💾 Saving image URL to database...')
+    // Save image URL and campaign metadata to database
+    {
+      console.log('💾 Saving campaign metadata to database...')
       try {
         // Sign authentication message
         const address = await signer.getAddress()
@@ -908,29 +942,43 @@ export const createAndActivateCampaign = async (campaignData: any) => {
         const message = `Sign this message to authenticate with DappDrop\n\nWallet: ${address}\nNonce: ${nonce}`
         const signature = await signer.signMessage(message)
 
+        // Determine reward name for storage
+        let rewardNameToStore = ''
+        if (campaignData.reward.type === 'None') {
+          rewardNameToStore = campaignData.reward.name || 'A special off-chain reward'
+        } else if (campaignData.reward.type === 'ERC20') {
+          rewardNameToStore = campaignData.reward.name || `${campaignData.reward.amount} ERC20 Tokens`
+        } else if (campaignData.reward.type === 'ERC721') {
+          rewardNameToStore = campaignData.reward.name || 'NFT Reward'
+        }
+
         const imageResponse = await fetch(
           `/api/campaigns/${campaignId}/image`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              imageUrl: campaignData.imageUrl,
+              imageUrl: campaignData.imageUrl || 'https://placehold.co/600x400',
               signature,
               message,
+              shortDescription: campaignData.shortDescription || '',
+              longDescription: campaignData.description || '',
+              rewardType: campaignData.reward.type,
+              rewardName: rewardNameToStore,
             }),
           }
         )
 
         if (imageResponse.ok) {
-          console.log('✅ Image URL saved to database')
+          console.log('✅ Campaign metadata saved to database')
         } else {
           console.warn(
-            '⚠️ Failed to save image URL, but campaign created successfully'
+            '⚠️ Failed to save campaign metadata, but campaign created successfully'
           )
         }
-      } catch (imageError) {
-        console.warn('⚠️ Error saving image URL:', imageError)
-        // Don't fail campaign creation if image save fails
+      } catch (metadataError) {
+        console.warn('⚠️ Error saving campaign metadata:', metadataError)
+        // Don't fail campaign creation if metadata save fails
       }
     }
 
@@ -1252,12 +1300,9 @@ export const createCampaign = async (campaignData: any) => {
 
     console.log('🎯 Campaign creation successful! Campaign ID:', campaignId)
 
-    // Save image URL to database if provided
-    if (
-      campaignData.imageUrl &&
-      campaignData.imageUrl !== 'https://placehold.co/600x400'
-    ) {
-      console.log('💾 Saving image URL to database...')
+    // Save image URL and campaign metadata to database
+    {
+      console.log('💾 Saving campaign metadata to database...')
       try {
         // Sign authentication message
         const address = await signer.getAddress()
@@ -1265,29 +1310,43 @@ export const createCampaign = async (campaignData: any) => {
         const message = `Sign this message to authenticate with DappDrop\n\nWallet: ${address}\nNonce: ${nonce}`
         const signature = await signer.signMessage(message)
 
+        // Determine reward name for storage
+        let rewardNameToStore = ''
+        if (campaignData.reward.type === 'None') {
+          rewardNameToStore = campaignData.reward.name || 'A special off-chain reward'
+        } else if (campaignData.reward.type === 'ERC20') {
+          rewardNameToStore = campaignData.reward.name || `${campaignData.reward.amount} ERC20 Tokens`
+        } else if (campaignData.reward.type === 'ERC721') {
+          rewardNameToStore = campaignData.reward.name || 'NFT Reward'
+        }
+
         const imageResponse = await fetch(
           `/api/campaigns/${campaignId}/image`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              imageUrl: campaignData.imageUrl,
+              imageUrl: campaignData.imageUrl || 'https://placehold.co/600x400',
               signature,
               message,
+              shortDescription: campaignData.shortDescription || '',
+              longDescription: campaignData.description || '',
+              rewardType: campaignData.reward.type,
+              rewardName: rewardNameToStore,
             }),
           }
         )
 
         if (imageResponse.ok) {
-          console.log('✅ Image URL saved to database')
+          console.log('✅ Campaign metadata saved to database')
         } else {
           console.warn(
-            '⚠️ Failed to save image URL, but campaign created successfully'
+            '⚠️ Failed to save campaign metadata, but campaign created successfully'
           )
         }
-      } catch (imageError) {
-        console.warn('⚠️ Error saving image URL:', imageError)
-        // Don't fail campaign creation if image save fails
+      } catch (metadataError) {
+        console.warn('⚠️ Error saving campaign metadata:', metadataError)
+        // Don't fail campaign creation if metadata save fails
       }
     }
 

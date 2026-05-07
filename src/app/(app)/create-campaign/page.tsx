@@ -239,7 +239,7 @@ const TASK_TYPE_OPTIONS: { value: TaskType; label: string }[] = [
   { value: 'JOIN_DISCORD', label: 'Join Discord' },
   { value: 'JOIN_TELEGRAM', label: 'Join Telegram' },
   { value: 'RETWEET', label: 'Retweet Post' },
-  { value: 'ONCHAIN_TX', label: 'On-chain Action' },
+  { value: 'ONCHAIN_TX', label: 'On-chain Action (Beta)' },
   { value: 'HUMANITY_VERIFICATION', label: 'Humanity Protocol Verification' },
 ]
 
@@ -1374,6 +1374,15 @@ export default function CreateCampaignPage() {
 
                       {tasks[index].type === 'ONCHAIN_TX' && (
                         <div className="space-y-4">
+                          {/* Beta Notice */}
+                          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-400 text-amber-900">
+                              BETA
+                            </span>
+                            <p className="text-sm text-amber-800">
+                              On-chain actions (x402 Payment Protocol) are currently in beta. Features may change.
+                            </p>
+                          </div>
                           <FormField
                             control={form.control}
                             name={`tasks.${index}.paymentRequired`}

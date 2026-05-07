@@ -11,6 +11,7 @@ import {
   Loader2,
   Rocket,
   XCircle,
+  Info,
 } from 'lucide-react'
 
 import type { Campaign } from '@/lib/types'
@@ -68,6 +69,18 @@ export function CampaignSidebar({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* About This Campaign */}
+          {campaign.description && !campaign.description.startsWith('A campaign hosted by') && (
+            <div className="p-3 bg-gradient-to-br from-slate-50 to-blue-50/50 rounded-lg border border-slate-200/60">
+              <div className="flex items-center gap-2 mb-2">
+                <Info className="h-4 w-4 text-primary/70" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary/70">About</p>
+              </div>
+              <p className="text-sm text-slate-700 leading-relaxed">
+                {campaign.description}
+              </p>
+            </div>
+          )}
           {/* Participants */}
           <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
             <Users className="h-5 w-5 text-primary" />
