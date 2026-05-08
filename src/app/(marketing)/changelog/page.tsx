@@ -28,6 +28,78 @@ import {
 
 const changelogData = [
   {
+    date: new Date('2026-05-05T12:00:00Z'),
+    version: 'Auth Update',
+    title: 'Humanity v2 OAuth SDK Migration',
+    description:
+      'Successfully migrated the platform authentication and verification flows from the legacy Humanity v1 API to the new Humanity v2 OAuth SDK.',
+    changes: [
+      {
+        type: 'Improvement',
+        icon: Users,
+        text: 'Migrated from Humanity v1 API to Humanity v2 OAuth SDK for enhanced security and reliability.',
+      },
+    ],
+  },
+  {
+    date: new Date('2026-04-22T12:00:00Z'),
+    version: 'AI Multi-Agent Pipeline',
+    title: 'Campaign Generation Flow Refactor',
+    description:
+      'Complete refactor of the campaign generation flow to utilize a robust multi-agent pipeline with Google Gemini integration, significantly improving the quality and performance of AI generation.',
+    changes: [
+      {
+        type: 'Improvement',
+        icon: Bot,
+        text: 'Removed deprecated Genkit dependencies and replaced with @ai-sdk/google for cutting-edge AI generation.',
+      },
+      {
+        type: 'Feature',
+        icon: Zap,
+        text: 'Introduced a new centralized configuration file specifically for the Google Gemini API.',
+      },
+      {
+        type: 'Feature',
+        icon: GitCommit,
+        text: 'Enhanced campaign generation logic utilizing a sophisticated planner, generator, and validator multi-agent structure.',
+      },
+      {
+        type: 'Improvement',
+        icon: ShieldCheck,
+        text: 'Improved validation process with robust retry logic and automatic feedback incorporation.',
+      },
+      {
+        type: 'Improvement',
+        icon: Layout,
+        text: 'Updated internal schemas to reflect new campaign planning and stringent validation requirements.',
+      },
+      {
+        type: 'Improvement',
+        icon: ShieldCheck,
+        text: 'Ensured seamless updates with zero breaking changes to the public API while vastly enhancing internal logic.',
+      },
+      {
+        type: 'Improvement',
+        icon: Zap,
+        text: 'Enhanced the overall performance of the complete application regarding loading and compiling times.',
+      },
+    ],
+  },
+  {
+    date: new Date('2026-04-02T12:00:00Z'),
+    version: 'Partnership',
+    title: 'Developer Grant by Humanity Protocol',
+    description:
+      'Dapp Drop has successfully secured a prestigious developer grant from the Humanity Protocol to further advance sybil-resistant campaign distribution.',
+    changes: [
+      {
+        type: 'Feature',
+        icon: Rocket,
+        text: 'Awarded the Humanity Protocol Developer Grant for building innovative identity-verified airdrop solutions.',
+      },
+    ],
+  },
+  {
     date: new Date('2025-12-01T18:00:00Z'),
     version: 'Design Overhaul',
     title: 'Complete UI/UX Redesign',
