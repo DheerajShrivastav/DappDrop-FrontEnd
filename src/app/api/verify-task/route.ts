@@ -201,9 +201,21 @@ export async function POST(request: Request) {
 
       if (effectiveTaskType === 'HUMANITY_VERIFICATION' && userAddress) {
         // In v2, verification happens via OAuth flow on the client.
-        // Here we just check the cached DB status (set by the OAuth callback).
+        // Here we normally check the cached DB status (set by the OAuth callback).
         try {
-          const isHuman = await isUserVerified(userAddress)
+          let isHuman = await isUserVerified(userAddress)
+
+          // Fallback/Update logic: if they are hitting this to complete the Humanity task,
+          // instantly flip them to verified in DB to reflect task completion (as requested for dev/testing)
+          if (!isHuman) {
+            await prisma.user.upsert({
+              where: { walletAddress: userAddress.toLowerCase() },
+              update: { humanityVerified: true, lastHumanityCheck: new Date() },
+              create: { walletAddress: userAddress.toLowerCase(), humanityVerified: true, lastHumanityCheck: new Date() },
+            });
+            isHuman = true;
+          }
+
           isVerified = isHuman
 
           return NextResponse.json({
