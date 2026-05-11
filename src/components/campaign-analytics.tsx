@@ -106,8 +106,8 @@ export function CampaignAnalytics({
         <div className="space-y-1">
           <CardTitle>Participant Analytics</CardTitle>
           <CardDescription>
-            A detailed view of your campaign participants, task completion rates,
-            and reward distribution status.
+            A detailed view of your campaign participants, task completion
+            rates, and reward distribution status.
           </CardDescription>
         </div>
         <Button asChild variant="outline">

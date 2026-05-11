@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     if (isNaN(campaignId) || isNaN(taskIndex)) {
       return NextResponse.json(
         { error: 'Invalid campaignId or taskId' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -52,14 +52,14 @@ export async function POST(request: Request) {
     if (!taskType) {
       return NextResponse.json(
         { error: 'taskType is required in the request body' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
     if (!taskType) {
       return NextResponse.json(
         { error: 'taskType is required in the request body' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       isVerified = await verifyDiscordJoin(
         discordUsername,
         discordServerId,
-        discordId
+        discordId,
       )
 
       // Store verification if successful
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
       isVerified = await verifyTelegramJoin(
         telegramUsername || '',
         telegramChatId,
-        telegramUserId
+        telegramUserId,
       )
 
       // Store verification if successful
@@ -184,7 +184,7 @@ export async function POST(request: Request) {
       } catch (error) {
         console.error(
           'Error fetching campaign for task type validation:',
-          error
+          error,
         )
       }
 
@@ -211,9 +211,13 @@ export async function POST(request: Request) {
             await prisma.user.upsert({
               where: { walletAddress: userAddress.toLowerCase() },
               update: { humanityVerified: true, lastHumanityCheck: new Date() },
-              create: { walletAddress: userAddress.toLowerCase(), humanityVerified: true, lastHumanityCheck: new Date() },
-            });
-            isHuman = true;
+              create: {
+                walletAddress: userAddress.toLowerCase(),
+                humanityVerified: true,
+                lastHumanityCheck: new Date(),
+              },
+            })
+            isHuman = true
           }
 
           isVerified = isHuman
@@ -262,7 +266,7 @@ export async function POST(request: Request) {
             taskIndex,
             canonicalTaskType,
             metadataTaskType: taskMetadata?.taskType,
-          }
+          },
         )
         return NextResponse.json({
           success: false,
@@ -307,7 +311,7 @@ export async function POST(request: Request) {
     console.error('API Error:', error)
     return NextResponse.json(
       { error: error.message || 'Verification failed' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
