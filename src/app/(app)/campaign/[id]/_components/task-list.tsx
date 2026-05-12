@@ -149,17 +149,20 @@ export function TaskList({
                     </div>
                     {role === 'participant' &&
                       !isCompleted &&
-                      campaign.status === 'Open' && (
+                      campaign.status === 'Open' &&
+                      (campaign.participants >= 1000 ? (
+                        <Badge variant="destructive" className="bg-red-500">
+                          Campaign Full
+                        </Badge>
+                      ) : (
                         <Button
                           size="sm"
                           className="shimmer"
-                          onClick={() =>
-                            onOpenVerifyDialog(task.id, task.type)
-                          }
+                          onClick={() => onOpenVerifyDialog(task.id, task.type)}
                         >
                           Verify
                         </Button>
-                      )}
+                      ))}
                     {isCompleted && (
                       <Badge className="bg-green-600">
                         <CheckCircle className="h-3 w-3 mr-1" />

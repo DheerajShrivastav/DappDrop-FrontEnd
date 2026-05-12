@@ -32,7 +32,7 @@ const initializeReadOnlyProvider = () => {
       readOnlyContract = new ethers.Contract(
         config.campaignFactoryAddress,
         Web3Campaigns.abi,
-        rpcProvider
+        rpcProvider,
       )
     }
   } catch (e) {
@@ -40,14 +40,16 @@ const initializeReadOnlyProvider = () => {
   }
 }
 
-export const initializeProviderAndContract = (walletProvider?: Eip1193Provider) => {
+export const initializeProviderAndContract = (
+  walletProvider?: Eip1193Provider,
+) => {
   if (walletProvider) {
     provider = new ethers.BrowserProvider(walletProvider)
     if (config.campaignFactoryAddress) {
       contract = new ethers.Contract(
         config.campaignFactoryAddress,
         Web3Campaigns.abi,
-        provider
+        provider,
       )
     } else {
       contract = null
@@ -83,7 +85,7 @@ const mapContractDataToCampaign = (
     shortDescription?: string | null
     longDescription?: string | null
     rewardName?: string | null
-  }
+  },
 ): Campaign => {
   const statusMap = ['Draft', 'Open', 'Ended', 'Closed']
   const rewardTypeMap = ['ERC20', 'ERC721', 'None']
@@ -97,15 +99,23 @@ const mapContractDataToCampaign = (
   ]
 
   // Use stored reward name if available, otherwise fall back to generated text
-  let rewardName = campaignMetadata?.rewardName || `Reward for ${contractData.name}`
-  if (!campaignMetadata?.rewardName && Number(contractData.reward.rewardType) === 2) {
+  let rewardName =
+    campaignMetadata?.rewardName || `Reward for ${contractData.name}`
+  if (
+    !campaignMetadata?.rewardName &&
+    Number(contractData.reward.rewardType) === 2
+  ) {
     // "None" type - use a more descriptive fallback
     rewardName = 'A special off-chain reward'
   }
 
   // Use stored descriptions if available, otherwise fall back to generated placeholders
-  const shortDescription = campaignMetadata?.shortDescription || `A campaign hosted by ${contractData.host}`
-  const longDescription = campaignMetadata?.longDescription || `A campaign hosted by ${contractData.host} with the name ${contractData.name}. More details can be found on the blockchain.`
+  const shortDescription =
+    campaignMetadata?.shortDescription ||
+    `A campaign hosted by ${contractData.host}`
+  const longDescription =
+    campaignMetadata?.longDescription ||
+    `A campaign hosted by ${contractData.host} with the name ${contractData.name}. More details can be found on the blockchain.`
 
   // Use the actual dates from the blockchain
   let startDate = new Date(Number(contractData.startTime) * 1000)
@@ -147,7 +157,7 @@ const mapContractDataToCampaign = (
       ) {
         try {
           verificationDataString = ethers.decodeBytes32String(
-            task.verificationData
+            task.verificationData,
           )
         } catch (e) {
           console.error('Failed to decode bytes32 string:', e)
@@ -163,11 +173,11 @@ const mapContractDataToCampaign = (
             discordInviteLink = metadata.discordInviteLink
             console.log(
               `Found Discord invite link for task ${index}:`,
-              discordInviteLink
+              discordInviteLink,
             )
           } else {
             console.warn(
-              `No Discord invite link found for task ${index} in campaign ${id}`
+              `No Discord invite link found for task ${index} in campaign ${id}`,
             )
           }
         } else {
@@ -259,7 +269,7 @@ const fetchTaskMetadata = async (campaignId: string) => {
         headers: {
           'Content-Type': 'application/json',
         },
-      }
+      },
     )
 
     if (response.ok) {
@@ -267,7 +277,7 @@ const fetchTaskMetadata = async (campaignId: string) => {
       if (result.success && Array.isArray(result.data)) {
         console.log(
           `Fetched task metadata for campaign ${campaignId}:`,
-          result.data
+          result.data,
         )
         return result.data
       } else {
@@ -277,7 +287,7 @@ const fetchTaskMetadata = async (campaignId: string) => {
       console.warn(
         `Failed to fetch task metadata for campaign ${campaignId}:`,
         response.status,
-        response.statusText
+        response.statusText,
       )
     }
   } catch (e) {
@@ -375,14 +385,24 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
 
           // Fetch image URL and metadata from database if available
           let imageUrl: string | undefined
-          let campaignMeta: { shortDescription?: string; longDescription?: string; rewardName?: string } | undefined
+          let campaignMeta:
+            | {
+                shortDescription?: string
+                longDescription?: string
+                rewardName?: string
+              }
+            | undefined
           if (typeof window !== 'undefined') {
             try {
               const imageResponse = await fetch(`/api/campaigns/${i}/image`)
               if (imageResponse.ok) {
                 const imageData = await imageResponse.json()
                 imageUrl = imageData.imageUrl
-                if (imageData.shortDescription || imageData.longDescription || imageData.rewardName) {
+                if (
+                  imageData.shortDescription ||
+                  imageData.longDescription ||
+                  imageData.rewardName
+                ) {
                   campaignMeta = {
                     shortDescription: imageData.shortDescription,
                     longDescription: imageData.longDescription,
@@ -400,7 +420,7 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
             i,
             undefined,
             imageUrl,
-            campaignMeta
+            campaignMeta,
           )
 
           campaigns.push(campaign)
@@ -409,7 +429,10 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
         if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
           console.warn(`Campaign ${i} not found on blockchain or reverted.`)
         } else {
-          console.warn(`Failed to fetch campaign ${i}:`, error?.message || 'Unknown error')
+          console.warn(
+            `Failed to fetch campaign ${i}:`,
+            error?.message || 'Unknown error',
+          )
         }
       }
     }
@@ -419,7 +442,7 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
     if (error.code === 'CALL_EXCEPTION') {
       console.error(
         'Contract call failed. Check contract address and network.',
-        error
+        error,
       )
       toast({
         variant: 'destructive',
@@ -440,7 +463,7 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
 }
 
 export const getCampaignsByHostAddress = async (
-  hostAddress: string
+  hostAddress: string,
 ): Promise<Campaign[]> => {
   const contractToUse = readOnlyContract ?? contract
   if (!contractToUse) {
@@ -449,9 +472,8 @@ export const getCampaignsByHostAddress = async (
   }
 
   try {
-    const campaignIdsBigInt: bigint[] = await contractToUse.getCampaignsByHost(
-      hostAddress
-    )
+    const campaignIdsBigInt: bigint[] =
+      await contractToUse.getCampaignsByHost(hostAddress)
     const campaignIds = campaignIdsBigInt.map((id) => Number(id))
 
     if (campaignIds.length === 0) return []
@@ -463,14 +485,24 @@ export const getCampaignsByHostAddress = async (
 
           // Fetch image URL and metadata from database if available
           let imageUrl: string | undefined
-          let campaignMeta: { shortDescription?: string; longDescription?: string; rewardName?: string } | undefined
+          let campaignMeta:
+            | {
+                shortDescription?: string
+                longDescription?: string
+                rewardName?: string
+              }
+            | undefined
           if (typeof window !== 'undefined') {
             try {
               const imageResponse = await fetch(`/api/campaigns/${id}/image`)
               if (imageResponse.ok) {
                 const imageData = await imageResponse.json()
                 imageUrl = imageData.imageUrl
-                if (imageData.shortDescription || imageData.longDescription || imageData.rewardName) {
+                if (
+                  imageData.shortDescription ||
+                  imageData.longDescription ||
+                  imageData.rewardName
+                ) {
                   campaignMeta = {
                     shortDescription: imageData.shortDescription,
                     longDescription: imageData.longDescription,
@@ -488,19 +520,24 @@ export const getCampaignsByHostAddress = async (
             id,
             undefined,
             imageUrl,
-            campaignMeta
+            campaignMeta,
           )
 
           return campaign
         } catch (error: any) {
           if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-            console.warn(`Campaign ${id} not found for host ${hostAddress} (reverted).`)
+            console.warn(
+              `Campaign ${id} not found for host ${hostAddress} (reverted).`,
+            )
           } else {
-            console.warn(`Failed to fetch campaign ${id} for host ${hostAddress}:`, error?.message || 'Unknown error')
+            console.warn(
+              `Failed to fetch campaign ${id} for host ${hostAddress}:`,
+              error?.message || 'Unknown error',
+            )
           }
           return null
         }
-      })
+      }),
     )
 
     return campaigns.filter((c): c is Campaign => c !== null)
@@ -549,16 +586,25 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
 
     // Fetch image URL and metadata from database if available
     let imageUrl: string | undefined
-    let campaignMeta: { shortDescription?: string; longDescription?: string; rewardName?: string } | undefined
+    let campaignMeta:
+      | {
+          shortDescription?: string
+          longDescription?: string
+          rewardName?: string
+        }
+      | undefined
     if (typeof window !== 'undefined') {
       try {
-
         const imageResponse = await fetch(`/api/campaigns/${id}/image`)
 
         if (imageResponse.ok) {
           const imageData = await imageResponse.json()
           imageUrl = imageData.imageUrl
-          if (imageData.shortDescription || imageData.longDescription || imageData.rewardName) {
+          if (
+            imageData.shortDescription ||
+            imageData.longDescription ||
+            imageData.rewardName
+          ) {
             campaignMeta = {
               shortDescription: imageData.shortDescription,
               longDescription: imageData.longDescription,
@@ -566,7 +612,9 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
             }
           }
         } else {
-          console.warn(`⚠️ Image API returned non-OK status: ${imageResponse.status}`)
+          console.warn(
+            `⚠️ Image API returned non-OK status: ${imageResponse.status}`,
+          )
         }
       } catch (e) {
         console.error('❌ Failed to fetch image:', e)
@@ -579,7 +627,7 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
       parseInt(id),
       undefined,
       imageUrl,
-      campaignMeta
+      campaignMeta,
     )
     console.log(`Mapped campaign data for ${id}:`, {
       id: campaign.id,
@@ -595,7 +643,10 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
     if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
       console.warn(`Campaign ${id} not found on blockchain or reverted.`)
     } else {
-      console.warn(`Error fetching campaign ${id}:`, error?.message || 'Unknown error')
+      console.warn(
+        `Error fetching campaign ${id}:`,
+        error?.message || 'Unknown error',
+      )
     }
     return null
   }
@@ -604,10 +655,10 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
 // Enhanced function to get campaign by ID with Discord invite links for client-side use
 export const getCampaignByIdWithMetadata = async (
   id: string,
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
 ): Promise<Campaign | null> => {
   console.log(
-    `getCampaignByIdWithMetadata called for campaign ${id}, forceRefresh: ${forceRefresh}`
+    `getCampaignByIdWithMetadata called for campaign ${id}, forceRefresh: ${forceRefresh}`,
   )
 
   // First get the basic campaign data
@@ -638,7 +689,10 @@ export const getCampaignByIdWithMetadata = async (
             return { ...task, telegramInviteLink: meta.telegramInviteLink }
           }
 
-          if (task.type === 'HUMANITY_VERIFICATION' && meta.metadata?.humanityPreset) {
+          if (
+            task.type === 'HUMANITY_VERIFICATION' &&
+            meta.metadata?.humanityPreset
+          ) {
             return {
               ...task,
               metadata: {
@@ -678,7 +732,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
   console.log('🚀 === createAndActivateCampaign FUNCTION CALLED ===')
   console.log(
     '📋 Campaign data received:',
-    JSON.stringify(campaignData, null, 2)
+    JSON.stringify(campaignData, null, 2),
   )
 
   if (!contract) throw new Error('Contract not initialized')
@@ -711,7 +765,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     const tx = await contractWithSigner.createCampaign(
       campaignData.title,
       actualStartTime,
-      actualEndTime
+      actualEndTime,
     )
     const receipt = await tx.wait()
 
@@ -731,7 +785,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     // 2. Add Tasks
     console.log(
       '🔄 Processing tasks in createAndActivateCampaign:',
-      campaignData.tasks.length
+      campaignData.tasks.length,
     )
     for (const task of campaignData.tasks) {
       console.log('🔧 Processing task in createAndActivateCampaign:', {
@@ -748,7 +802,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       let verificationDataToStore = task.verificationData || ''
 
       const verificationDataBytes = ethers.encodeBytes32String(
-        verificationDataToStore
+        verificationDataToStore,
       )
 
       const taskTx = await contractWithSigner.addTaskToCampaign(
@@ -756,7 +810,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
         taskType,
         task.description,
         verificationDataBytes,
-        false
+        false,
       )
       await taskTx.wait()
 
@@ -766,7 +820,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
           const taskIndex = campaignData.tasks.indexOf(task)
           console.log(
             '🎮 Storing Discord metadata for task in createAndActivateCampaign',
-            taskIndex
+            taskIndex,
           )
           await fetch('/api/campaign-task-metadata', {
             method: 'POST',
@@ -782,7 +836,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
             }),
           })
           console.log(
-            '✅ Discord metadata stored successfully in createAndActivateCampaign'
+            '✅ Discord metadata stored successfully in createAndActivateCampaign',
           )
         } catch (e) {
           console.warn('Failed to store Discord invite link in database:', e)
@@ -795,7 +849,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
           const taskIndex = campaignData.tasks.indexOf(task)
           console.log(
             '💰 Storing payment metadata for task in createAndActivateCampaign',
-            taskIndex
+            taskIndex,
           )
           await fetch('/api/campaign-task-metadata', {
             method: 'POST',
@@ -819,7 +873,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
             }),
           })
           console.log(
-            '✅ Payment metadata stored successfully in createAndActivateCampaign'
+            '✅ Payment metadata stored successfully in createAndActivateCampaign',
           )
         } catch (e) {
           console.warn('Failed to store payment metadata in database:', e)
@@ -834,7 +888,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
           const taskIndex = campaignData.tasks.indexOf(task)
           console.log(
             '📱 Storing Telegram metadata for task in createAndActivateCampaign',
-            taskIndex
+            taskIndex,
           )
 
           await fetch('/api/campaign-task-metadata', {
@@ -852,12 +906,12 @@ export const createAndActivateCampaign = async (campaignData: any) => {
           })
 
           console.log(
-            '📤 Sending Telegram metadata request in createAndActivateCampaign:'
+            '📤 Sending Telegram metadata request in createAndActivateCampaign:',
           )
         } catch (e) {
           console.warn(
             '❌ Failed to store Telegram metadata in database in createAndActivateCampaign:',
-            e
+            e,
           )
         }
       } else if (task.type === 'JOIN_TELEGRAM') {
@@ -866,7 +920,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
           {
             verificationData: task.verificationData,
             telegramInviteLink: task.telegramInviteLink,
-          }
+          },
         )
       }
 
@@ -875,7 +929,10 @@ export const createAndActivateCampaign = async (campaignData: any) => {
         try {
           const taskIndex = campaignData.tasks.indexOf(task)
           const rawPreset = (task as any).humanityPreset
-          const presetToStore = Array.isArray(rawPreset) && rawPreset.length > 0 ? rawPreset : [rawPreset ?? 'is_human']
+          const presetToStore =
+            Array.isArray(rawPreset) && rawPreset.length > 0
+              ? rawPreset
+              : [rawPreset ?? 'is_human']
           await fetch('/api/campaign-task-metadata', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -889,7 +946,9 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               },
             }),
           })
-          console.log(`✅ Humanity presets ${JSON.stringify(presetToStore)} stored for task index ${taskIndex} (campaign ${Number(campaignId)})`)
+          console.log(
+            `✅ Humanity presets ${JSON.stringify(presetToStore)} stored for task index ${taskIndex} (campaign ${Number(campaignId)})`,
+          )
         } catch (e) {
           console.warn('Failed to store humanity preset in database:', e)
         }
@@ -920,13 +979,28 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     }
 
     if (rewardType !== 2) {
-      const rewardTx = await contractWithSigner.setCampaignReward(
-        campaignId,
-        rewardType,
-        tokenAddress,
-        rewardAmount
-      )
-      await rewardTx.wait()
+      try {
+        const rewardTx = await contractWithSigner.setCampaignReward(
+          campaignId,
+          rewardType,
+          tokenAddress,
+          rewardAmount,
+        )
+        await rewardTx.wait()
+      } catch (error: any) {
+        if (
+          error.message &&
+          (error.message.includes('Token address has no code') ||
+            error.message.includes('Invalid token address') ||
+            error.message.includes('InvalidTokenAddress'))
+        ) {
+          throw new Error(
+            'Token address has no code or is invalid. Please check the contract address.',
+          )
+        } else {
+          throw error
+        }
+      }
     }
 
     // 4. If the start time is in the future, the campaign will be in Draft status and can be opened later
@@ -945,9 +1019,12 @@ export const createAndActivateCampaign = async (campaignData: any) => {
         // Determine reward name for storage
         let rewardNameToStore = ''
         if (campaignData.reward.type === 'None') {
-          rewardNameToStore = campaignData.reward.name || 'A special off-chain reward'
+          rewardNameToStore =
+            campaignData.reward.name || 'A special off-chain reward'
         } else if (campaignData.reward.type === 'ERC20') {
-          rewardNameToStore = campaignData.reward.name || `${campaignData.reward.amount} ERC20 Tokens`
+          rewardNameToStore =
+            campaignData.reward.name ||
+            `${campaignData.reward.amount} ERC20 Tokens`
         } else if (campaignData.reward.type === 'ERC721') {
           rewardNameToStore = campaignData.reward.name || 'NFT Reward'
         }
@@ -966,14 +1043,14 @@ export const createAndActivateCampaign = async (campaignData: any) => {
               rewardType: campaignData.reward.type,
               rewardName: rewardNameToStore,
             }),
-          }
+          },
         )
 
         if (imageResponse.ok) {
           console.log('✅ Campaign metadata saved to database')
         } else {
           console.warn(
-            '⚠️ Failed to save campaign metadata, but campaign created successfully'
+            '⚠️ Failed to save campaign metadata, but campaign created successfully',
           )
         }
       } catch (metadataError) {
@@ -986,8 +1063,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       actualStartTime <= now + 60
         ? 'Your campaign has been created and is now active!'
         : `Your campaign has been created and will become active on ${new Date(
-          actualStartTime * 1000
-        ).toLocaleString()}.`
+            actualStartTime * 1000,
+          ).toLocaleString()}.`
 
     toast({
       title: 'Success!',
@@ -1016,7 +1093,7 @@ export const createCampaign = async (campaignData: any) => {
   console.log('🚀 === createCampaign FUNCTION CALLED ===')
   console.log(
     '📋 Campaign data received:',
-    JSON.stringify(campaignData, null, 2)
+    JSON.stringify(campaignData, null, 2),
   )
 
   if (!contract) throw new Error('Contract not initialized')
@@ -1044,7 +1121,7 @@ export const createCampaign = async (campaignData: any) => {
     const tx = await contractWithSigner.createCampaign(
       campaignData.title,
       userStartTime,
-      userEndTime
+      userEndTime,
     )
     const receipt = await tx.wait()
 
@@ -1078,7 +1155,7 @@ export const createCampaign = async (campaignData: any) => {
       let verificationDataToStore = task.verificationData || ''
 
       const verificationDataBytes = ethers.encodeBytes32String(
-        verificationDataToStore
+        verificationDataToStore,
       )
 
       const taskTx = await contractWithSigner.addTaskToCampaign(
@@ -1086,7 +1163,7 @@ export const createCampaign = async (campaignData: any) => {
         taskType,
         task.description,
         verificationDataBytes,
-        false
+        false,
       )
       await taskTx.wait()
 
@@ -1149,18 +1226,18 @@ export const createCampaign = async (campaignData: any) => {
       // Store Telegram metadata in database for this campaign
       console.log(
         '🔍 Checking Telegram task conditions for task type:',
-        task.type
+        task.type,
       )
       console.log(
         '🔍 Task type strict equality check:',
-        task.type === 'JOIN_TELEGRAM'
+        task.type === 'JOIN_TELEGRAM',
       )
       console.log('🔍 Verification data exists:', !!task.verificationData)
       console.log('🔍 Telegram invite link exists:', !!task.telegramInviteLink)
       console.log(
         '🔍 Combined condition result:',
         task.type === 'JOIN_TELEGRAM' &&
-        (task.verificationData || task.telegramInviteLink)
+          (task.verificationData || task.telegramInviteLink),
       )
 
       if (
@@ -1185,11 +1262,11 @@ export const createCampaign = async (campaignData: any) => {
           console.log('📤 Sending Telegram metadata request:', requestBody)
           console.log(
             '🌐 Current environment:',
-            typeof window !== 'undefined' ? 'browser' : 'server'
+            typeof window !== 'undefined' ? 'browser' : 'server',
           )
           console.log(
             '🌐 Base URL will be:',
-            typeof window !== 'undefined' ? window.location.origin : 'relative'
+            typeof window !== 'undefined' ? window.location.origin : 'relative',
           )
 
           const apiUrl =
@@ -1216,7 +1293,7 @@ export const createCampaign = async (campaignData: any) => {
 
           console.log(
             '📥 Telegram metadata API response status:',
-            response.status
+            response.status,
           )
           const responseData = await response.json()
           console.log('📥 Telegram metadata API response data:', responseData)
@@ -1226,7 +1303,7 @@ export const createCampaign = async (campaignData: any) => {
           } else {
             console.error(
               '❌ Failed to store Telegram metadata - API error:',
-              responseData
+              responseData,
             )
           }
         } catch (e) {
@@ -1244,7 +1321,10 @@ export const createCampaign = async (campaignData: any) => {
         try {
           const taskIndex = campaignData.tasks.indexOf(task)
           const rawPreset = (task as any).humanityPreset
-          const presetToStore = Array.isArray(rawPreset) && rawPreset.length > 0 ? rawPreset : [rawPreset ?? 'is_human']
+          const presetToStore =
+            Array.isArray(rawPreset) && rawPreset.length > 0
+              ? rawPreset
+              : [rawPreset ?? 'is_human']
           await fetch('/api/campaign-task-metadata', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1258,7 +1338,9 @@ export const createCampaign = async (campaignData: any) => {
               },
             }),
           })
-          console.log(`✅ Humanity presets ${JSON.stringify(presetToStore)} stored for task index ${taskIndex} (campaign ${Number(campaignId)})`)
+          console.log(
+            `✅ Humanity presets ${JSON.stringify(presetToStore)} stored for task index ${taskIndex} (campaign ${Number(campaignId)})`,
+          )
         } catch (e) {
           console.warn('Failed to store humanity preset in database:', e)
         }
@@ -1289,13 +1371,28 @@ export const createCampaign = async (campaignData: any) => {
     }
 
     if (rewardType !== 2) {
-      const rewardTx = await contractWithSigner.setCampaignReward(
-        campaignId,
-        rewardType,
-        tokenAddress,
-        rewardAmount
-      )
-      await rewardTx.wait()
+      try {
+        const rewardTx = await contractWithSigner.setCampaignReward(
+          campaignId,
+          rewardType,
+          tokenAddress,
+          rewardAmount,
+        )
+        await rewardTx.wait()
+      } catch (error: any) {
+        if (
+          error.message &&
+          (error.message.includes('Token address has no code') ||
+            error.message.includes('Invalid token address') ||
+            error.message.includes('InvalidTokenAddress'))
+        ) {
+          throw new Error(
+            'Token address has no code or is invalid. Please check the contract address.',
+          )
+        } else {
+          throw error
+        }
+      }
     }
 
     console.log('🎯 Campaign creation successful! Campaign ID:', campaignId)
@@ -1313,9 +1410,12 @@ export const createCampaign = async (campaignData: any) => {
         // Determine reward name for storage
         let rewardNameToStore = ''
         if (campaignData.reward.type === 'None') {
-          rewardNameToStore = campaignData.reward.name || 'A special off-chain reward'
+          rewardNameToStore =
+            campaignData.reward.name || 'A special off-chain reward'
         } else if (campaignData.reward.type === 'ERC20') {
-          rewardNameToStore = campaignData.reward.name || `${campaignData.reward.amount} ERC20 Tokens`
+          rewardNameToStore =
+            campaignData.reward.name ||
+            `${campaignData.reward.amount} ERC20 Tokens`
         } else if (campaignData.reward.type === 'ERC721') {
           rewardNameToStore = campaignData.reward.name || 'NFT Reward'
         }
@@ -1334,14 +1434,14 @@ export const createCampaign = async (campaignData: any) => {
               rewardType: campaignData.reward.type,
               rewardName: rewardNameToStore,
             }),
-          }
+          },
         )
 
         if (imageResponse.ok) {
           console.log('✅ Campaign metadata saved to database')
         } else {
           console.warn(
-            '⚠️ Failed to save campaign metadata, but campaign created successfully'
+            '⚠️ Failed to save campaign metadata, but campaign created successfully',
           )
         }
       } catch (metadataError) {
@@ -1375,19 +1475,27 @@ export const createCampaign = async (campaignData: any) => {
 
 export const hasParticipated = async (
   campaignId: string,
-  participantAddress: string
+  participantAddress: string,
 ): Promise<boolean> => {
   const contractToUse = contract ?? readOnlyContract
   if (!contractToUse || !participantAddress) return false
   try {
     // Convert campaignId from string to number for smart contract calls
     const campaignIdNumber = parseInt(campaignId, 10)
-    return await contractToUse.hasParticipated(campaignIdNumber, participantAddress)
+    return await contractToUse.hasParticipated(
+      campaignIdNumber,
+      participantAddress,
+    )
   } catch (error: any) {
     if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-      console.warn(`Campaign ${campaignId} or participation data not found/reverted.`)
+      console.warn(
+        `Campaign ${campaignId} or participation data not found/reverted.`,
+      )
     } else {
-      console.warn(`Error checking participation for ${participantAddress} in campaign ${campaignId}:`, error?.message || 'Unknown error')
+      console.warn(
+        `Error checking participation for ${participantAddress} in campaign ${campaignId}:`,
+        error?.message || 'Unknown error',
+      )
     }
     // Don't show a toast for this, as it might be called frequently
     return false
@@ -1431,7 +1539,7 @@ export const becomeHost = async () => {
 
 export const openCampaign = async (
   campaignId: string,
-  toast: any
+  toast: any,
 ): Promise<string> => {
   if (!contract) throw new Error('Contract not initialized')
   const signer = await getSigner()
@@ -1485,7 +1593,7 @@ export const openCampaign = async (
       if (openError.reason) {
         if (
           openError.reason.includes(
-            'Web3Campaigns__CampaignStartTimeNotYetStrated'
+            'Web3Campaigns__CampaignStartTimeNotYetStrated',
           )
         ) {
           errorMessage = 'Campaign start time has not been reached yet.'
@@ -1524,8 +1632,9 @@ export const openCampaign = async (
     toast({
       variant: 'destructive',
       title: 'Transaction Failed',
-      description: `Failed to open campaign. ${error.message || 'An unknown error occurred.'
-        }`,
+      description: `Failed to open campaign. ${
+        error.message || 'An unknown error occurred.'
+      }`,
     })
     throw error
   }
@@ -1567,7 +1676,8 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
   try {
     if (provider) {
       const network = await provider.getNetwork()
-      if (network.chainId !== BigInt(11155111)) { // Sepolia chain ID
+      if (network.chainId !== BigInt(11155111)) {
+        // Sepolia chain ID
         if (window.ethereum) {
           await switchOrAddSepoliaNetwork(window.ethereum as any)
           // Refresh signer/contract after network switch
@@ -1604,22 +1714,25 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     // Check if campaign is in Open status (should be 1)
     if (Number(campaignData.status) !== 1) {
       throw new Error(
-        `Campaign is not open. Current status: ${campaignData.status} (should be 1 for Open)`
+        `Campaign is not open. Current status: ${campaignData.status} (should be 1 for Open)`,
       )
     }
 
     // Check if task index is valid
     if (taskIndex >= campaignData.tasks.length) {
       throw new Error(
-        `Invalid task index ${taskIndex}. Campaign has ${campaignData.tasks.length} tasks.`
+        `Invalid task index ${taskIndex}. Campaign has ${campaignData.tasks.length} tasks.`,
       )
     }
 
     // Check if the user is the campaign host — the contract rejects hosts
     // completing their own tasks (Web3Campaigns__PosterCannotAcceptOwnTask)
-    if (campaignData.host && userAddress.toLowerCase() === campaignData.host.toLowerCase()) {
+    if (
+      campaignData.host &&
+      userAddress.toLowerCase() === campaignData.host.toLowerCase()
+    ) {
       throw new Error(
-        'Campaign hosts cannot complete tasks on their own campaign. Please use a different wallet.'
+        'Campaign hosts cannot complete tasks on their own campaign. Please use a different wallet.',
       )
     }
 
@@ -1635,14 +1748,24 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       }
     } catch (checkErr: any) {
       // If it's our own error, re-throw. Otherwise ignore and let the contract call handle it.
-      if (checkErr.message === 'You have already completed this task.') throw checkErr
-      console.warn('Pre-check hasCompletedTask failed, proceeding anyway:', checkErr?.message)
+      if (checkErr.message === 'You have already completed this task.')
+        throw checkErr
+      console.warn(
+        'Pre-check hasCompletedTask failed, proceeding anyway:',
+        checkErr?.message,
+      )
     }
 
     // The smart contract completeTask function only takes campaignId and taskIndex
     // It automatically uses msg.sender (the connected wallet) as the participant
-    console.log('Calling smart contract completeTask...', { campaignIdNumber, taskIndex })
-    const tx = await contractWithSigner.completeTask(campaignIdNumber, taskIndex)
+    console.log('Calling smart contract completeTask...', {
+      campaignIdNumber,
+      taskIndex,
+    })
+    const tx = await contractWithSigner.completeTask(
+      campaignIdNumber,
+      taskIndex,
+    )
 
     console.log('Transaction sent:', tx.hash)
     await tx.wait()
@@ -1650,11 +1773,13 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     console.log('Task completed successfully!')
   } catch (error: any) {
     if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-      console.warn(`Campaign ${campaignId} not found or reverted when attempting task completion.`)
+      console.warn(
+        `Campaign ${campaignId} not found or reverted when attempting task completion.`,
+      )
     } else {
       console.warn(
         `Error completing task ${taskIndex} for campaign ${campaignId}:`,
-        error?.message || 'Unknown error'
+        error?.message || 'Unknown error',
       )
     }
 
@@ -1669,7 +1794,8 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       } else if (error.reason.includes('TaskNotFound')) {
         description = 'Task not found in this campaign.'
       } else if (error.reason.includes('PosterCannotAcceptOwnTask')) {
-        description = 'Campaign hosts cannot complete tasks on their own campaign.'
+        description =
+          'Campaign hosts cannot complete tasks on their own campaign.'
       } else if (error.reason.includes('Too many rapid actions')) {
         description = 'Please wait 30 seconds between actions.'
       } else if (
@@ -1681,12 +1807,16 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       } else {
         description += ` Reason: ${error.reason}`
       }
-    } else if (error.message && !error.message.includes('missing revert data')) {
+    } else if (
+      error.message &&
+      !error.message.includes('missing revert data')
+    ) {
       // Use the message only if it's our own pre-check error, not the raw ethers CALL_EXCEPTION
       description = error.message
     } else {
       // Custom error with no reason (null revert data) — try to give a useful message
-      description = 'Transaction rejected by the smart contract. Possible reasons: ' +
+      description =
+        'Transaction rejected by the smart contract. Possible reasons: ' +
         'campaign host cannot complete own tasks, task already completed, or campaign is not active.'
     }
 
@@ -1699,7 +1829,7 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
 export const getUserTaskCompletionStatus = async (
   campaignId: string,
   userAddress: string,
-  tasks: any[]
+  tasks: any[],
 ): Promise<{ [taskId: string]: boolean }> => {
   // Try to use the wallet contract first, then fallback to read-only
   let contractToUse = contract ?? readOnlyContract
@@ -1744,7 +1874,7 @@ export const getUserTaskCompletionStatus = async (
       contractToUse = new ethers.Contract(
         config.campaignFactoryAddress!,
         Web3Campaigns.abi,
-        providerInstance
+        providerInstance,
       )
     }
 
@@ -1756,17 +1886,17 @@ export const getUserTaskCompletionStatus = async (
     // Query ParticipantTaskCompleted events for this campaign and user
     const filter = contractToUse.filters.ParticipantTaskCompleted(
       campaignId,
-      userAddress
+      userAddress,
     )
 
     const events = await contractToUse.queryFilter(
       filter,
       startBlock,
-      latestBlock
+      latestBlock,
     )
 
     console.log(
-      `Found ${events.length} ParticipantTaskCompleted events for user ${userAddress} in campaign ${campaignId}`
+      `Found ${events.length} ParticipantTaskCompleted events for user ${userAddress} in campaign ${campaignId}`,
     )
 
     // Mark tasks as completed based on events
@@ -1783,12 +1913,12 @@ export const getUserTaskCompletionStatus = async (
           // task.id is the index as string, so we need to match correctly
           completionStatus[task.id] = true
           console.log(
-            `Marked task ${task.id} (index ${taskIndexNumber}) as completed for user ${userAddress}`
+            `Marked task ${task.id} (index ${taskIndexNumber}) as completed for user ${userAddress}`,
           )
         }
       } else {
         console.warn(
-          `Invalid task index ${taskIndexNumber} for campaign ${campaignId}`
+          `Invalid task index ${taskIndexNumber} for campaign ${campaignId}`,
         )
       }
     })
@@ -1809,9 +1939,14 @@ export const getUserTaskCompletionStatus = async (
     return completionStatus
   } catch (error: any) {
     if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-      console.warn(`Campaign ${campaignId} task completion data not found/reverted for ${userAddress}.`)
+      console.warn(
+        `Campaign ${campaignId} task completion data not found/reverted for ${userAddress}.`,
+      )
     } else {
-      console.warn('Error checking user task completion status:', error?.message || 'Unknown error')
+      console.warn(
+        'Error checking user task completion status:',
+        error?.message || 'Unknown error',
+      )
     }
     console.warn('Error details:', {
       campaignId,
@@ -1832,11 +1967,11 @@ export const getUserTaskCompletionStatus = async (
 
 // Function to get basic participant addresses for a campaign
 export const getCampaignParticipantAddresses = async (
-  campaignId: string
+  campaignId: string,
 ): Promise<string[]> => {
   console.log(
     'getCampaignParticipantAddresses called with campaignId:',
-    campaignId
+    campaignId,
   )
 
   // Try to use the wallet contract first, then fallback to read-only
@@ -1844,7 +1979,7 @@ export const getCampaignParticipantAddresses = async (
 
   if (!contractToUse) {
     console.log(
-      'No contract available, trying to initialize read-only contract...'
+      'No contract available, trying to initialize read-only contract...',
     )
     initializeReadOnlyProvider()
     contractToUse = readOnlyContract
@@ -1875,7 +2010,7 @@ export const getCampaignParticipantAddresses = async (
       contractToUse = new ethers.Contract(
         config.campaignFactoryAddress!,
         Web3Campaigns.abi,
-        providerInstance
+        providerInstance,
       )
     }
 
@@ -1893,7 +2028,7 @@ export const getCampaignParticipantAddresses = async (
     const events = await contractToUse.queryFilter(
       filter,
       startBlock,
-      latestBlock
+      latestBlock,
     )
 
     console.log('Raw events found:', events.length, events)
@@ -1919,16 +2054,21 @@ export const getCampaignParticipantAddresses = async (
     return participantAddresses
   } catch (error: any) {
     if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-      console.warn(`Campaign ${campaignId} participants not found/reverted (probably uncreated).`)
+      console.warn(
+        `Campaign ${campaignId} participants not found/reverted (probably uncreated).`,
+      )
     } else {
-      console.warn('Error fetching participant addresses:', error?.message || 'Unknown error')
+      console.warn(
+        'Error fetching participant addresses:',
+        error?.message || 'Unknown error',
+      )
     }
     return []
   }
 }
 
 export const getCampaignParticipants = async (
-  campaign: Campaign
+  campaign: Campaign,
 ): Promise<ParticipantData[]> => {
   // Try to use the wallet contract first, then fallback to read-only
   let contractToUse = contract ?? readOnlyContract
@@ -1959,7 +2099,7 @@ export const getCampaignParticipants = async (
       contractToUse = new ethers.Contract(
         config.campaignFactoryAddress!,
         Web3Campaigns.abi,
-        providerInstance
+        providerInstance,
       )
     }
 
@@ -1979,7 +2119,7 @@ export const getCampaignParticipants = async (
       const chunkEvents = await contractToUse.queryFilter(
         filter,
         fromBlock,
-        toBlock
+        toBlock,
       )
       events.push(...chunkEvents)
     }
@@ -1999,7 +2139,7 @@ export const getCampaignParticipants = async (
       participantAddresses.map(async (address) => {
         const hasClaimed = await contractToUse!.hasClaimedReward(
           campaign.id,
-          address
+          address,
         )
         const completedTasksCount =
           participantTaskCompletion.get(address)?.size || 0
@@ -2008,15 +2148,20 @@ export const getCampaignParticipants = async (
           tasksCompleted: completedTasksCount,
           claimed: hasClaimed,
         }
-      })
+      }),
     )
 
     return participantData
   } catch (error: any) {
     if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-      console.warn(`Campaign ${campaign.id} participant data not found/reverted.`)
+      console.warn(
+        `Campaign ${campaign.id} participant data not found/reverted.`,
+      )
     } else {
-      console.warn('Error fetching participants:', error?.message || 'Unknown error')
+      console.warn(
+        'Error fetching participants:',
+        error?.message || 'Unknown error',
+      )
     }
     toast({
       variant: 'destructive',

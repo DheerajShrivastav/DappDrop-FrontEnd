@@ -88,6 +88,8 @@ import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 // Ethereum address regex: 0x followed by 40 hex characters
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
 
+import { isAddress } from 'viem'
+
 const taskSchema = z
   .object({
     type: z.enum([
@@ -214,7 +216,10 @@ const campaignSchema = z.object({
       type: z.literal('ERC20'),
       tokenAddress: z
         .string()
-        .regex(/^0x[a-fA-F0-9]{40}$/, 'Please enter a valid Ethereum address.'),
+        .refine(
+          (val) => isAddress(val),
+          'Please enter a valid Ethereum address.',
+        ),
       amount: z.string().min(1, 'Amount is required for ERC20 tokens.'),
       name: z.string().optional(),
     }),
@@ -222,7 +227,10 @@ const campaignSchema = z.object({
       type: z.literal('ERC721'),
       tokenAddress: z
         .string()
-        .regex(/^0x[a-fA-F0-9]{40}$/, 'Please enter a valid Ethereum address.'),
+        .refine(
+          (val) => isAddress(val),
+          'Please enter a valid Ethereum address.',
+        ),
       name: z.string().optional(),
     }),
     z.object({
@@ -247,7 +255,8 @@ export default function CreateCampaignPage() {
   const [step, setStep] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generationStage, setGenerationStage] = useState<GenerationStage | null>(null)
+  const [generationStage, setGenerationStage] =
+    useState<GenerationStage | null>(null)
   const [generationError, setGenerationError] = useState<{
     message: string
     retryable: boolean
@@ -455,7 +464,8 @@ export default function CreateCampaignPage() {
       toast({
         variant: 'destructive',
         title: 'Description Too Short',
-        description: 'Please provide at least 20 characters so the AI has enough context to work with.',
+        description:
+          'Please provide at least 20 characters so the AI has enough context to work with.',
       })
       return
     }
@@ -483,7 +493,8 @@ export default function CreateCampaignPage() {
       })
       toast({
         title: '✨ Campaign Drafted!',
-        description: 'AI has generated your campaign. Review and customize the details below.',
+        description:
+          'AI has generated your campaign. Review and customize the details below.',
       })
       setStep(1)
     } catch (e: any) {
@@ -659,13 +670,17 @@ export default function CreateCampaignPage() {
                     />
                     <div className="flex items-center justify-between mt-2">
                       <p className="text-xs text-muted-foreground">
-                        Our AI will draft a campaign title, description, and tasks
-                        for you.
+                        Our AI will draft a campaign title, description, and
+                        tasks for you.
                       </p>
-                      <p className={cn(
-                        'text-xs tabular-nums',
-                        aiPrompt.trim().length < 20 ? 'text-muted-foreground' : 'text-green-500',
-                      )}>
+                      <p
+                        className={cn(
+                          'text-xs tabular-nums',
+                          aiPrompt.trim().length < 20
+                            ? 'text-muted-foreground'
+                            : 'text-green-500',
+                        )}
+                      >
                         {aiPrompt.trim().length}/20 min
                       </p>
                     </div>
@@ -679,44 +694,70 @@ export default function CreateCampaignPage() {
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium">
-                              {generationStage === 'planning' && '🧠 Analyzing your project...'}
-                              {generationStage === 'generating' && '✍️ Writing campaign content...'}
-                              {generationStage === 'validating' && '🔍 Reviewing quality...'}
+                              {generationStage === 'planning' &&
+                                '🧠 Analyzing your project...'}
+                              {generationStage === 'generating' &&
+                                '✍️ Writing campaign content...'}
+                              {generationStage === 'validating' &&
+                                '🔍 Reviewing quality...'}
                             </p>
                             <p className="text-xs text-muted-foreground mt-0.5">
-                              {generationStage === 'planning' && 'Deciding campaign strategy, target audience, and task types'}
-                              {generationStage === 'generating' && 'Crafting title, description, and tasks based on the plan'}
-                              {generationStage === 'validating' && 'Checking for quality, accuracy, and consistency'}
+                              {generationStage === 'planning' &&
+                                'Deciding campaign strategy, target audience, and task types'}
+                              {generationStage === 'generating' &&
+                                'Crafting title, description, and tasks based on the plan'}
+                              {generationStage === 'validating' &&
+                                'Checking for quality, accuracy, and consistency'}
                             </p>
                           </div>
                         </div>
                         {/* Stage dots */}
                         <div className="flex items-center gap-2 mt-3">
-                          {(['planning', 'generating', 'validating'] as const).map((stage, idx) => (
+                          {(
+                            ['planning', 'generating', 'validating'] as const
+                          ).map((stage, idx) => (
                             <React.Fragment key={stage}>
-                              <div className={cn(
-                                'h-2 w-2 rounded-full transition-colors duration-300',
-                                generationStage === stage
-                                  ? 'bg-primary animate-pulse'
-                                  : (['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
-                                    ? 'bg-primary'
-                                    : 'bg-muted'),
-                              )} />
+                              <div
+                                className={cn(
+                                  'h-2 w-2 rounded-full transition-colors duration-300',
+                                  generationStage === stage
+                                    ? 'bg-primary animate-pulse'
+                                    : [
+                                          'planning',
+                                          'generating',
+                                          'validating',
+                                        ].indexOf(generationStage!) > idx
+                                      ? 'bg-primary'
+                                      : 'bg-muted',
+                                )}
+                              />
                               {idx < 2 && (
-                                <div className={cn(
-                                  'h-0.5 flex-1 rounded transition-colors duration-300',
-                                  ['planning', 'generating', 'validating'].indexOf(generationStage!) > idx
-                                    ? 'bg-primary'
-                                    : 'bg-muted',
-                                )} />
+                                <div
+                                  className={cn(
+                                    'h-0.5 flex-1 rounded transition-colors duration-300',
+                                    [
+                                      'planning',
+                                      'generating',
+                                      'validating',
+                                    ].indexOf(generationStage!) > idx
+                                      ? 'bg-primary'
+                                      : 'bg-muted',
+                                  )}
+                                />
                               )}
                             </React.Fragment>
                           ))}
                         </div>
                         <div className="flex justify-between mt-1">
-                          <span className="text-[10px] text-muted-foreground">Plan</span>
-                          <span className="text-[10px] text-muted-foreground">Generate</span>
-                          <span className="text-[10px] text-muted-foreground">Validate</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            Plan
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            Generate
+                          </span>
+                          <span className="text-[10px] text-muted-foreground">
+                            Validate
+                          </span>
                         </div>
                       </div>
                     )}
@@ -726,9 +767,17 @@ export default function CreateCampaignPage() {
                       <div className="mt-4 p-4 rounded-lg border border-destructive/50 bg-destructive/5 animate-in fade-in-50">
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5">
-                            {generationError.category === 'rate_limit' && <Clock className="h-5 w-5 text-amber-500" />}
-                            {generationError.category === 'network' && <Wifi className="h-5 w-5 text-destructive" />}
-                            {!['rate_limit', 'network'].includes(generationError.category) && <AlertCircle className="h-5 w-5 text-destructive" />}
+                            {generationError.category === 'rate_limit' && (
+                              <Clock className="h-5 w-5 text-amber-500" />
+                            )}
+                            {generationError.category === 'network' && (
+                              <Wifi className="h-5 w-5 text-destructive" />
+                            )}
+                            {!['rate_limit', 'network'].includes(
+                              generationError.category,
+                            ) && (
+                              <AlertCircle className="h-5 w-5 text-destructive" />
+                            )}
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium text-destructive">
@@ -1380,7 +1429,8 @@ export default function CreateCampaignPage() {
                               BETA
                             </span>
                             <p className="text-sm text-amber-800">
-                              On-chain actions (x402 Payment Protocol) are currently in beta. Features may change.
+                              On-chain actions (x402 Payment Protocol) are
+                              currently in beta. Features may change.
                             </p>
                           </div>
                           <FormField
@@ -1665,7 +1715,9 @@ export default function CreateCampaignPage() {
                           <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3 dark:bg-purple-950/20 dark:border-purple-800/40">
                             <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
                               <ShieldCheck className="h-5 w-5" />
-                              <h4 className="font-semibold">Verification Presets</h4>
+                              <h4 className="font-semibold">
+                                Verification Presets
+                              </h4>
                             </div>
                             <p className="text-sm text-purple-700 dark:text-purple-400">
                               Select one or more Humanity Protocol checks users
@@ -1675,14 +1727,22 @@ export default function CreateCampaignPage() {
                               control={form.control}
                               name={`tasks.${index}.humanityPreset`}
                               render={({ field }) => {
-                                const selected: string[] = Array.isArray(field.value) ? field.value : field.value ? [field.value] : ['is_human']
+                                const selected: string[] = Array.isArray(
+                                  field.value,
+                                )
+                                  ? field.value
+                                  : field.value
+                                    ? [field.value]
+                                    : ['is_human']
 
                                 const toggle = (preset: string) => {
                                   const next = selected.includes(preset)
                                     ? selected.filter((p) => p !== preset)
                                     : [...selected, preset]
                                   // Ensure at least one preset is always selected
-                                  field.onChange(next.length > 0 ? next : ['is_human'])
+                                  field.onChange(
+                                    next.length > 0 ? next : ['is_human'],
+                                  )
                                 }
 
                                 // Group presets by category
@@ -1694,7 +1754,8 @@ export default function CreateCampaignPage() {
                                 return (
                                   <FormItem className="space-y-3">
                                     <FormLabel>
-                                      Required Checks ({selected.length} selected)
+                                      Required Checks ({selected.length}{' '}
+                                      selected)
                                     </FormLabel>
                                     {categories.map((cat) => {
                                       const presets = HUMANITY_PRESETS.filter(
@@ -1702,29 +1763,38 @@ export default function CreateCampaignPage() {
                                       )
                                       if (presets.length === 0) return null
                                       return (
-                                        <div key={cat.key} className="space-y-1.5">
+                                        <div
+                                          key={cat.key}
+                                          className="space-y-1.5"
+                                        >
                                           <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
                                             {cat.label}
                                           </p>
                                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                             {presets.map((p) => {
-                                              const isChecked = selected.includes(p.preset)
+                                              const isChecked =
+                                                selected.includes(p.preset)
                                               return (
                                                 <label
                                                   key={p.preset}
-                                                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isChecked
+                                                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                                                    isChecked
                                                       ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 ring-1 ring-purple-500/30'
                                                       : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/10'
-                                                    }`}
+                                                  }`}
                                                 >
                                                   <Checkbox
                                                     checked={isChecked}
-                                                    onCheckedChange={() => toggle(p.preset)}
+                                                    onCheckedChange={() =>
+                                                      toggle(p.preset)
+                                                    }
                                                     className="mt-0.5"
                                                   />
                                                   <div className="space-y-0.5 flex-1 min-w-0">
                                                     <div className="flex items-center gap-1.5">
-                                                      <span className="text-sm">{p.icon}</span>
+                                                      <span className="text-sm">
+                                                        {p.icon}
+                                                      </span>
                                                       <span className="text-sm font-medium truncate">
                                                         {p.label}
                                                       </span>
@@ -1741,7 +1811,8 @@ export default function CreateCampaignPage() {
                                       )
                                     })}
                                     <FormDescription>
-                                      Users must pass <strong>all</strong> selected checks to complete this task.
+                                      Users must pass <strong>all</strong>{' '}
+                                      selected checks to complete this task.
                                     </FormDescription>
                                     <FormMessage />
                                   </FormItem>
@@ -1890,8 +1961,8 @@ export default function CreateCampaignPage() {
                       <strong>Reward:</strong>{' '}
                       {form.getValues('reward.type') === 'ERC20'
                         ? `${form.getValues(
-                          'reward.amount',
-                        )} tokens from contract `
+                            'reward.amount',
+                          )} tokens from contract `
                         : form.getValues('reward.type') === 'ERC721'
                           ? `1 NFT from contract `
                           : `${(form.getValues('reward') as any).name}`}

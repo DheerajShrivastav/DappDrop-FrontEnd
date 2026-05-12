@@ -52,26 +52,26 @@ import { TaskList } from './_components/task-list'
 // Lazy-load heavy dialog components (only loaded when opened)
 const TaskVerificationForm = dynamic(
   () =>
-    import('@/components/task-verification-form').then(
-      (mod) => ({ default: mod.TaskVerificationForm })
-    ),
-  { ssr: false }
+    import('@/components/task-verification-form').then((mod) => ({
+      default: mod.TaskVerificationForm,
+    })),
+  { ssr: false },
 )
 
 const HumanityVerificationModal = dynamic(
   () =>
-    import('@/components/humanity-verification-modal').then(
-      (mod) => ({ default: mod.HumanityVerificationModal })
-    ),
-  { ssr: false }
+    import('@/components/humanity-verification-modal').then((mod) => ({
+      default: mod.HumanityVerificationModal,
+    })),
+  { ssr: false },
 )
 
 const CampaignAnalytics = dynamic(
   () =>
-    import('@/components/campaign-analytics').then(
-      (mod) => ({ default: mod.CampaignAnalytics })
-    ),
-  { ssr: false }
+    import('@/components/campaign-analytics').then((mod) => ({
+      default: mod.CampaignAnalytics,
+    })),
+  { ssr: false },
 )
 
 export default function CampaignDetailsPage() {
@@ -303,9 +303,13 @@ export default function CampaignDetailsPage() {
         setIsJoined(true)
       }
     } catch (error: any) {
-      const description = error.message.includes('not in active period')
-        ? 'This campaign is not currently active.'
-        : error.message || 'Failed to complete task.'
+      let description = error.message || 'Failed to complete task.'
+      if (error.message.includes('not in active period')) {
+        description = 'This campaign is not currently active.'
+      } else if (error.message.includes('Campaign participant limit reached')) {
+        description =
+          'The maximum participant limit for this campaign has been reached.'
+      }
       toast({ variant: 'destructive', title: 'Error', description })
     } finally {
       setUserTasks((prevTasks) =>
@@ -487,10 +491,10 @@ export default function CampaignDetailsPage() {
         storedWallet &&
         storedWallet.toLowerCase() !== address.toLowerCase()
       ) {
-        console.warn(
-          'Humanity verification wallet mismatch:',
-          { stored: storedWallet, current: address },
-        )
+        console.warn('Humanity verification wallet mismatch:', {
+          stored: storedWallet,
+          current: address,
+        })
         toast({
           variant: 'destructive',
           title: 'Wallet Mismatch',
@@ -518,7 +522,8 @@ export default function CampaignDetailsPage() {
                 setUserHumanityStatus(true)
                 toast({
                   title: 'Task Already Completed',
-                  description: 'This humanity verification task was already completed.',
+                  description:
+                    'This humanity verification task was already completed.',
                 })
                 return
               }
@@ -549,11 +554,21 @@ export default function CampaignDetailsPage() {
                   // was actually already completed (error.reason can be null for custom errors)
                   let taskAlreadyDone = false
                   try {
-                    const status = await getUserTaskCompletionStatus(campaignId, address, campaign.tasks)
+                    const status = await getUserTaskCompletionStatus(
+                      campaignId,
+                      address,
+                      campaign.tasks,
+                    )
                     taskAlreadyDone = status[taskContext.taskId] === true
-                  } catch { /* ignore re-check errors */ }
+                  } catch {
+                    /* ignore re-check errors */
+                  }
 
-                  if (taskAlreadyDone || errMsg.includes('already completed') || errMsg.includes('TaskAlreadyCompleted')) {
+                  if (
+                    taskAlreadyDone ||
+                    errMsg.includes('already completed') ||
+                    errMsg.includes('TaskAlreadyCompleted')
+                  ) {
                     setUserHumanityStatus(true)
                     setUserTasks((prevTasks) =>
                       prevTasks.map((task) =>
@@ -564,7 +579,8 @@ export default function CampaignDetailsPage() {
                     )
                     toast({
                       title: 'Task Already Completed',
-                      description: 'This task was already completed on the blockchain.',
+                      description:
+                        'This task was already completed on the blockchain.',
                     })
                   } else {
                     // Reset so the user can retry
@@ -573,7 +589,8 @@ export default function CampaignDetailsPage() {
                       variant: 'destructive',
                       title: 'Task Completion Failed',
                       description:
-                        errMsg || 'Verified but could not complete task on blockchain. Please try again.',
+                        errMsg ||
+                        'Verified but could not complete task on blockchain. Please try again.',
                     })
                   }
                 })
@@ -584,12 +601,12 @@ export default function CampaignDetailsPage() {
 
         // No task context — just mark identity as verified
         setUserHumanityStatus(true)
-
       } else {
         toast({
           variant: 'destructive',
           title: 'Verification Failed',
-          description: 'Humanity Protocol did not verify this wallet as human. Please ensure you have completed Palm verification.',
+          description:
+            'Humanity Protocol did not verify this wallet as human. Please ensure you have completed Palm verification.',
         })
       }
     } catch (e) {
@@ -622,7 +639,8 @@ export default function CampaignDetailsPage() {
           setUserHumanityStatus(true)
           toast({
             title: 'Task Already Completed',
-            description: 'This humanity verification task was already completed.',
+            description:
+              'This humanity verification task was already completed.',
           })
         } else {
           try {
@@ -644,16 +662,29 @@ export default function CampaignDetailsPage() {
                 'Humanity verification successful and task marked complete.',
             })
           } catch (err: any) {
-            console.warn('Error completing task on blockchain:', err?.message || err)
+            console.warn(
+              'Error completing task on blockchain:',
+              err?.message || err,
+            )
             const errMsg = err.message || ''
             // Re-check blockchain to see if task was actually completed
             let taskAlreadyDone = false
             try {
-              const status = await getUserTaskCompletionStatus(campaignId, address!, campaign.tasks)
+              const status = await getUserTaskCompletionStatus(
+                campaignId,
+                address!,
+                campaign.tasks,
+              )
               taskAlreadyDone = status[verifyingTaskId] === true
-            } catch { /* ignore re-check errors */ }
+            } catch {
+              /* ignore re-check errors */
+            }
 
-            if (taskAlreadyDone || errMsg.includes('already completed') || errMsg.includes('TaskAlreadyCompleted')) {
+            if (
+              taskAlreadyDone ||
+              errMsg.includes('already completed') ||
+              errMsg.includes('TaskAlreadyCompleted')
+            ) {
               setUserHumanityStatus(true)
               setUserTasks((prevTasks) =>
                 prevTasks.map((task) =>
@@ -664,7 +695,8 @@ export default function CampaignDetailsPage() {
               )
               toast({
                 title: 'Task Already Completed',
-                description: 'This task was already completed on the blockchain.',
+                description:
+                  'This task was already completed on the blockchain.',
               })
             } else {
               // Reset so user can retry
@@ -673,7 +705,8 @@ export default function CampaignDetailsPage() {
                 variant: 'destructive',
                 title: 'Task Completion Failed',
                 description:
-                  errMsg || 'Verified but could not complete task on blockchain. Please try again.',
+                  errMsg ||
+                  'Verified but could not complete task on blockchain. Please try again.',
               })
             }
           }
@@ -866,7 +899,8 @@ export default function CampaignDetailsPage() {
         onVerificationComplete={handleHumanityVerificationComplete}
         preset={
           verifyingTaskId
-            ? (campaign?.tasks.find((t) => t.id === verifyingTaskId)?.metadata?.humanityPreset ?? 'is_human')
+            ? (campaign?.tasks.find((t) => t.id === verifyingTaskId)?.metadata
+                ?.humanityPreset ?? 'is_human')
             : 'is_human'
         }
       />
