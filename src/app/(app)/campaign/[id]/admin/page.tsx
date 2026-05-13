@@ -15,7 +15,7 @@ interface Participant {
 export default async function CampaignAdminPage({
   params,
 }: {
-  params: Promise<{ id: string }> | { id: string }
+  params: Promise<{ id: string }>
 }) {
   const resolvedParams = await params
   const campaignId = resolvedParams.id

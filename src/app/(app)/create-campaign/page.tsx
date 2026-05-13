@@ -293,7 +293,7 @@ export default function CreateCampaignPage() {
           telegramInviteLink: '',
         },
       ],
-      reward: { type: 'ERC20', tokenAddress: '', amount: '', name: '' },
+      reward: { type: 'ERC20', tokenAddress: '0x' as `0x${string}`, amount: '', name: '' },
     },
     mode: 'onChange',
   })
@@ -723,10 +723,10 @@ export default function CreateCampaignPage() {
                                   generationStage === stage
                                     ? 'bg-primary animate-pulse'
                                     : [
-                                          'planning',
-                                          'generating',
-                                          'validating',
-                                        ].indexOf(generationStage!) > idx
+                                      'planning',
+                                      'generating',
+                                      'validating',
+                                    ].indexOf(generationStage!) > idx
                                       ? 'bg-primary'
                                       : 'bg-muted',
                                 )}
@@ -776,8 +776,8 @@ export default function CreateCampaignPage() {
                             {!['rate_limit', 'network'].includes(
                               generationError.category,
                             ) && (
-                              <AlertCircle className="h-5 w-5 text-destructive" />
-                            )}
+                                <AlertCircle className="h-5 w-5 text-destructive" />
+                              )}
                           </div>
                           <div className="flex-1">
                             <p className="text-sm font-medium text-destructive">
@@ -1777,11 +1777,10 @@ export default function CreateCampaignPage() {
                                               return (
                                                 <label
                                                   key={p.preset}
-                                                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
-                                                    isChecked
-                                                      ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 ring-1 ring-purple-500/30'
-                                                      : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/10'
-                                                  }`}
+                                                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isChecked
+                                                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 ring-1 ring-purple-500/30'
+                                                    : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/10'
+                                                    }`}
                                                 >
                                                   <Checkbox
                                                     checked={isChecked}
@@ -1881,7 +1880,7 @@ export default function CreateCampaignPage() {
                                 <RadioGroupItem value="None" />
                               </FormControl>
                               <FormLabel className="font-normal">
-                                None (Text description)
+                                Other (Text description)
                               </FormLabel>
                             </FormItem>
                           </RadioGroup>
@@ -1961,8 +1960,8 @@ export default function CreateCampaignPage() {
                       <strong>Reward:</strong>{' '}
                       {form.getValues('reward.type') === 'ERC20'
                         ? `${form.getValues(
-                            'reward.amount',
-                          )} tokens from contract `
+                          'reward.amount',
+                        )} tokens from contract `
                         : form.getValues('reward.type') === 'ERC721'
                           ? `1 NFT from contract `
                           : `${(form.getValues('reward') as any).name}`}

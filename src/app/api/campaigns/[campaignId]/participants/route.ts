@@ -16,7 +16,7 @@ export async function GET(
     }
 
     // 1. Get raw array of wallet addresses from the blockchain
-    const participantAddresses = await getCampaignParticipantAddresses(campaignId);
+    const participantAddresses = await getCampaignParticipantAddresses(resolvedParams.campaignId);
 
     if (!participantAddresses || participantAddresses.length === 0) {
       return NextResponse.json([]);
