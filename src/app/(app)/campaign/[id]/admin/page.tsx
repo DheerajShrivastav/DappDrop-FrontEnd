@@ -1,7 +1,9 @@
 import React from 'react'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { verifyWalletSession } from '@/app/lib/dal'
+import { getCampaignById } from '@/lib/web3-service'
 
 // Interfaces for our merged data
 interface Participant {
@@ -24,11 +26,38 @@ export default async function CampaignAdminPage({
     notFound()
   }
 
+  let session
+  try {
+    session = await verifyWalletSession()
+  } catch (error) {
+    console.error('Unauthorized access to Campaign Admin Page:', error)
+    notFound()
+  }
+
+  // Fetch campaign to verify the user is the host
+  const campaign = await getCampaignById(campaignId)
+
+  if (!campaign) {
+    notFound()
+  }
+
+  if (campaign.host.toLowerCase() !== session.walletAddress.toLowerCase()) {
+    console.error(
+      `User ${session.walletAddress} attempted to access admin page for campaign ${campaignId} hosted by ${campaign.host}`,
+    )
+    notFound()
+  }
+
   // Fetch the data from our new API route
   // Using absolute URL for server-side fetch in Next.js App Router
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+  const appUrl =
+    process.env.APP_URL ||
+    (process.env.VERCEL_URL
+      ? `https://${process.env.VERCEL_URL}`
+      : 'http://localhost:3000')
 
   let participants: Participant[] = []
+  let errorMessage: string | null = null
   try {
     const res = await fetch(
       `${appUrl}/api/campaigns/${campaignId}/participants`,
@@ -41,9 +70,11 @@ export default async function CampaignAdminPage({
       participants = await res.json()
     } else {
       console.error('Failed to fetch participants', await res.text())
+      errorMessage = await res.text()
     }
   } catch (error) {
     console.error('Error fetching admin participants:', error)
+    errorMessage = error instanceof Error ? error.message : 'Unknown error'
   }
 
   return (
@@ -68,7 +99,11 @@ export default async function CampaignAdminPage({
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {participants.length === 0 ? (
+                {errorMessage ? (
+                  <tr>
+                    <td colSpan={4}>Failed to load participants.</td>
+                  </tr>
+                ) : participants.length === 0 ? (
                   <tr>
                     <td
                       colSpan={4}

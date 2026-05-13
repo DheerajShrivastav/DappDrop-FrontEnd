@@ -303,10 +303,11 @@ export default function CampaignDetailsPage() {
         setIsJoined(true)
       }
     } catch (error: any) {
-      let description = error.message || 'Failed to complete task.'
-      if (error.message.includes('not in active period')) {
+      const message = String(error?.message ?? error ?? '')
+      let description = message || 'Failed to complete task.'
+      if (message.includes('not in active period')) {
         description = 'This campaign is not currently active.'
-      } else if (error.message.includes('Campaign participant limit reached')) {
+      } else if (message.includes('Campaign participant limit reached')) {
         description =
           'The maximum participant limit for this campaign has been reached.'
       }
