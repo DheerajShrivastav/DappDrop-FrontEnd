@@ -69,8 +69,9 @@ export default async function CampaignAdminPage({
     if (res.ok) {
       participants = await res.json()
     } else {
-      console.error('Failed to fetch participants', await res.text())
-      errorMessage = await res.text()
+      const errorText = await res.text()
+      console.error('Failed to fetch participants', errorText)
+      errorMessage = errorText
     }
   } catch (error) {
     console.error('Error fetching admin participants:', error)
