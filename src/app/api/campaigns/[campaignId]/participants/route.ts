@@ -68,7 +68,7 @@ export async function GET(
       let telegramUsername = null;
 
       userSocials.forEach((social) => {
-        const proof = social.proofData as any;
+        const proof = (social.proofData as any) || {};
         if (social.platform?.toUpperCase() === 'DISCORD') {
           discordUsername = proof?.username || proof?.discordUsername || null;
         } else if (social.platform?.toUpperCase() === 'TELEGRAM') {

@@ -206,18 +206,17 @@ export async function POST(request: Request) {
           let isHuman = await isUserVerified(userAddress)
 
           // Fallback/Update logic: if they are hitting this to complete the Humanity task,
-          // instantly flip them to verified in DB to reflect task completion (as requested for dev/testing)
+          // we can attempt a real-time check in case the OAuth callback hasn't processed yet.
           if (!isHuman) {
-            await prisma.user.upsert({
-              where: { walletAddress: userAddress.toLowerCase() },
-              update: { humanityVerified: true, lastHumanityCheck: new Date() },
-              create: {
-                walletAddress: userAddress.toLowerCase(),
-                humanityVerified: true,
-                lastHumanityCheck: new Date(),
+            return NextResponse.json(
+              {
+                success: false,
+                verified: false,
+                message:
+                  'Humanity verification pending. Please complete the Humanity Protocol verification and try again shortly.',
               },
-            })
-            isHuman = true
+              { status: 403 },
+            )
           }
 
           isVerified = isHuman
