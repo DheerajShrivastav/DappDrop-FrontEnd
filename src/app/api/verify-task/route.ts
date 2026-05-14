@@ -214,8 +214,11 @@ export async function POST(request: Request) {
                 verified: false,
                 message:
                   'Humanity verification pending. Please complete the Humanity Protocol verification and try again shortly.',
+                error:
+                  'Humanity verification pending. Please complete the Humanity Protocol verification and try again shortly.',
               },
               { status: 403 },
+            )
             )
           }
 
