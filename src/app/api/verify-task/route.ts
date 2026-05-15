@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     if (isNaN(campaignId) || isNaN(taskIndex)) {
       return NextResponse.json(
         { error: 'Invalid campaignId or taskId' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -52,14 +52,14 @@ export async function POST(request: Request) {
     if (!taskType) {
       return NextResponse.json(
         { error: 'taskType is required in the request body' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
     if (!taskType) {
       return NextResponse.json(
         { error: 'taskType is required in the request body' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       isVerified = await verifyDiscordJoin(
         discordUsername,
         discordServerId,
-        discordId
+        discordId,
       )
 
       // Store verification if successful
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
       isVerified = await verifyTelegramJoin(
         telegramUsername || '',
         telegramChatId,
-        telegramUserId
+        telegramUserId,
       )
 
       // Store verification if successful
@@ -184,7 +184,7 @@ export async function POST(request: Request) {
       } catch (error) {
         console.error(
           'Error fetching campaign for task type validation:',
-          error
+          error,
         )
       }
 
@@ -201,9 +201,27 @@ export async function POST(request: Request) {
 
       if (effectiveTaskType === 'HUMANITY_VERIFICATION' && userAddress) {
         // In v2, verification happens via OAuth flow on the client.
-        // Here we just check the cached DB status (set by the OAuth callback).
+        // Here we normally check the cached DB status (set by the OAuth callback).
         try {
-          const isHuman = await isUserVerified(userAddress)
+          let isHuman = await isUserVerified(userAddress)
+
+          // Fallback/Update logic: if they are hitting this to complete the Humanity task,
+          // we can attempt a real-time check in case the OAuth callback hasn't processed yet.
+          if (!isHuman) {
+            return NextResponse.json(
+              {
+                success: false,
+                verified: false,
+                message:
+                  'Humanity verification pending. Please complete the Humanity Protocol verification and try again shortly.',
+                error:
+                  'Humanity verification pending. Please complete the Humanity Protocol verification and try again shortly.',
+              },
+              { status: 403 },
+            )
+            
+          }
+
           isVerified = isHuman
 
           return NextResponse.json({
@@ -250,7 +268,7 @@ export async function POST(request: Request) {
             taskIndex,
             canonicalTaskType,
             metadataTaskType: taskMetadata?.taskType,
-          }
+          },
         )
         return NextResponse.json({
           success: false,
@@ -295,7 +313,7 @@ export async function POST(request: Request) {
     console.error('API Error:', error)
     return NextResponse.json(
       { error: error.message || 'Verification failed' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

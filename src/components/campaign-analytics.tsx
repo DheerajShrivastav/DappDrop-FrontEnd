@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { Loader2, CheckCircle, XCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -54,14 +56,21 @@ export function CampaignAnalytics({
   if (participants.length === 0 && campaign.participants > 0) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle>Campaign Participants</CardTitle>
-          <CardDescription>
-            {campaign.participants} participant
-            {campaign.participants > 1 ? 's' : ''} joined this campaign.
-            {participantAddresses.length === 0 &&
-              ' Loading participant data...'}
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start sm:items-center justify-between space-y-0 gap-4 pb-4">
+          <div className="space-y-1">
+            <CardTitle>Campaign Participants</CardTitle>
+            <CardDescription>
+              {campaign.participants} participant
+              {campaign.participants > 1 ? 's' : ''} joined this campaign.
+              {participantAddresses.length === 0 &&
+                ' Loading participant data...'}
+            </CardDescription>
+          </div>
+          <Button asChild variant="outline">
+            <Link href={`/campaign/${campaign.id}/admin`}>
+              View Detailed Participant Info
+            </Link>
+          </Button>
         </CardHeader>
         {participantAddresses.length > 0 && (
           <CardContent className="p-0">
@@ -93,12 +102,19 @@ export function CampaignAnalytics({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Participant Analytics</CardTitle>
-        <CardDescription>
-          A detailed view of your campaign participants, task completion rates,
-          and reward distribution status.
-        </CardDescription>
+      <CardHeader className="flex flex-row items-start sm:items-center justify-between space-y-0 pb-4 gap-4">
+        <div className="space-y-1">
+          <CardTitle>Participant Analytics</CardTitle>
+          <CardDescription>
+            A detailed view of your campaign participants, task completion
+            rates, and reward distribution status.
+          </CardDescription>
+        </div>
+        <Button asChild variant="outline">
+          <Link href={`/campaign/${campaign.id}/admin`}>
+            View Detailed Participant Info
+          </Link>
+        </Button>
       </CardHeader>
       <CardContent className="p-0">
         <Table>

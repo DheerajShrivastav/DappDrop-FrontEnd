@@ -128,7 +128,17 @@ export function TaskList({
                       )}
                     </div>
                     <div className="flex-1">
-                      <h4 className="font-semibold mb-1">{task.description}</h4>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-semibold">{task.description}</h4>
+                        {task.type === 'ONCHAIN_TX' && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] px-1.5 py-0 h-5 border-amber-400 bg-amber-50 text-amber-700 font-semibold"
+                          >
+                            Beta
+                          </Badge>
+                        )}
+                      </div>
                       {task.type === 'ONCHAIN_TX' &&
                         task.metadata?.paymentRequired && (
                           <Badge variant="outline" className="text-xs">
@@ -139,17 +149,20 @@ export function TaskList({
                     </div>
                     {role === 'participant' &&
                       !isCompleted &&
-                      campaign.status === 'Open' && (
+                      campaign.status === 'Open' &&
+                      (campaign.participants >= 1000 ? (
+                        <Badge variant="destructive" className="bg-red-500">
+                          Campaign Full
+                        </Badge>
+                      ) : (
                         <Button
                           size="sm"
                           className="shimmer"
-                          onClick={() =>
-                            onOpenVerifyDialog(task.id, task.type)
-                          }
+                          onClick={() => onOpenVerifyDialog(task.id, task.type)}
                         >
                           Verify
                         </Button>
-                      )}
+                      ))}
                     {isCompleted && (
                       <Badge className="bg-green-600">
                         <CheckCircle className="h-3 w-3 mr-1" />

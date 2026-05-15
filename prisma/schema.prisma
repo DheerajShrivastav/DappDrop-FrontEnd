@@ -91,9 +91,15 @@ model CampaignCache {
   isActive    Boolean
 
   // OFF-CHAIN enhancements
-  imageUrl      String?
-  tags          String[]
-  featuredUntil DateTime?
+  imageUrl         String?
+  shortDescription String? // User-provided short description for cards/sidebar
+  longDescription  String? // User-provided detailed description for campaign page
+  tags             String[]
+  featuredUntil    DateTime?
+
+  // Reward metadata (off-chain, since blockchain stores only type/address/amount)
+  rewardType String? // "ERC20", "ERC721", "None"
+  rewardName String? // User-provided name/description for the reward
 
   lastSyncedAt DateTime @default(now())
 }

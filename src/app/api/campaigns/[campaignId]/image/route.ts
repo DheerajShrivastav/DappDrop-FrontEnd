@@ -24,7 +24,7 @@ export async function POST(
     )
 
     // Parse request body
-    const { imageUrl, signature, message } = await request.json()
+    const { imageUrl, signature, message, shortDescription, longDescription, rewardType, rewardName } = await request.json()
 
     console.log('📥 Request data received')
 
@@ -56,6 +56,13 @@ export async function POST(
         { status: 400 }
       )
     }
+
+    // Prepare optional metadata fields
+    const metadataFields: Record<string, string | undefined> = {}
+    if (shortDescription && typeof shortDescription === 'string') metadataFields.shortDescription = shortDescription
+    if (longDescription && typeof longDescription === 'string') metadataFields.longDescription = longDescription
+    if (rewardType && typeof rewardType === 'string') metadataFields.rewardType = rewardType
+    if (rewardName && typeof rewardName === 'string') metadataFields.rewardName = rewardName
 
     const campaignId = parseInt(campaignIdString)
 
@@ -126,6 +133,7 @@ export async function POST(
             hostAddress: onChainData.host,
             isActive: Number(onChainData.status) === 1, // 1 = Open status
             imageUrl,
+            ...metadataFields,
             tags: [],
             lastSyncedAt: new Date(),
           },
@@ -181,11 +189,12 @@ export async function POST(
         }
       }
 
-      // Update imageUrl in database
+      // Update imageUrl and metadata in database
       existingCache = await prisma.campaignCache.update({
         where: { id: existingCache.id },
         data: {
           imageUrl,
+          ...metadataFields,
           lastSyncedAt: new Date(),
         },
       })
@@ -233,6 +242,10 @@ export async function GET(
       select: {
         campaignId: true,
         imageUrl: true,
+        shortDescription: true,
+        longDescription: true,
+        rewardType: true,
+        rewardName: true,
       },
     })
 
@@ -243,6 +256,10 @@ export async function GET(
     return NextResponse.json({
       campaignId: campaign.campaignId,
       imageUrl: campaign.imageUrl,
+      shortDescription: campaign.shortDescription,
+      longDescription: campaign.longDescription,
+      rewardType: campaign.rewardType,
+      rewardName: campaign.rewardName,
     })
   } catch (error) {
     console.error('Error fetching campaign image:', error)
