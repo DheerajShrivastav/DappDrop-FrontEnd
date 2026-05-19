@@ -21,13 +21,13 @@ let provider: BrowserProvider | null = null
 let contract: Contract | null = null
 let readOnlyContract: Contract | null = null
 
-const SEPOLIA_CHAIN_ID = '0xaa36a7' // Sepolia chain id in hex
-const SEPOLIA_RPC_URL = 'https://ethereum-sepolia.publicnode.com'
+const TARGET_CHAIN_ID = `0x${config.chainId.toString(16)}`
+const TARGET_RPC_URL = config.rpcUrl
 
 const initializeReadOnlyProvider = () => {
   if (readOnlyContract) return
   try {
-    const rpcProvider = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+    const rpcProvider = new ethers.JsonRpcProvider(TARGET_RPC_URL)
     if (config.campaignFactoryAddress) {
       readOnlyContract = new ethers.Contract(
         config.campaignFactoryAddress,
@@ -207,11 +207,11 @@ const mapContractDataToCampaign = (
   }
 }
 
-const switchOrAddSepoliaNetwork = async (ethereum: Eip1193Provider) => {
+const switchOrAddTargetNetwork = async (ethereum: Eip1193Provider) => {
   try {
     await ethereum.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: SEPOLIA_CHAIN_ID }],
+      params: [{ chainId: TARGET_CHAIN_ID }],
     })
   } catch (switchError: any) {
     if (switchError.code === 4902) {
@@ -220,34 +220,31 @@ const switchOrAddSepoliaNetwork = async (ethereum: Eip1193Provider) => {
           method: 'wallet_addEthereumChain',
           params: [
             {
-              chainId: SEPOLIA_CHAIN_ID,
-              chainName: 'Sepolia Testnet',
-              nativeCurrency: {
-                name: 'Sepolia Ether',
-                symbol: 'ETH',
-                decimals: 18,
-              },
-              rpcUrls: [SEPOLIA_RPC_URL],
-              blockExplorerUrls: ['https://sepolia.etherscan.io'],
+              chainId: TARGET_CHAIN_ID,
+              chainName:
+                config.chainId === 9998453
+                  ? 'Tenderly Base Virtual'
+                  : 'Target Network',
+              nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
+              rpcUrls: [TARGET_RPC_URL],
             },
           ],
         })
       } catch (addError) {
-        console.error('Failed to add Sepolia network:', addError)
+        console.error('Failed to add network:', addError)
         toast({
           variant: 'destructive',
           title: 'Network Error',
-          description: 'Failed to add Sepolia network to your wallet.',
+          description: 'Failed to add target network to your wallet.',
         })
         throw addError
       }
     } else {
-      console.error('Failed to switch to Sepolia network:', switchError)
+      console.error('Failed to switch to target network:', switchError)
       toast({
         variant: 'destructive',
         title: 'Network Error',
-        description:
-          'Please switch to the Sepolia test network in your wallet.',
+        description: 'Please switch to the correct network in your wallet.',
       })
       throw switchError
     }
@@ -330,7 +327,7 @@ export const connectWallet = async (): Promise<string | null> => {
   }
 
   try {
-    await switchOrAddSepoliaNetwork(selectedProvider)
+    await switchOrAddTargetNetwork(selectedProvider)
     const accounts = await selectedProvider.request({
       method: 'eth_requestAccounts',
     })
@@ -761,11 +758,54 @@ export const createAndActivateCampaign = async (campaignData: any) => {
   }
 
   try {
-    // 1. Create Campaign with actual dates
-    const tx = await contractWithSigner.createCampaign(
+    // Prepare task arrays for unified call
+    const taskTypes: number[] = []
+    const descriptions: string[] = []
+    const verificationDatas: string[] = []
+    const isOptionals: boolean[] = []
+
+    for (const task of campaignData.tasks) {
+      taskTypes.push(taskTypeMap[task.type as TaskType])
+      descriptions.push(task.description)
+      verificationDatas.push(ethers.encodeBytes32String(task.verificationData || ''))
+      isOptionals.push(false)
+    }
+
+    // Prepare reward values
+    let rewardType
+    let tokenAddress = ethers.ZeroAddress
+    let rewardAmount: string | bigint = '0'
+
+    switch (campaignData.reward.type) {
+      case 'ERC20':
+        rewardType = 0
+        tokenAddress = campaignData.reward.tokenAddress
+        rewardAmount = ethers.parseUnits(campaignData.reward.amount || '0', 18)
+        break
+      case 'ERC721':
+        rewardType = 1
+        tokenAddress = campaignData.reward.tokenAddress
+        rewardAmount = '0'
+        break
+      case 'None':
+        rewardType = 2
+        break
+      default:
+        throw new Error('Invalid reward type')
+    }
+
+    // 1. Create Campaign with tasks and reward in a single transaction
+    const tx = await contractWithSigner.createCampaignWithTasksAndReward(
       campaignData.title,
       actualStartTime,
       actualEndTime,
+      taskTypes,
+      descriptions,
+      verificationDatas,
+      isOptionals,
+      rewardType,
+      tokenAddress,
+      rewardAmount
     )
     const receipt = await tx.wait()
 
@@ -782,37 +822,18 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     if (!event) throw new Error('CampaignCreated event not found')
     const campaignId = event.args.campaignId
 
-    // 2. Add Tasks
+    // 2. Add Off-Chain Task Metadata (DB only)
     console.log(
-      '🔄 Processing tasks in createAndActivateCampaign:',
+      '🔄 Processing off-chain task metadata in createAndActivateCampaign:',
       campaignData.tasks.length,
     )
     for (const task of campaignData.tasks) {
-      console.log('🔧 Processing task in createAndActivateCampaign:', {
+      console.log('🔧 Processing task off-chain metadata in createAndActivateCampaign:', {
         type: task.type,
         verificationData: task.verificationData,
         telegramInviteLink: task.telegramInviteLink,
         discordInviteLink: task.discordInviteLink,
       })
-
-      const taskType = taskTypeMap[task.type as TaskType]
-
-      // For blockchain storage, we only store the server ID (needed for verification)
-      // The invite link will be stored separately in the database
-      let verificationDataToStore = task.verificationData || ''
-
-      const verificationDataBytes = ethers.encodeBytes32String(
-        verificationDataToStore,
-      )
-
-      const taskTx = await contractWithSigner.addTaskToCampaign(
-        campaignId,
-        taskType,
-        task.description,
-        verificationDataBytes,
-        false,
-      )
-      await taskTx.wait()
 
       // Store Discord invite links in database for this campaign
       if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
@@ -955,54 +976,6 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       }
     }
 
-    // 3. Set Reward
-    let rewardType
-    let tokenAddress = ethers.ZeroAddress
-    let rewardAmount: string | bigint = '0'
-
-    switch (campaignData.reward.type) {
-      case 'ERC20':
-        rewardType = 0
-        tokenAddress = campaignData.reward.tokenAddress
-        rewardAmount = ethers.parseUnits(campaignData.reward.amount || '0', 18)
-        break
-      case 'ERC721':
-        rewardType = 1
-        tokenAddress = campaignData.reward.tokenAddress
-        rewardAmount = '0'
-        break
-      case 'None':
-        rewardType = 2
-        break
-      default:
-        throw new Error('Invalid reward type')
-    }
-
-    if (rewardType !== 2) {
-      try {
-        const rewardTx = await contractWithSigner.setCampaignReward(
-          campaignId,
-          rewardType,
-          tokenAddress,
-          rewardAmount,
-        )
-        await rewardTx.wait()
-      } catch (error: any) {
-        if (
-          error.message &&
-          (error.message.includes('Token address has no code') ||
-            error.message.includes('Invalid token address') ||
-            error.message.includes('InvalidTokenAddress'))
-        ) {
-          throw new Error(
-            'Token address has no code or is invalid. Please check the contract address.',
-          )
-        } else {
-          throw error
-        }
-      }
-    }
-
     // 4. If the start time is in the future, the campaign will be in Draft status and can be opened later
     // If the start time is now or very soon, it should automatically become Active
 
@@ -1117,11 +1090,54 @@ export const createCampaign = async (campaignData: any) => {
   }
 
   try {
-    // 1. Create Campaign with user's actual dates
-    const tx = await contractWithSigner.createCampaign(
+    // Prepare task arrays for unified call
+    const taskTypes: number[] = []
+    const descriptions: string[] = []
+    const verificationDatas: string[] = []
+    const isOptionals: boolean[] = []
+
+    for (const task of campaignData.tasks) {
+      taskTypes.push(taskTypeMap[task.type as TaskType])
+      descriptions.push(task.description)
+      verificationDatas.push(ethers.encodeBytes32String(task.verificationData || ''))
+      isOptionals.push(false)
+    }
+
+    // Prepare reward values
+    let rewardType
+    let tokenAddress = ethers.ZeroAddress
+    let rewardAmount: string | bigint = '0'
+
+    switch (campaignData.reward.type) {
+      case 'ERC20':
+        rewardType = 0
+        tokenAddress = campaignData.reward.tokenAddress
+        rewardAmount = ethers.parseUnits(campaignData.reward.amount || '0', 18)
+        break
+      case 'ERC721':
+        rewardType = 1
+        tokenAddress = campaignData.reward.tokenAddress
+        rewardAmount = '0'
+        break
+      case 'None':
+        rewardType = 2
+        break
+      default:
+        throw new Error('Invalid reward type')
+    }
+
+    // 1. Create Campaign with tasks and reward in a single transaction
+    const tx = await contractWithSigner.createCampaignWithTasksAndReward(
       campaignData.title,
       userStartTime,
       userEndTime,
+      taskTypes,
+      descriptions,
+      verificationDatas,
+      isOptionals,
+      rewardType,
+      tokenAddress,
+      rewardAmount
     )
     const receipt = await tx.wait()
 
@@ -1138,34 +1154,15 @@ export const createCampaign = async (campaignData: any) => {
     if (!event) throw new Error('CampaignCreated event not found')
     const campaignId = event.args.campaignId
 
-    // 2. Add Tasks
-    console.log('🔄 Processing tasks:', campaignData.tasks.length)
+    // 2. Add Off-Chain Task Metadata (DB only)
+    console.log('🔄 Processing off-chain task metadata:', campaignData.tasks.length)
     for (const task of campaignData.tasks) {
-      console.log('🔧 Processing task:', {
+      console.log('🔧 Processing task off-chain metadata:', {
         type: task.type,
         verificationData: task.verificationData,
         telegramInviteLink: task.telegramInviteLink,
         discordInviteLink: task.discordInviteLink,
       })
-
-      const taskType = taskTypeMap[task.type as TaskType]
-
-      // For blockchain storage, we only store the server ID (needed for verification)
-      // The invite link will be stored separately in database
-      let verificationDataToStore = task.verificationData || ''
-
-      const verificationDataBytes = ethers.encodeBytes32String(
-        verificationDataToStore,
-      )
-
-      const taskTx = await contractWithSigner.addTaskToCampaign(
-        campaignId,
-        taskType,
-        task.description,
-        verificationDataBytes,
-        false,
-      )
-      await taskTx.wait()
 
       // Store Discord invite links in database for this campaign
       if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
@@ -1343,54 +1340,6 @@ export const createCampaign = async (campaignData: any) => {
           )
         } catch (e) {
           console.warn('Failed to store humanity preset in database:', e)
-        }
-      }
-    }
-
-    // 3. Set Reward
-    let rewardType
-    let tokenAddress = ethers.ZeroAddress
-    let rewardAmount: string | bigint = '0'
-
-    switch (campaignData.reward.type) {
-      case 'ERC20':
-        rewardType = 0
-        tokenAddress = campaignData.reward.tokenAddress
-        rewardAmount = ethers.parseUnits(campaignData.reward.amount || '0', 18)
-        break
-      case 'ERC721':
-        rewardType = 1
-        tokenAddress = campaignData.reward.tokenAddress
-        rewardAmount = '0'
-        break
-      case 'None':
-        rewardType = 2
-        break
-      default:
-        throw new Error('Invalid reward type')
-    }
-
-    if (rewardType !== 2) {
-      try {
-        const rewardTx = await contractWithSigner.setCampaignReward(
-          campaignId,
-          rewardType,
-          tokenAddress,
-          rewardAmount,
-        )
-        await rewardTx.wait()
-      } catch (error: any) {
-        if (
-          error.message &&
-          (error.message.includes('Token address has no code') ||
-            error.message.includes('Invalid token address') ||
-            error.message.includes('InvalidTokenAddress'))
-        ) {
-          throw new Error(
-            'Token address has no code or is invalid. Please check the contract address.',
-          )
-        } else {
-          throw error
         }
       }
     }
@@ -1676,16 +1625,15 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
   try {
     if (provider) {
       const network = await provider.getNetwork()
-      if (network.chainId !== BigInt(11155111)) {
-        // Sepolia chain ID
+      if (network.chainId !== BigInt(config.chainId)) {
         if (window.ethereum) {
-          await switchOrAddSepoliaNetwork(window.ethereum as any)
+          await switchOrAddTargetNetwork(window.ethereum as any)
           // Refresh signer/contract after network switch
           const providerRefresh = new ethers.BrowserProvider(window.ethereum)
           const signerRefresh = await providerRefresh.getSigner()
           contractWithSigner = contract.connect(signerRefresh) as Contract
         } else {
-          throw new Error('Please switch to Sepolia testnet in your wallet.')
+          throw new Error('Please switch to the target network in your wallet.')
         }
       }
     }
@@ -1868,7 +1816,7 @@ export const getUserTaskCompletionStatus = async (
 
     if (!providerInstance) {
       // Create a new provider if the contract doesn't have one
-      providerInstance = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+      providerInstance = new ethers.JsonRpcProvider(TARGET_RPC_URL)
 
       // Create a new contract instance with the provider
       contractToUse = new ethers.Contract(
@@ -2004,7 +1952,7 @@ export const getCampaignParticipantAddresses = async (
     if (!providerInstance) {
       console.log('No provider on contract, creating new JsonRpc provider...')
       // Create a new provider if the contract doesn't have one
-      providerInstance = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+      providerInstance = new ethers.JsonRpcProvider(TARGET_RPC_URL)
 
       // Create a new contract instance with the provider
       contractToUse = new ethers.Contract(
@@ -2093,7 +2041,7 @@ export const getCampaignParticipants = async (
 
     if (!providerInstance) {
       // Create a new provider if the contract doesn't have one
-      providerInstance = new ethers.JsonRpcProvider(SEPOLIA_RPC_URL)
+      providerInstance = new ethers.JsonRpcProvider(TARGET_RPC_URL)
 
       // Create a new contract instance with the provider
       contractToUse = new ethers.Contract(

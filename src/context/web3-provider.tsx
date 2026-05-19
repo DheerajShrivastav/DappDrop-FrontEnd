@@ -1,5 +1,6 @@
 'use client'
 
+// @ts-expect-error - Next.js handles CSS imports but TypeScript might not recognize the module
 import '@rainbow-me/rainbowkit/styles.css'
 import {
   getDefaultConfig,
@@ -7,25 +8,47 @@ import {
   darkTheme,
 } from '@rainbow-me/rainbowkit'
 import { WagmiProvider } from 'wagmi'
-import { mainnet, sepolia } from 'wagmi/chains'
+import { mainnet, sepolia, base, polygon } from 'wagmi/chains'
+import { defineChain } from 'viem'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import { ReactNode } from 'react'
+import appConfig from '@/app/config'
 
 // Singleton pattern to prevent multiple WalletConnect initializations
 // This can happen during React strict mode or hot module reloading
-let config: ReturnType<typeof getDefaultConfig> | null = null
+let wagmiConfig: ReturnType<typeof getDefaultConfig> | null = null
 let queryClient: QueryClient | null = null
 
+// Helper to determine the target chain dynamically
+function getTargetChain() {
+  if (appConfig.chainId === 11155111) return sepolia
+  if (appConfig.chainId === 8453) return base
+  if (appConfig.chainId === 1) return mainnet
+  if (appConfig.chainId === 137) return polygon
+
+  // Custom Virtual Testnet (Tenderly or other)
+  return defineChain({
+    id: appConfig.chainId,
+    name: 'Custom Network',
+    network: 'custom_network',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: {
+      default: { http: [appConfig.rpcUrl] },
+      public: { http: [appConfig.rpcUrl] },
+    },
+  })
+}
+
 function getConfig() {
-  if (!config) {
-    config = getDefaultConfig({
+  if (!wagmiConfig) {
+    wagmiConfig = getDefaultConfig({
       appName: 'DApp Drop',
       projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '',
-      chains: [mainnet, sepolia],
+      chains: [getTargetChain(), mainnet, sepolia],
       ssr: true,
     })
   }
-  return config
+  return wagmiConfig
 }
 
 function getQueryClient() {
