@@ -7,18 +7,17 @@ import { ethers } from 'ethers'
 const campaignFactoryAddress =
   process.env.NEXT_PUBLIC_CAMPAIGN_FACTORY_CONTRACT || ''
 
-if (
-  campaignFactoryAddress &&
-  !ethers.isAddress(campaignFactoryAddress)
-) {
+if (campaignFactoryAddress && !ethers.isAddress(campaignFactoryAddress)) {
   throw new Error(
-    `Invalid Ethereum address for NEXT_PUBLIC_CAMPAIGN_FACTORY_CONTRACT: ${campaignFactoryAddress}`
+    `Invalid Ethereum address for NEXT_PUBLIC_CAMPAIGN_FACTORY_CONTRACT: ${campaignFactoryAddress}`,
   )
 }
 
 const config = {
   campaignFactoryAddress,
-  sepoliaRpcUrl:
+  chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '11155111', 10),
+  rpcUrl:
+    process.env.NEXT_PUBLIC_RPC_URL ||
     process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ||
     'https://ethereum-sepolia.publicnode.com',
   humanityPortalUrl:
@@ -34,7 +33,7 @@ const config = {
 if (process.env.NODE_ENV === 'development') {
   if (!config.campaignFactoryAddress) {
     console.warn(
-      '⚠️  NEXT_PUBLIC_CAMPAIGN_FACTORY_CONTRACT is not set. Web3 functionality will not work.'
+      '⚠️  NEXT_PUBLIC_CAMPAIGN_FACTORY_CONTRACT is not set. Web3 functionality will not work.',
     )
   }
 }
