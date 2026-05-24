@@ -94,8 +94,8 @@ const mapContractDataToCampaign = (
     'JOIN_DISCORD',
     'JOIN_TELEGRAM',
     'RETWEET',
-    'HUMANITY_VERIFICATION',
     'ONCHAIN_TX',
+    'HUMANITY_VERIFICATION',
   ]
 
   // Use stored reward name if available, otherwise fall back to generated text
@@ -745,8 +745,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     JOIN_DISCORD: 1,
     JOIN_TELEGRAM: 2,
     RETWEET: 3,
-    HUMANITY_VERIFICATION: 4,
     ONCHAIN_TX: 4,
+    HUMANITY_VERIFICATION: 5,
   }
 
   try {
@@ -1077,8 +1077,8 @@ export const createCampaign = async (campaignData: any) => {
     JOIN_DISCORD: 1,
     JOIN_TELEGRAM: 2,
     RETWEET: 3,
-    HUMANITY_VERIFICATION: 4,
     ONCHAIN_TX: 4,
+    HUMANITY_VERIFICATION: 5,
   }
 
   try {
@@ -1687,7 +1687,6 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
         throw new Error('You have already completed this task.')
       }
     } catch (checkErr: any) {
-      // If it's our own error, re-throw. Otherwise ignore and let the contract call handle it.
       if (checkErr.message === 'You have already completed this task.')
         throw checkErr
       console.warn(
@@ -1696,68 +1695,110 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       )
     }
 
-    // The smart contract completeTask function only takes campaignId and taskIndex
-    // It automatically uses msg.sender (the connected wallet) as the participant
-    console.log('Calling smart contract completeTask...', {
-      campaignIdNumber,
-      taskIndex,
-    })
-    const tx = await contractWithSigner.completeTask(
-      campaignIdNumber,
-      taskIndex,
-    )
-
-    console.log('Transaction sent:', tx.hash)
-    await tx.wait()
-
-    console.log('Task completed successfully!')
-  } catch (error: any) {
-    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-      console.warn(
-        `Campaign ${campaignId} not found or reverted when attempting task completion.`,
+    // Simulate the call first via direct RPC (bypasses MetaMask which strips error data)
+    try {
+      console.log('🔍 Pre-simulating completeTask via RPC...')
+      const rpcProvider = new ethers.JsonRpcProvider(TARGET_RPC_URL)
+      const simContract = new ethers.Contract(
+        config.campaignFactoryAddress!,
+        Web3Campaigns.abi,
+        rpcProvider,
       )
-    } else {
-      console.warn(
-        `Error completing task ${taskIndex} for campaign ${campaignId}:`,
-        error?.message || 'Unknown error',
+      await simContract.completeTask.staticCall(
+        campaignIdNumber,
+        taskIndex,
+        { from: userAddress },
       )
+      console.log('✅ Simulation passed, sending real transaction...')
+    } catch (simError: any) {
+      console.error(
+        '🔴 Simulation reverted: ' +
+          JSON.stringify({
+            code: simError?.code,
+            reason: simError?.reason,
+            shortMessage: simError?.shortMessage,
+            data: simError?.data,
+          }),
+      )
+
+      const errorMap: Record<string, string> = {
+        Web3Campaigns__CampaignNotOpen: 'Campaign is not open for task completion.',
+        Web3Campaigns__CampaignEnded: 'This campaign has ended.',
+        Web3Campaigns__CampaignNotFound: 'Campaign not found.',
+        Web3Campaigns__CampaignStartTimeNotYetStrated: 'Campaign start time has not been reached yet.',
+        Web3Campaigns__TaskAlreadyCompleted: 'You have already completed this task.',
+        Web3Campaigns__TaskNotFound: 'Task not found in this campaign.',
+        Web3Campaigns__PosterCannotAcceptOwnTask: 'Campaign hosts cannot complete their own tasks.',
+        Web3Campaigns__InvalidTaskType: 'This task type is invalid or requires host verification.',
+        EnforcedPause: 'The contract is currently paused.',
+      }
+
+      // Check text fields for known error names
+      const searchTexts = [simError?.reason, simError?.shortMessage, simError?.message].filter(Boolean).join(' ')
+      for (const [name, msg] of Object.entries(errorMap)) {
+        if (searchTexts.includes(name)) throw new Error(msg)
+      }
+
+      // Try decoding hex error data from RPC
+      const candidates = [simError?.data, simError?.error?.data, simError?.info?.error?.data].filter(
+        (d) => d && typeof d === 'string' && d.startsWith('0x') && d.length > 2,
+      )
+      const iface = new ethers.Interface(Web3Campaigns.abi)
+      for (const data of candidates) {
+        try {
+          const parsed = iface.parseError(data)
+          if (parsed?.name) throw new Error(errorMap[parsed.name] || 'Contract error: ' + parsed.name)
+        } catch (e: any) {
+          if (e.message && !e.message.includes('no matching error')) throw e
+        }
+      }
+
+      // Diagnostic fallback: determine specific reason from on-chain state
+      const now = Math.floor(Date.now() / 1000)
+      if (Number(campaignData.status) !== 1) {
+        throw new Error('Campaign is not open. Status: ' + ['Draft', 'Open', 'Ended', 'Closed'][Number(campaignData.status)] + '.')
+      }
+      if (userAddress.toLowerCase() === campaignData.host.toLowerCase()) {
+        throw new Error('Campaign hosts cannot complete their own tasks.')
+      }
+      if (now > Number(campaignData.endTime)) throw new Error('This campaign has ended.')
+      if (now < Number(campaignData.startTime)) throw new Error('Campaign has not started yet.')
+
+      try {
+        const done = await contractToRead.hasCompletedTask(campaignIdNumber, userAddress, taskIndex)
+        if (done) throw new Error('You have already completed this task.')
+      } catch (e: any) {
+        if (e.message === 'You have already completed this task.') throw e
+      }
+
+      throw new Error(simError?.shortMessage || simError?.reason || 'Transaction rejected. Try again in 30 seconds.')
     }
 
-    let description = `Failed to complete task.`
-
-    // Parse common smart contract errors
-    if (error.reason) {
-      if (error.reason.includes('CampaignNotOpen')) {
-        description = 'Campaign is not open for task completion.'
-      } else if (error.reason.includes('TaskAlreadyCompleted')) {
-        description = 'You have already completed this task.'
-      } else if (error.reason.includes('TaskNotFound')) {
-        description = 'Task not found in this campaign.'
-      } else if (error.reason.includes('PosterCannotAcceptOwnTask')) {
-        description =
-          'Campaign hosts cannot complete tasks on their own campaign.'
-      } else if (error.reason.includes('Too many rapid actions')) {
-        description = 'Please wait 30 seconds between actions.'
-      } else if (
-        error.reason.includes('Account flagged for suspicious activity')
-      ) {
-        description = 'Account flagged for suspicious activity.'
-      } else if (error.reason.includes('Campaign not in active period')) {
-        description = 'This campaign is not currently active.'
-      } else {
-        description += ` Reason: ${error.reason}`
-      }
-    } else if (
+    console.log('Calling smart contract completeTask...', { campaignIdNumber, taskIndex })
+    const tx = await contractWithSigner.completeTask(campaignIdNumber, taskIndex)
+    console.log('Transaction sent:', tx.hash)
+    await tx.wait()
+    console.log('Task completed successfully!')
+  } catch (error: any) {
+    // If it already has a user-friendly message from pre-checks or simulation, re-throw directly
+    if (
       error.message &&
-      !error.message.includes('missing revert data')
+      !error.message.includes('missing revert data') &&
+      !error.message.includes('CALL_EXCEPTION') &&
+      !error.message.includes('could not coalesce error')
     ) {
-      // Use the message only if it's our own pre-check error, not the raw ethers CALL_EXCEPTION
-      description = error.message
+      console.error('Parsed error description:', error.message)
+      throw error
+    }
+
+    let description = 'Failed to complete task.'
+    if (error.reason) {
+      if (error.reason.includes('CampaignNotOpen')) description = 'Campaign is not open.'
+      else if (error.reason.includes('TaskAlreadyCompleted')) description = 'Task already completed.'
+      else if (error.reason.includes('PosterCannotAcceptOwnTask')) description = 'Hosts cannot complete own tasks.'
+      else description += ' Reason: ' + error.reason
     } else {
-      // Custom error with no reason (null revert data) — try to give a useful message
-      description =
-        'Transaction rejected by the smart contract. Possible reasons: ' +
-        'campaign host cannot complete own tasks, task already completed, or campaign is not active.'
+      description = error?.shortMessage || 'Transaction failed. Please check console and try again.'
     }
 
     console.error('Parsed error description:', description)
@@ -1781,128 +1822,69 @@ export const getUserTaskCompletionStatus = async (
 
   if (!contractToUse || !userAddress) return {}
 
-  try {
-    const completionStatus: { [taskId: string]: boolean } = {}
+  const completionStatus: { [taskId: string]: boolean } = {}
 
-    // Initialize all tasks as not completed first
-    tasks.forEach((task) => {
-      completionStatus[task.id] = false
-    })
+  // Initialize all tasks as not completed first
+  tasks.forEach((task) => {
+    completionStatus[task.id] = false
+  })
 
-    console.log('Checking task completion for:', {
-      campaignId,
-      userAddress,
-      taskCount: tasks.length,
-      taskIds: tasks.map((t) => t.id),
-    })
-
-    // Check if we have a provider
-    let providerInstance: ethers.Provider | null = null
-
-    if (
-      contractToUse.provider &&
-      typeof (contractToUse.provider as any).getBlockNumber === 'function'
-    ) {
-      providerInstance = contractToUse.provider as unknown as ethers.Provider
-    }
-
-    if (!providerInstance) {
-      // Create a new provider if the contract doesn't have one
-      providerInstance = new ethers.JsonRpcProvider(TARGET_RPC_URL)
-
-      // Create a new contract instance with the provider
-      contractToUse = new ethers.Contract(
-        config.campaignFactoryAddress!,
-        Web3Campaigns.abi,
-        providerInstance,
-      )
-    }
-
-    const latestBlock = await providerInstance.getBlockNumber()
-    const startBlock = Math.max(0, latestBlock - 49999) // Look back up to ~50k blocks
-
-    console.log(`Querying events from block ${startBlock} to ${latestBlock}`)
-
-    // Query ParticipantTaskCompleted events for this campaign and user
-    const filter = contractToUse.filters.ParticipantTaskCompleted(
-      campaignId,
-      userAddress,
-    )
-
-    const events = await contractToUse.queryFilter(
-      filter,
-      startBlock,
-      latestBlock,
-    )
-
-    console.log(
-      `Found ${events.length} ParticipantTaskCompleted events for user ${userAddress} in campaign ${campaignId}`,
-    )
-
-    // Mark tasks as completed based on events
-    events.forEach((event: any) => {
-      const taskIndex = event.args?.[2] // taskIndex is the 3rd argument (BigInt)
-      const taskIndexNumber = Number(taskIndex) // Convert BigInt to number
-
-      if (
-        typeof taskIndexNumber === 'number' &&
-        taskIndexNumber < tasks.length
-      ) {
-        const task = tasks[taskIndexNumber]
-        if (task) {
-          // task.id is the index as string, so we need to match correctly
-          completionStatus[task.id] = true
-          console.log(
-            `Marked task ${task.id} (index ${taskIndexNumber}) as completed for user ${userAddress}`,
-          )
-        }
-      } else {
-        console.warn(
-          `Invalid task index ${taskIndexNumber} for campaign ${campaignId}`,
-        )
-      }
-    })
-
-    console.log('Task completion status for user:', {
-      userAddress,
-      campaignId,
-      completionStatus,
-      eventsFound: events.length,
-      taskIds: tasks.map((t) => t.id),
-      eventDetails: events.map((e) => ({
-        taskIndex: Number((e as any).args?.[2]),
-        blockNumber: e.blockNumber,
-        transactionHash: e.transactionHash,
-      })),
-    })
-
-    return completionStatus
-  } catch (error: any) {
-    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-      console.warn(
-        `Campaign ${campaignId} task completion data not found/reverted for ${userAddress}.`,
-      )
-    } else {
-      console.warn(
-        'Error checking user task completion status:',
-        error?.message || 'Unknown error',
-      )
-    }
-    console.warn('Error details:', {
-      campaignId,
-      userAddress,
-      taskCount: tasks.length,
-      contractAddress: config.campaignFactoryAddress,
-      error: error instanceof Error ? error.message : String(error),
-    })
-
-    // Return all tasks as not completed if there's an error
-    const completionStatus: { [taskId: string]: boolean } = {}
-    tasks.forEach((task) => {
-      completionStatus[task.id] = false
-    })
+  const campaignIdNumber = parseInt(campaignId, 10)
+  if (Number.isNaN(campaignIdNumber)) {
     return completionStatus
   }
+
+  console.log('Checking task completion via hasCompletedTask for:', {
+    campaignId,
+    userAddress,
+    taskCount: tasks.length,
+    taskIds: tasks.map((t) => t.id),
+  })
+
+  // Ensure we have a working contract with a provider
+  let providerInstance: ethers.Provider | null = null
+  if (
+    contractToUse.provider &&
+    typeof (contractToUse.provider as any).getBlockNumber === 'function'
+  ) {
+    providerInstance = contractToUse.provider as unknown as ethers.Provider
+  }
+
+  if (!providerInstance) {
+    providerInstance = new ethers.JsonRpcProvider(TARGET_RPC_URL)
+    contractToUse = new ethers.Contract(
+      config.campaignFactoryAddress!,
+      Web3Campaigns.abi,
+      providerInstance,
+    )
+  }
+
+  // Use direct hasCompletedTask calls — this reads the actual on-chain state
+  // and is the source of truth (unlike event scanning which can miss events)
+  for (let taskIndex = 0; taskIndex < tasks.length; taskIndex += 1) {
+    const task = tasks[taskIndex]
+    try {
+      const isCompleted = await contractToUse.hasCompletedTask(
+        campaignIdNumber,
+        userAddress,
+        taskIndex,
+      )
+      completionStatus[task.id] = Boolean(isCompleted)
+    } catch (taskError: any) {
+      console.warn(
+        `Failed to check task ${taskIndex} completion: ${taskError?.message || 'Unknown error'}`,
+      )
+      // Leave as false on error
+    }
+  }
+
+  console.log('Task completion status (via hasCompletedTask):', {
+    userAddress,
+    campaignId,
+    completionStatus,
+  })
+
+  return completionStatus
 }
 
 // Function to get basic participant addresses for a campaign
