@@ -1,63 +1,78 @@
-'use client';
+'use client'
 
-import React, { createContext, useContext, useEffect, ReactNode, useCallback } from 'react';
-import { useAccount, useDisconnect, useWalletClient } from 'wagmi';
-import { useConnectModal } from '@rainbow-me/rainbowkit';
-import { useRole } from '@/hooks/use-role';
-import { initializeProviderAndContract } from '@/lib/web3-service';
-import type { Eip1193Provider } from 'ethers';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  ReactNode,
+  useCallback,
+  useRef,
+} from 'react'
+import { useAccount, useDisconnect, useWalletClient } from 'wagmi'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
+import { useRole } from '@/hooks/use-role'
+import { initializeProviderAndContract } from '@/lib/web3-service'
+import type { Eip1193Provider } from 'ethers'
 
-type Role = 'host' | 'participant' | null;
+type Role = 'host' | 'participant' | null
 
 // Define ethereum provider interface with event methods
 interface EthereumProvider {
-  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-  on: (event: string, callback: (...args: unknown[]) => void) => void;
-  removeListener?: (event: string, callback: (...args: unknown[]) => void) => void;
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>
+  on: (event: string, callback: (...args: unknown[]) => void) => void
+  removeListener?: (
+    event: string,
+    callback: (...args: unknown[]) => void,
+  ) => void
 }
 
 interface WalletContextType {
-  isConnected: boolean;
-  address: string | null;
-  role: Role;
-  connectWallet: () => void;
-  disconnectWallet: () => void;
-  checkRoles: (address: string) => Promise<void>;
+  isConnected: boolean
+  address: string | null
+  role: Role
+  connectWallet: () => void
+  disconnectWallet: () => void
+  checkRoles: (address: string) => Promise<void>
 }
 
-const WalletContext = createContext<WalletContextType | undefined>(undefined);
+const WalletContext = createContext<WalletContextType | undefined>(undefined)
 
 export const WalletProvider = ({ children }: { children: ReactNode }) => {
-  const { address, isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
-  const { openConnectModal } = useConnectModal();
-  const { role, checkRole } = useRole();
-  const { data: walletClient } = useWalletClient();
+  const { address, isConnected } = useAccount()
+  const { disconnect } = useDisconnect()
+  const { openConnectModal } = useConnectModal()
+  const { role, checkRole } = useRole()
+  const { data: walletClient } = useWalletClient()
+  const lastWalletClientRef = useRef<typeof walletClient | null>(null)
 
   // Initialize web3-service with the Wagmi provider
   useEffect(() => {
-    if (walletClient) {
-      // walletClient.transport is not directly an Eip1193Provider, but for BrowserProvider it usually works 
-      // if we pass the window.ethereum or similar. 
+    if (walletClient && walletClient !== lastWalletClientRef.current) {
+      // walletClient.transport is not directly an Eip1193Provider, but for BrowserProvider it usually works
+      // if we pass the window.ethereum or similar.
       // However, ethers.BrowserProvider expects an object with request method.
       // walletClient has a request method.
-      initializeProviderAndContract(walletClient as unknown as Eip1193Provider);
+      initializeProviderAndContract(walletClient as unknown as Eip1193Provider)
+      lastWalletClientRef.current = walletClient
     }
-  }, [walletClient]);
+  }, [walletClient])
 
   const connectWallet = useCallback(() => {
     if (openConnectModal) {
-      openConnectModal();
+      openConnectModal()
     }
-  }, [openConnectModal]);
+  }, [openConnectModal])
 
   const disconnectWallet = useCallback(() => {
-    disconnect();
-  }, [disconnect]);
+    disconnect()
+  }, [disconnect])
 
-  const checkRoles = useCallback(async (addr: string) => {
-    await checkRole(addr);
-  }, [checkRole]);
+  const checkRoles = useCallback(
+    async (addr: string) => {
+      await checkRole(addr)
+    },
+    [checkRole],
+  )
 
   const value = {
     isConnected,
@@ -65,20 +80,18 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
     role,
     connectWallet,
     disconnectWallet,
-    checkRoles
-  };
+    checkRoles,
+  }
 
   return (
-    <WalletContext.Provider value={value}>
-      {children}
-    </WalletContext.Provider>
-  );
-};
+    <WalletContext.Provider value={value}>{children}</WalletContext.Provider>
+  )
+}
 
 export const useWallet = () => {
-  const context = useContext(WalletContext);
+  const context = useContext(WalletContext)
   if (context === undefined) {
-    throw new Error('useWallet must be used within a WalletProvider');
+    throw new Error('useWallet must be used within a WalletProvider')
   }
-  return context;
-};
+  return context
+}
