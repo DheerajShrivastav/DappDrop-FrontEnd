@@ -1,6 +1,5 @@
 'use client'
 
-// @ts-expect-error - Next.js handles CSS imports but TypeScript might not recognize the module
 import '@rainbow-me/rainbowkit/styles.css'
 import {
   getDefaultConfig,

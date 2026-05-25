@@ -21,6 +21,42 @@ let provider: BrowserProvider | null = null
 let contract: Contract | null = null
 let readOnlyContract: Contract | null = null
 
+const PARTICIPANT_CACHE_TTL_MS = 30 * 1000
+const PARTICIPANT_DETAIL_CACHE_TTL_MS = 30 * 1000
+const PARTICIPATION_CACHE_TTL_MS = 30 * 1000
+const MAX_LOG_RANGE_FALLBACK = 2000
+const PARTICIPANT_QUERY_CONCURRENCY = 3
+const PAUSED_CACHE_TTL_MS = 30 * 1000
+const HOST_ROLE_CACHE_TTL_MS = 30 * 1000
+
+type ParticipantAddressCacheEntry = {
+  addresses: string[]
+  lastBlock: number
+  updatedAt: number
+  inFlight?: Promise<string[]>
+}
+
+type ParticipantDetailsCacheEntry = {
+  data: ParticipantData[]
+  updatedAt: number
+  inFlight?: Promise<ParticipantData[]>
+}
+
+type ParticipationCacheEntry = {
+  value: boolean
+  updatedAt: number
+  inFlight?: Promise<boolean>
+}
+
+const participantAddressesCache = new Map<
+  string,
+  ParticipantAddressCacheEntry
+>()
+const participantDetailsCache = new Map<string, ParticipantDetailsCacheEntry>()
+const participationCache = new Map<string, ParticipationCacheEntry>()
+const hostRoleCache = new Map<string, ParticipationCacheEntry>()
+let pausedCache: ParticipationCacheEntry | null = null
+
 const TARGET_CHAIN_ID = `0x${config.chainId.toString(16)}`
 const TARGET_RPC_URL = config.rpcUrl
 
@@ -38,6 +74,13 @@ const initializeReadOnlyProvider = () => {
   } catch (e) {
     console.error('Failed to initialize read-only provider', e)
   }
+}
+
+const getReadOnlyContract = () => {
+  if (!readOnlyContract) {
+    initializeReadOnlyProvider()
+  }
+  return readOnlyContract
 }
 
 export const initializeProviderAndContract = (
@@ -76,6 +119,32 @@ const getSigner = async () => {
   return signer
 }
 
+const runWithConcurrency = async <T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> => {
+  if (items.length === 0) return []
+
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+
+  const runners = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (true) {
+        const currentIndex = nextIndex
+        nextIndex += 1
+        if (currentIndex >= items.length) return
+        results[currentIndex] = await worker(items[currentIndex], currentIndex)
+      }
+    },
+  )
+
+  await Promise.all(runners)
+  return results
+}
+
 const mapContractDataToCampaign = (
   contractData: any,
   id: number,
@@ -94,8 +163,8 @@ const mapContractDataToCampaign = (
     'JOIN_DISCORD',
     'JOIN_TELEGRAM',
     'RETWEET',
-    'ONCHAIN_TX',
     'HUMANITY_VERIFICATION',
+    'ONCHAIN_TX',
   ]
 
   // Use stored reward name if available, otherwise fall back to generated text
@@ -467,67 +536,65 @@ export const getCampaignsByHostAddress = async (
 
     if (campaignIds.length === 0) return []
 
-    const campaigns = await Promise.all(
-      campaignIds.map(async (id) => {
-        try {
-          const campaignData = await contractToUse.getCampaign(id)
+    const campaigns = await runWithConcurrency(campaignIds, 4, async (id) => {
+      try {
+        const campaignData = await contractToUse.getCampaign(id)
 
-          // Fetch image URL and metadata from database if available
-          let imageUrl: string | undefined
-          let campaignMeta:
-            | {
-                shortDescription?: string
-                longDescription?: string
-                rewardName?: string
-              }
-            | undefined
-          if (typeof window !== 'undefined') {
-            try {
-              const imageResponse = await fetch(`/api/campaigns/${id}/image`)
-              if (imageResponse.ok) {
-                const imageData = await imageResponse.json()
-                imageUrl = imageData.imageUrl
-                if (
-                  imageData.shortDescription ||
-                  imageData.longDescription ||
-                  imageData.rewardName
-                ) {
-                  campaignMeta = {
-                    shortDescription: imageData.shortDescription,
-                    longDescription: imageData.longDescription,
-                    rewardName: imageData.rewardName,
-                  }
+        // Fetch image URL and metadata from database if available
+        let imageUrl: string | undefined
+        let campaignMeta:
+          | {
+              shortDescription?: string
+              longDescription?: string
+              rewardName?: string
+            }
+          | undefined
+        if (typeof window !== 'undefined') {
+          try {
+            const imageResponse = await fetch(`/api/campaigns/${id}/image`)
+            if (imageResponse.ok) {
+              const imageData = await imageResponse.json()
+              imageUrl = imageData.imageUrl
+              if (
+                imageData.shortDescription ||
+                imageData.longDescription ||
+                imageData.rewardName
+              ) {
+                campaignMeta = {
+                  shortDescription: imageData.shortDescription,
+                  longDescription: imageData.longDescription,
+                  rewardName: imageData.rewardName,
                 }
               }
-            } catch (e) {
-              // Silently fail if image fetch fails
             }
+          } catch (e) {
+            // Silently fail if image fetch fails
           }
-
-          const campaign = mapContractDataToCampaign(
-            campaignData,
-            id,
-            undefined,
-            imageUrl,
-            campaignMeta,
-          )
-
-          return campaign
-        } catch (error: any) {
-          if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-            console.warn(
-              `Campaign ${id} not found for host ${hostAddress} (reverted).`,
-            )
-          } else {
-            console.warn(
-              `Failed to fetch campaign ${id} for host ${hostAddress}:`,
-              error?.message || 'Unknown error',
-            )
-          }
-          return null
         }
-      }),
-    )
+
+        const campaign = mapContractDataToCampaign(
+          campaignData,
+          id,
+          undefined,
+          imageUrl,
+          campaignMeta,
+        )
+
+        return campaign
+      } catch (error: any) {
+        if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+          console.warn(
+            `Campaign ${id} not found for host ${hostAddress} (reverted).`,
+          )
+        } else {
+          console.warn(
+            `Failed to fetch campaign ${id} for host ${hostAddress}:`,
+            error?.message || 'Unknown error',
+          )
+        }
+        return null
+      }
+    })
 
     return campaigns.filter((c): c is Campaign => c !== null)
   } catch (error) {
@@ -745,8 +812,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     JOIN_DISCORD: 1,
     JOIN_TELEGRAM: 2,
     RETWEET: 3,
+    HUMANITY_VERIFICATION: 4,
     ONCHAIN_TX: 4,
-    HUMANITY_VERIFICATION: 5,
   }
 
   try {
@@ -759,7 +826,9 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     for (const task of campaignData.tasks) {
       taskTypes.push(taskTypeMap[task.type as TaskType])
       descriptions.push(task.description)
-      verificationDatas.push(ethers.encodeBytes32String(task.verificationData || ''))
+      verificationDatas.push(
+        ethers.encodeBytes32String(task.verificationData || ''),
+      )
       isOptionals.push(false)
     }
 
@@ -797,7 +866,7 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       isOptionals,
       rewardType,
       tokenAddress,
-      rewardAmount
+      rewardAmount,
     )
     const receipt = await tx.wait()
 
@@ -820,12 +889,15 @@ export const createAndActivateCampaign = async (campaignData: any) => {
       campaignData.tasks.length,
     )
     for (const task of campaignData.tasks) {
-      console.log('🔧 Processing task off-chain metadata in createAndActivateCampaign:', {
-        type: task.type,
-        verificationData: task.verificationData,
-        telegramInviteLink: task.telegramInviteLink,
-        discordInviteLink: task.discordInviteLink,
-      })
+      console.log(
+        '🔧 Processing task off-chain metadata in createAndActivateCampaign:',
+        {
+          type: task.type,
+          verificationData: task.verificationData,
+          telegramInviteLink: task.telegramInviteLink,
+          discordInviteLink: task.discordInviteLink,
+        },
+      )
 
       // Store Discord invite links in database for this campaign
       if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
@@ -1077,8 +1149,8 @@ export const createCampaign = async (campaignData: any) => {
     JOIN_DISCORD: 1,
     JOIN_TELEGRAM: 2,
     RETWEET: 3,
+    HUMANITY_VERIFICATION: 4,
     ONCHAIN_TX: 4,
-    HUMANITY_VERIFICATION: 5,
   }
 
   try {
@@ -1091,7 +1163,9 @@ export const createCampaign = async (campaignData: any) => {
     for (const task of campaignData.tasks) {
       taskTypes.push(taskTypeMap[task.type as TaskType])
       descriptions.push(task.description)
-      verificationDatas.push(ethers.encodeBytes32String(task.verificationData || ''))
+      verificationDatas.push(
+        ethers.encodeBytes32String(task.verificationData || ''),
+      )
       isOptionals.push(false)
     }
 
@@ -1129,7 +1203,7 @@ export const createCampaign = async (campaignData: any) => {
       isOptionals,
       rewardType,
       tokenAddress,
-      rewardAmount
+      rewardAmount,
     )
     const receipt = await tx.wait()
 
@@ -1147,7 +1221,10 @@ export const createCampaign = async (campaignData: any) => {
     const campaignId = event.args.campaignId
 
     // 2. Add Off-Chain Task Metadata (DB only)
-    console.log('🔄 Processing off-chain task metadata:', campaignData.tasks.length)
+    console.log(
+      '🔄 Processing off-chain task metadata:',
+      campaignData.tasks.length,
+    )
     for (const task of campaignData.tasks) {
       console.log('🔧 Processing task off-chain metadata:', {
         type: task.type,
@@ -1418,40 +1495,118 @@ export const hasParticipated = async (
   campaignId: string,
   participantAddress: string,
 ): Promise<boolean> => {
-  const contractToUse = contract ?? readOnlyContract
-  if (!contractToUse || !participantAddress) return false
-  try {
-    // Convert campaignId from string to number for smart contract calls
-    const campaignIdNumber = parseInt(campaignId, 10)
-    return await contractToUse.hasParticipated(
-      campaignIdNumber,
-      participantAddress,
-    )
-  } catch (error: any) {
-    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-      console.warn(
-        `Campaign ${campaignId} or participation data not found/reverted.`,
+  if (!participantAddress) return false
+
+  const cacheKey = `${config.chainId}:${config.campaignFactoryAddress ?? 'unknown'}:${campaignId}:${participantAddress.toLowerCase()}`
+  const cached = participationCache.get(cacheKey)
+  const now = Date.now()
+
+  if (cached && now - cached.updatedAt < PARTICIPATION_CACHE_TTL_MS) {
+    return cached.value
+  }
+
+  if (cached?.inFlight) {
+    return cached.inFlight
+  }
+
+  const fetchPromise = (async () => {
+    let contractToUse = getReadOnlyContract() ?? contract
+    if (!contractToUse) return cached?.value ?? false
+
+    try {
+      // Convert campaignId from string to number for smart contract calls
+      const campaignIdNumber = parseInt(campaignId, 10)
+      const value = await contractToUse.hasParticipated(
+        campaignIdNumber,
+        participantAddress,
       )
-    } else {
-      console.warn(
-        `Error checking participation for ${participantAddress} in campaign ${campaignId}:`,
-        error?.message || 'Unknown error',
-      )
+      return Boolean(value)
+    } catch (error: any) {
+      if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+        console.warn(
+          `Campaign ${campaignId} or participation data not found/reverted.`,
+        )
+      } else {
+        console.warn(
+          `Error checking participation for ${participantAddress} in campaign ${campaignId}:`,
+          error?.message || 'Unknown error',
+        )
+      }
+      // Don't show a toast for this, as it might be called frequently
+      return cached?.value ?? false
     }
-    // Don't show a toast for this, as it might be called frequently
-    return false
+  })()
+
+  participationCache.set(cacheKey, {
+    value: cached?.value ?? false,
+    updatedAt: cached?.updatedAt ?? 0,
+    inFlight: fetchPromise,
+  })
+
+  try {
+    const value = await fetchPromise
+    participationCache.set(cacheKey, {
+      value,
+      updatedAt: Date.now(),
+    })
+    return value
+  } finally {
+    const latest = participationCache.get(cacheKey)
+    if (latest?.inFlight === fetchPromise) {
+      participationCache.set(cacheKey, {
+        value: latest.value,
+        updatedAt: latest.updatedAt,
+      })
+    }
   }
 }
 
 export const isHost = async (address: string): Promise<boolean> => {
-  const contractToUse = readOnlyContract ?? contract
-  if (!contractToUse || !address) return false
+  if (!address) return false
+
+  const cacheKey = `${config.chainId}:${config.campaignFactoryAddress ?? 'unknown'}:${address.toLowerCase()}`
+  const cached = hostRoleCache.get(cacheKey)
+  const now = Date.now()
+
+  if (cached && now - cached.updatedAt < HOST_ROLE_CACHE_TTL_MS) {
+    return cached.value
+  }
+
+  if (cached?.inFlight) {
+    return cached.inFlight
+  }
+
+  const fetchPromise = (async () => {
+    let contractToUse = getReadOnlyContract() ?? contract
+    if (!contractToUse) return cached?.value ?? false
+    try {
+      const hostRole = await contractToUse.HOST_ROLE()
+      const value = await contractToUse.hasRole(hostRole, address)
+      return Boolean(value)
+    } catch (error) {
+      console.error('Error checking for host role:', error)
+      return cached?.value ?? false
+    }
+  })()
+
+  hostRoleCache.set(cacheKey, {
+    value: cached?.value ?? false,
+    updatedAt: cached?.updatedAt ?? 0,
+    inFlight: fetchPromise,
+  })
+
   try {
-    const hostRole = await contractToUse.HOST_ROLE()
-    return await contractToUse.hasRole(hostRole, address)
-  } catch (error) {
-    console.error('Error checking for host role:', error)
-    return false
+    const value = await fetchPromise
+    hostRoleCache.set(cacheKey, { value, updatedAt: Date.now() })
+    return value
+  } finally {
+    const latest = hostRoleCache.get(cacheKey)
+    if (latest?.inFlight === fetchPromise) {
+      hostRoleCache.set(cacheKey, {
+        value: latest.value,
+        updatedAt: latest.updatedAt,
+      })
+    }
   }
 }
 
@@ -1612,6 +1767,8 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
   // This function is called with the user's connected wallet.
   // The smart contract automatically uses msg.sender as the participant.
   const signer = await getSigner()
+  const signerAddress = await signer.getAddress()
+  const walletNetwork = provider ? await provider.getNetwork() : null
   let contractWithSigner = contract.connect(signer) as Contract
 
   try {
@@ -1638,6 +1795,9 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       campaignId: campaignIdNumber,
       taskIndex,
       userAddress,
+      signerAddress,
+      walletChainId:
+        walletNetwork?.chainId?.toString?.() ?? walletNetwork?.chainId,
     })
 
     // First, let's check the campaign status and other details
@@ -1649,6 +1809,9 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       host: campaignData.host,
       tasksLength: campaignData.tasks.length,
       requestedTaskIndex: taskIndex,
+      startTime: Number(campaignData.startTime),
+      endTime: Number(campaignData.endTime),
+      now: Math.floor(Date.now() / 1000),
     })
 
     // Check if campaign is in Open status (should be 1)
@@ -1687,6 +1850,7 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
         throw new Error('You have already completed this task.')
       }
     } catch (checkErr: any) {
+      // If it's our own error, re-throw. Otherwise ignore and let the contract call handle it.
       if (checkErr.message === 'You have already completed this task.')
         throw checkErr
       console.warn(
@@ -1695,110 +1859,266 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       )
     }
 
-    // Simulate the call first via direct RPC (bypasses MetaMask which strips error data)
-    try {
-      console.log('🔍 Pre-simulating completeTask via RPC...')
-      const rpcProvider = new ethers.JsonRpcProvider(TARGET_RPC_URL)
-      const simContract = new ethers.Contract(
-        config.campaignFactoryAddress!,
-        Web3Campaigns.abi,
-        rpcProvider,
-      )
-      await simContract.completeTask.staticCall(
-        campaignIdNumber,
-        taskIndex,
-        { from: userAddress },
-      )
-      console.log('✅ Simulation passed, sending real transaction...')
-    } catch (simError: any) {
-      console.error(
-        '🔴 Simulation reverted: ' +
-          JSON.stringify({
-            code: simError?.code,
-            reason: simError?.reason,
-            shortMessage: simError?.shortMessage,
-            data: simError?.data,
-          }),
-      )
+    // The smart contract completeTask function only takes campaignId and taskIndex
+    // It automatically uses msg.sender (the connected wallet) as the participant
+    console.log('Calling smart contract completeTask...', {
+      campaignIdNumber,
+      taskIndex,
+    })
+    const tx = await contractWithSigner.completeTask(
+      campaignIdNumber,
+      taskIndex,
+    )
 
-      const errorMap: Record<string, string> = {
-        Web3Campaigns__CampaignNotOpen: 'Campaign is not open for task completion.',
-        Web3Campaigns__CampaignEnded: 'This campaign has ended.',
-        Web3Campaigns__CampaignNotFound: 'Campaign not found.',
-        Web3Campaigns__CampaignStartTimeNotYetStrated: 'Campaign start time has not been reached yet.',
-        Web3Campaigns__TaskAlreadyCompleted: 'You have already completed this task.',
-        Web3Campaigns__TaskNotFound: 'Task not found in this campaign.',
-        Web3Campaigns__PosterCannotAcceptOwnTask: 'Campaign hosts cannot complete their own tasks.',
-        Web3Campaigns__InvalidTaskType: 'This task type is invalid or requires host verification.',
-        EnforcedPause: 'The contract is currently paused.',
-      }
-
-      // Check text fields for known error names
-      const searchTexts = [simError?.reason, simError?.shortMessage, simError?.message].filter(Boolean).join(' ')
-      for (const [name, msg] of Object.entries(errorMap)) {
-        if (searchTexts.includes(name)) throw new Error(msg)
-      }
-
-      // Try decoding hex error data from RPC
-      const candidates = [simError?.data, simError?.error?.data, simError?.info?.error?.data].filter(
-        (d) => d && typeof d === 'string' && d.startsWith('0x') && d.length > 2,
-      )
-      const iface = new ethers.Interface(Web3Campaigns.abi)
-      for (const data of candidates) {
-        try {
-          const parsed = iface.parseError(data)
-          if (parsed?.name) throw new Error(errorMap[parsed.name] || 'Contract error: ' + parsed.name)
-        } catch (e: any) {
-          if (e.message && !e.message.includes('no matching error')) throw e
-        }
-      }
-
-      // Diagnostic fallback: determine specific reason from on-chain state
-      const now = Math.floor(Date.now() / 1000)
-      if (Number(campaignData.status) !== 1) {
-        throw new Error('Campaign is not open. Status: ' + ['Draft', 'Open', 'Ended', 'Closed'][Number(campaignData.status)] + '.')
-      }
-      if (userAddress.toLowerCase() === campaignData.host.toLowerCase()) {
-        throw new Error('Campaign hosts cannot complete their own tasks.')
-      }
-      if (now > Number(campaignData.endTime)) throw new Error('This campaign has ended.')
-      if (now < Number(campaignData.startTime)) throw new Error('Campaign has not started yet.')
-
-      try {
-        const done = await contractToRead.hasCompletedTask(campaignIdNumber, userAddress, taskIndex)
-        if (done) throw new Error('You have already completed this task.')
-      } catch (e: any) {
-        if (e.message === 'You have already completed this task.') throw e
-      }
-
-      throw new Error(simError?.shortMessage || simError?.reason || 'Transaction rejected. Try again in 30 seconds.')
-    }
-
-    console.log('Calling smart contract completeTask...', { campaignIdNumber, taskIndex })
-    const tx = await contractWithSigner.completeTask(campaignIdNumber, taskIndex)
     console.log('Transaction sent:', tx.hash)
     await tx.wait()
+
     console.log('Task completed successfully!')
   } catch (error: any) {
-    // If it already has a user-friendly message from pre-checks or simulation, re-throw directly
-    if (
-      error.message &&
-      !error.message.includes('missing revert data') &&
-      !error.message.includes('CALL_EXCEPTION') &&
-      !error.message.includes('could not coalesce error')
-    ) {
-      console.error('Parsed error description:', error.message)
-      throw error
+    console.error('🔴 completeTask error object:', {
+      code: error?.code,
+      reason: error?.reason,
+      message: error?.message,
+      data: error?.data,
+      errorData: error?.error?.data,
+      infoErrorData: error?.info?.error?.data,
+      shortMessage: error?.shortMessage,
+      revert: error?.revert,
+      transaction: error?.transaction,
+    })
+
+    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+      console.warn(
+        `Campaign ${campaignId} not found or reverted when attempting task completion.`,
+      )
+    } else {
+      console.warn(
+        `Error completing task ${taskIndex} for campaign ${campaignId}:`,
+        error?.message || 'Unknown error',
+      )
     }
 
-    let description = 'Failed to complete task.'
-    if (error.reason) {
-      if (error.reason.includes('CampaignNotOpen')) description = 'Campaign is not open.'
-      else if (error.reason.includes('TaskAlreadyCompleted')) description = 'Task already completed.'
-      else if (error.reason.includes('PosterCannotAcceptOwnTask')) description = 'Hosts cannot complete own tasks.'
-      else description += ' Reason: ' + error.reason
-    } else {
-      description = error?.shortMessage || 'Transaction failed. Please check console and try again.'
+    let description = `Failed to complete task.`
+
+    const errorMap: Record<string, string> = {
+      Web3Campaigns__CampaignNotOpen:
+        'Campaign is not open for task completion.',
+      Web3Campaigns__CampaignEnded:
+        'This campaign has ended and cannot accept tasks.',
+      Web3Campaigns__CampaignNotFound: 'Campaign not found.',
+      Web3Campaigns__CampaignStartTimeNotYetStrated:
+        'Campaign start time has not been reached yet.',
+      Web3Campaigns__TaskAlreadyCompleted:
+        'You have already completed this task.',
+      Web3Campaigns__TaskNotFound: 'Task not found in this campaign.',
+      Web3Campaigns__PosterCannotAcceptOwnTask:
+        'Campaign hosts cannot complete tasks on their own campaign.',
+      Web3Campaigns__TaskNotVerifiableByHost:
+        'This task requires host verification before completion.',
+      EnforcedPause:
+        'The contract is currently paused. Please try again later.',
+      ReentrancyGuardReentrantCall:
+        'Transaction was blocked due to reentrancy protection. Please try again.',
+    }
+
+    // Try to decode custom errors for a clearer message — check ALL possible data locations
+    const errorDataCandidates = [
+      error?.data?.data,
+      error?.data,
+      error?.error?.data,
+      error?.info?.error?.data,
+      error?.error?.error?.data,
+      error?.info?.error?.error?.data,
+      // ethers.js v6 sometimes puts it under revert
+      error?.revert?.data,
+    ].filter(
+      (d) => d && typeof d === 'string' && d.startsWith('0x') && d.length > 2,
+    )
+
+    console.log('🔍 Error data candidates found:', errorDataCandidates)
+
+    let decoded = null
+    const iface = new ethers.Interface(Web3Campaigns.abi)
+
+    for (const errorData of errorDataCandidates) {
+      try {
+        decoded = iface.parseError(errorData)
+        if (decoded?.name) {
+          console.log('✅ Decoded custom error:', decoded.name)
+          description =
+            errorMap[decoded.name] || `Contract error: ${decoded.name}`
+          break
+        }
+      } catch (decodeError) {
+        console.warn(
+          'Failed to decode error data candidate:',
+          errorData,
+          decodeError,
+        )
+      }
+    }
+
+    // If we couldn't decode from error data, try to simulate the call to get the revert data
+    if (!decoded && contractWithSigner) {
+      try {
+        console.log('🔍 Attempting eth_call simulation to get revert data...')
+        const campaignIdNumber = parseInt(campaignId, 10)
+        await contractWithSigner.completeTask.staticCall(
+          campaignIdNumber,
+          taskIndex,
+        )
+      } catch (simError: any) {
+        console.log('🔍 Simulation error:', {
+          code: simError?.code,
+          reason: simError?.reason,
+          data: simError?.data,
+          revert: simError?.revert,
+          shortMessage: simError?.shortMessage,
+        })
+
+        // Try to extract error name from simulation
+        const simDataCandidates = [
+          simError?.data?.data,
+          simError?.data,
+          simError?.error?.data,
+          simError?.info?.error?.data,
+          simError?.revert?.data,
+        ].filter(
+          (d) =>
+            d && typeof d === 'string' && d.startsWith('0x') && d.length > 2,
+        )
+
+        for (const simData of simDataCandidates) {
+          try {
+            decoded = iface.parseError(simData)
+            if (decoded?.name) {
+              console.log(
+                '✅ Decoded custom error from simulation:',
+                decoded.name,
+              )
+              description =
+                errorMap[decoded.name] || `Contract error: ${decoded.name}`
+              break
+            }
+          } catch {
+            // continue to next candidate
+          }
+        }
+
+        // Also check if the simulation gave us a reason string
+        if (!decoded && simError?.reason) {
+          console.log('✅ Got reason from simulation:', simError.reason)
+          // Check against known error names
+          for (const [errorName, errorMsg] of Object.entries(errorMap)) {
+            if (simError.reason.includes(errorName)) {
+              description = errorMsg
+              decoded = { name: errorName } as any
+              break
+            }
+          }
+        }
+
+        // Check shortMessage from simulation
+        if (!decoded && simError?.shortMessage) {
+          for (const [errorName, errorMsg] of Object.entries(errorMap)) {
+            if (simError.shortMessage.includes(errorName)) {
+              description = errorMsg
+              decoded = { name: errorName } as any
+              break
+            }
+          }
+        }
+      }
+    }
+
+    // Parse common smart contract errors from error.reason
+    if (!decoded && error.reason) {
+      if (error.reason.includes('CampaignNotOpen')) {
+        description = 'Campaign is not open for task completion.'
+      } else if (error.reason.includes('TaskAlreadyCompleted')) {
+        description = 'You have already completed this task.'
+      } else if (error.reason.includes('TaskNotFound')) {
+        description = 'Task not found in this campaign.'
+      } else if (error.reason.includes('PosterCannotAcceptOwnTask')) {
+        description =
+          'Campaign hosts cannot complete tasks on their own campaign.'
+      } else if (error.reason.includes('Too many rapid actions')) {
+        description = 'Please wait 30 seconds between actions.'
+      } else if (
+        error.reason.includes('Account flagged for suspicious activity')
+      ) {
+        description = 'Account flagged for suspicious activity.'
+      } else if (error.reason.includes('Campaign not in active period')) {
+        description = 'This campaign is not currently active.'
+      } else {
+        description += ` Reason: ${error.reason}`
+      }
+    } else if (!decoded && error.shortMessage) {
+      // ethers.js v6 often puts useful info in shortMessage
+      for (const [errorName, errorMsg] of Object.entries(errorMap)) {
+        if (error.shortMessage.includes(errorName)) {
+          description = errorMsg
+          break
+        }
+      }
+      if (description === 'Failed to complete task.') {
+        description = error.shortMessage
+      }
+    } else if (
+      !decoded &&
+      error.message &&
+      !error.message.includes('missing revert data') &&
+      !error.message.includes('CALL_EXCEPTION')
+    ) {
+      // Use the message only if it's our own pre-check error, not the raw ethers CALL_EXCEPTION
+      description = error.message
+    } else if (!decoded) {
+      // Last resort: check the campaign's current state to give a specific reason
+      try {
+        const contractToRead = readOnlyContract || contractWithSigner
+        if (contractToRead) {
+          const campaignIdNumber = parseInt(campaignId, 10)
+          const campaignData =
+            await contractToRead.getCampaign(campaignIdNumber)
+          const userAddress = await (await getSigner()).getAddress()
+          const now = Math.floor(Date.now() / 1000)
+
+          if (Number(campaignData.status) !== 1) {
+            description = `Campaign is not open. Current status: ${['Draft', 'Open', 'Ended', 'Closed'][Number(campaignData.status)] || campaignData.status}.`
+          } else if (
+            userAddress.toLowerCase() === campaignData.host.toLowerCase()
+          ) {
+            description =
+              'Campaign hosts cannot complete tasks on their own campaign. Please use a different wallet.'
+          } else if (now > Number(campaignData.endTime)) {
+            description = 'This campaign has ended. The end time has passed.'
+          } else if (now < Number(campaignData.startTime)) {
+            description = 'Campaign start time has not been reached yet.'
+          } else {
+            // Check if task already completed
+            try {
+              const alreadyDone = await contractToRead.hasCompletedTask(
+                campaignIdNumber,
+                userAddress,
+                taskIndex,
+              )
+              if (alreadyDone) {
+                description = 'You have already completed this task.'
+              } else {
+                description =
+                  'Transaction rejected by the smart contract. The campaign is active and the task is not yet completed. Please check the browser console for more details and try again.'
+              }
+            } catch {
+              description =
+                'Transaction rejected by the smart contract. Please check the browser console for more details and try again.'
+            }
+          }
+        }
+      } catch (diagError) {
+        console.warn('Diagnostic check failed:', diagError)
+        description =
+          'Transaction rejected by the smart contract. Please check the browser console for more details and try again.'
+      }
     }
 
     console.error('Parsed error description:', description)
@@ -1822,69 +2142,80 @@ export const getUserTaskCompletionStatus = async (
 
   if (!contractToUse || !userAddress) return {}
 
-  const completionStatus: { [taskId: string]: boolean } = {}
+  try {
+    const completionStatus: { [taskId: string]: boolean } = {}
 
-  // Initialize all tasks as not completed first
-  tasks.forEach((task) => {
-    completionStatus[task.id] = false
-  })
+    // Initialize all tasks as not completed first
+    tasks.forEach((task) => {
+      completionStatus[task.id] = false
+    })
 
-  const campaignIdNumber = parseInt(campaignId, 10)
-  if (Number.isNaN(campaignIdNumber)) {
+    console.log('Checking task completion for:', {
+      campaignId,
+      userAddress,
+      taskCount: tasks.length,
+      taskIds: tasks.map((t) => t.id),
+    })
+
+    const campaignIdNumber = parseInt(campaignId, 10)
+    if (Number.isNaN(campaignIdNumber)) {
+      return completionStatus
+    }
+
+    for (let taskIndex = 0; taskIndex < tasks.length; taskIndex += 1) {
+      const task = tasks[taskIndex]
+      try {
+        const isCompleted = await contractToUse.hasCompletedTask(
+          campaignIdNumber,
+          userAddress,
+          taskIndex,
+        )
+        completionStatus[task.id] = Boolean(isCompleted)
+      } catch (taskError: any) {
+        console.warn('Failed to check task completion status:', {
+          campaignId: campaignIdNumber,
+          taskIndex,
+          userAddress,
+          error: taskError?.message || 'Unknown error',
+        })
+      }
+    }
+
+    console.log('Task completion status for user:', {
+      userAddress,
+      campaignId,
+      completionStatus,
+      method: 'hasCompletedTask',
+      taskIds: tasks.map((t) => t.id),
+    })
+
+    return completionStatus
+  } catch (error: any) {
+    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
+      console.warn(
+        `Campaign ${campaignId} task completion data not found/reverted for ${userAddress}.`,
+      )
+    } else {
+      console.warn(
+        'Error checking user task completion status:',
+        error?.message || 'Unknown error',
+      )
+    }
+    console.warn('Error details:', {
+      campaignId,
+      userAddress,
+      taskCount: tasks.length,
+      contractAddress: config.campaignFactoryAddress,
+      error: error instanceof Error ? error.message : String(error),
+    })
+
+    // Return all tasks as not completed if there's an error
+    const completionStatus: { [taskId: string]: boolean } = {}
+    tasks.forEach((task) => {
+      completionStatus[task.id] = false
+    })
     return completionStatus
   }
-
-  console.log('Checking task completion via hasCompletedTask for:', {
-    campaignId,
-    userAddress,
-    taskCount: tasks.length,
-    taskIds: tasks.map((t) => t.id),
-  })
-
-  // Ensure we have a working contract with a provider
-  let providerInstance: ethers.Provider | null = null
-  if (
-    contractToUse.provider &&
-    typeof (contractToUse.provider as any).getBlockNumber === 'function'
-  ) {
-    providerInstance = contractToUse.provider as unknown as ethers.Provider
-  }
-
-  if (!providerInstance) {
-    providerInstance = new ethers.JsonRpcProvider(TARGET_RPC_URL)
-    contractToUse = new ethers.Contract(
-      config.campaignFactoryAddress!,
-      Web3Campaigns.abi,
-      providerInstance,
-    )
-  }
-
-  // Use direct hasCompletedTask calls — this reads the actual on-chain state
-  // and is the source of truth (unlike event scanning which can miss events)
-  for (let taskIndex = 0; taskIndex < tasks.length; taskIndex += 1) {
-    const task = tasks[taskIndex]
-    try {
-      const isCompleted = await contractToUse.hasCompletedTask(
-        campaignIdNumber,
-        userAddress,
-        taskIndex,
-      )
-      completionStatus[task.id] = Boolean(isCompleted)
-    } catch (taskError: any) {
-      console.warn(
-        `Failed to check task ${taskIndex} completion: ${taskError?.message || 'Unknown error'}`,
-      )
-      // Leave as false on error
-    }
-  }
-
-  console.log('Task completion status (via hasCompletedTask):', {
-    userAddress,
-    campaignId,
-    completionStatus,
-  })
-
-  return completionStatus
 }
 
 // Function to get basic participant addresses for a campaign
@@ -1896,70 +2227,122 @@ export const getCampaignParticipantAddresses = async (
     campaignId,
   )
 
-  // Try to use the wallet contract first, then fallback to read-only
-  let contractToUse = contract ?? readOnlyContract
+  const cacheKey = `${config.chainId}:${config.campaignFactoryAddress ?? 'unknown'}:${campaignId}`
+  const cached = participantAddressesCache.get(cacheKey)
+  const now = Date.now()
 
-  if (!contractToUse) {
-    console.log(
-      'No contract available, trying to initialize read-only contract...',
-    )
-    initializeReadOnlyProvider()
-    contractToUse = readOnlyContract
+  if (cached && now - cached.updatedAt < PARTICIPANT_CACHE_TTL_MS) {
+    return cached.addresses
   }
 
-  if (!contractToUse) {
-    console.log('Still no contract available after initialization')
-    return []
+  if (cached?.inFlight) {
+    return cached.inFlight
   }
 
-  try {
-    // Check if we have a provider
-    let providerInstance: ethers.Provider | null = null
+  const fetchPromise = (async () => {
+    let contractToUse = getReadOnlyContract() ?? contract
 
-    if (
-      contractToUse.provider &&
-      typeof (contractToUse.provider as any).getBlockNumber === 'function'
-    ) {
-      providerInstance = contractToUse.provider as unknown as ethers.Provider
+    if (!contractToUse) {
+      console.log('No contract available after initialization')
+      return cached?.addresses ?? []
     }
 
-    if (!providerInstance) {
-      console.log('No provider on contract, creating new JsonRpc provider...')
-      // Create a new provider if the contract doesn't have one
+    let providerInstance = contractToUse.runner as ethers.Provider | null
+    if (
+      !providerInstance ||
+      typeof providerInstance.getBlockNumber !== 'function'
+    ) {
       providerInstance = new ethers.JsonRpcProvider(TARGET_RPC_URL)
-
-      // Create a new contract instance with the provider
       contractToUse = new ethers.Contract(
         config.campaignFactoryAddress!,
         Web3Campaigns.abi,
         providerInstance,
       )
     }
-
-    console.log('Using provider:', providerInstance.constructor.name)
+    console.log('Using provider:', providerInstance?.constructor?.name)
 
     const latestBlock = await providerInstance.getBlockNumber()
-    const startBlock = Math.max(0, latestBlock - 49999) // Look back up to ~50k blocks
+    const cachedLastBlock = cached?.lastBlock ?? null
+    const startBlock = cachedLastBlock
+      ? Math.min(cachedLastBlock + 1, latestBlock)
+      : Math.max(0, latestBlock - 49999)
+
+    if (startBlock > latestBlock) {
+      return cached?.addresses ?? []
+    }
 
     console.log('Querying events from block', startBlock, 'to', latestBlock)
 
-    // Query ParticipantTaskCompleted events for this campaign
     const filter = contractToUse.filters.ParticipantTaskCompleted(campaignId)
     console.log('Filter created:', filter)
 
-    const events = await contractToUse.queryFilter(
-      filter,
-      startBlock,
-      latestBlock,
-    )
+    const events: any[] = []
+    let chunkSize = MAX_LOG_RANGE_FALLBACK
+
+    const parseLogRangeLimit = (message: string): number | null => {
+      const rangeMatch = message.match(/up to a (\d+) block range/i)
+      if (rangeMatch?.[1]) {
+        const maxRange = Number(rangeMatch[1])
+        if (!Number.isNaN(maxRange)) {
+          return Math.max(1, maxRange - 1)
+        }
+      }
+
+      const recommendedMatch = message.match(
+        /\[(0x[0-9a-fA-F]+),\s*(0x[0-9a-fA-F]+)\]/,
+      )
+      if (recommendedMatch?.[1] && recommendedMatch?.[2]) {
+        const from = Number.parseInt(recommendedMatch[1], 16)
+        const to = Number.parseInt(recommendedMatch[2], 16)
+        if (!Number.isNaN(from) && !Number.isNaN(to) && to >= from) {
+          return Math.max(1, to - from)
+        }
+      }
+
+      return null
+    }
+
+    let fromBlock = startBlock
+    while (fromBlock <= latestBlock) {
+      const toBlock = Math.min(fromBlock + chunkSize, latestBlock)
+
+      try {
+        const chunkEvents = await contractToUse.queryFilter(
+          filter,
+          fromBlock,
+          toBlock,
+        )
+        if (chunkEvents.length) {
+          events.push(...chunkEvents)
+        }
+        fromBlock = toBlock + 1
+      } catch (error: any) {
+        const errorMessage =
+          error?.error?.message || error?.shortMessage || error?.message || ''
+        const maxRange = parseLogRangeLimit(errorMessage)
+
+        if (maxRange && maxRange < chunkSize) {
+          chunkSize = Math.max(1, maxRange)
+          console.warn('Reducing log query range due to RPC limits:', {
+            chunkSize,
+            errorMessage,
+          })
+          continue
+        }
+
+        throw error
+      }
+    }
 
     console.log('Raw events found:', events.length, events)
 
-    // Extract unique participant addresses
-    const participantSet = new Set<string>()
+    const participantSet = new Set<string>(
+      (cached?.addresses ?? []).map((address) => address.toLowerCase()),
+    )
+
     events.forEach((event: any, index) => {
       console.log(`Event ${index}:`, event.args)
-      const participant = event.args?.[1] // participant address is the 2nd argument
+      const participant = event.args?.[1]
       if (participant) {
         console.log('Adding participant:', participant)
         participantSet.add(participant.toLowerCase())
@@ -1973,7 +2356,24 @@ export const getCampaignParticipantAddresses = async (
       eventsCount: events.length,
     })
 
+    participantAddressesCache.set(cacheKey, {
+      addresses: participantAddresses,
+      lastBlock: latestBlock,
+      updatedAt: Date.now(),
+    })
+
     return participantAddresses
+  })()
+
+  participantAddressesCache.set(cacheKey, {
+    addresses: cached?.addresses ?? [],
+    lastBlock: cached?.lastBlock ?? 0,
+    updatedAt: cached?.updatedAt ?? 0,
+    inFlight: fetchPromise,
+  })
+
+  try {
+    return await fetchPromise
   } catch (error: any) {
     if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
       console.warn(
@@ -1985,95 +2385,98 @@ export const getCampaignParticipantAddresses = async (
         error?.message || 'Unknown error',
       )
     }
-    return []
+    return cached?.addresses ?? []
+  } finally {
+    const latest = participantAddressesCache.get(cacheKey)
+    if (latest?.inFlight === fetchPromise) {
+      participantAddressesCache.set(cacheKey, {
+        addresses: latest.addresses,
+        lastBlock: latest.lastBlock,
+        updatedAt: latest.updatedAt,
+      })
+    }
   }
 }
 
 export const getCampaignParticipants = async (
   campaign: Campaign,
 ): Promise<ParticipantData[]> => {
-  // Try to use the wallet contract first, then fallback to read-only
-  let contractToUse = contract ?? readOnlyContract
+  const cacheKey = `${config.chainId}:${config.campaignFactoryAddress ?? 'unknown'}:${campaign.id}`
+  const cached = participantDetailsCache.get(cacheKey)
+  const now = Date.now()
 
-  if (!contractToUse) {
-    initializeReadOnlyProvider()
-    contractToUse = readOnlyContract
+  if (cached && now - cached.updatedAt < PARTICIPANT_DETAIL_CACHE_TTL_MS) {
+    return cached.data
   }
 
-  if (!contractToUse) return []
+  if (cached?.inFlight) {
+    return cached.inFlight
+  }
 
-  try {
-    // Check if we have a provider
-    let providerInstance: ethers.Provider | null = null
+  const fetchPromise = (async () => {
+    const contractToUse = getReadOnlyContract() ?? contract
+    if (!contractToUse) return cached?.data ?? []
 
-    if (
-      contractToUse.provider &&
-      typeof (contractToUse.provider as any).getBlockNumber === 'function'
-    ) {
-      providerInstance = contractToUse.provider as unknown as ethers.Provider
+    const campaignIdNumber = Number(campaign.id)
+    if (Number.isNaN(campaignIdNumber)) return []
+
+    const participantAddresses = await getCampaignParticipantAddresses(
+      String(campaign.id),
+    )
+
+    if (participantAddresses.length === 0) {
+      participantDetailsCache.set(cacheKey, {
+        data: [],
+        updatedAt: Date.now(),
+      })
+      return []
     }
 
-    if (!providerInstance) {
-      // Create a new provider if the contract doesn't have one
-      providerInstance = new ethers.JsonRpcProvider(TARGET_RPC_URL)
+    const tasksCount = campaign.tasks.length
 
-      // Create a new contract instance with the provider
-      contractToUse = new ethers.Contract(
-        config.campaignFactoryAddress!,
-        Web3Campaigns.abi,
-        providerInstance,
-      )
-    }
-
-    const latestBlock = await providerInstance.getBlockNumber()
-
-    const maxRange = 50000
-    const startBlock = Math.max(0, latestBlock - 49999)
-
-    let events: any[] = []
-    for (
-      let fromBlock = startBlock;
-      fromBlock <= latestBlock;
-      fromBlock += maxRange
-    ) {
-      const toBlock = Math.min(fromBlock + maxRange - 1, latestBlock)
-      const filter = contractToUse.filters.ParticipantTaskCompleted(campaign.id)
-      const chunkEvents = await contractToUse.queryFilter(
-        filter,
-        fromBlock,
-        toBlock,
-      )
-      events.push(...chunkEvents)
-    }
-
-    const participantTaskCompletion = new Map<string, Set<string>>()
-    for (const event of events) {
-      const [_, participant, taskId] = event.args
-      const taskIdStr = taskId
-      if (!participantTaskCompletion.has(participant)) {
-        participantTaskCompletion.set(participant, new Set<string>())
-      }
-      participantTaskCompletion.get(participant)!.add(taskIdStr)
-    }
-
-    const participantAddresses = Array.from(participantTaskCompletion.keys())
-    const participantData = await Promise.all(
-      participantAddresses.map(async (address) => {
-        const hasClaimed = await contractToUse!.hasClaimedReward(
-          campaign.id,
+    const participantData = await runWithConcurrency(
+      participantAddresses,
+      PARTICIPANT_QUERY_CONCURRENCY,
+      async (address) => {
+        const hasClaimed = await contractToUse.hasClaimedReward(
+          campaignIdNumber,
           address,
         )
-        const completedTasksCount =
-          participantTaskCompletion.get(address)?.size || 0
+
+        let completedTasksCount = 0
+        for (let taskIndex = 0; taskIndex < tasksCount; taskIndex += 1) {
+          const completed = await contractToUse.hasCompletedTask(
+            campaignIdNumber,
+            address,
+            taskIndex,
+          )
+          if (completed) completedTasksCount += 1
+        }
+
         return {
           address,
           tasksCompleted: completedTasksCount,
-          claimed: hasClaimed,
+          claimed: Boolean(hasClaimed),
         }
-      }),
+      },
     )
 
+    participantDetailsCache.set(cacheKey, {
+      data: participantData,
+      updatedAt: Date.now(),
+    })
+
     return participantData
+  })()
+
+  participantDetailsCache.set(cacheKey, {
+    data: cached?.data ?? [],
+    updatedAt: cached?.updatedAt ?? 0,
+    inFlight: fetchPromise,
+  })
+
+  try {
+    return await fetchPromise
   } catch (error: any) {
     if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
       console.warn(
@@ -2090,17 +2493,56 @@ export const getCampaignParticipants = async (
       title: 'Error',
       description: 'Could not fetch participant data.',
     })
-    return []
+    return cached?.data ?? []
+  } finally {
+    const latest = participantDetailsCache.get(cacheKey)
+    if (latest?.inFlight === fetchPromise) {
+      participantDetailsCache.set(cacheKey, {
+        data: latest.data,
+        updatedAt: latest.updatedAt,
+      })
+    }
   }
 }
 
 export const isPaused = async (): Promise<boolean> => {
-  const contractToUse = readOnlyContract
-  if (!contractToUse) return false
+  const now = Date.now()
+  if (pausedCache && now - pausedCache.updatedAt < PAUSED_CACHE_TTL_MS) {
+    return pausedCache.value
+  }
+
+  if (pausedCache?.inFlight) {
+    return pausedCache.inFlight
+  }
+
+  const fetchPromise = (async () => {
+    const contractToUse = getReadOnlyContract()
+    if (!contractToUse) return pausedCache?.value ?? false
+    try {
+      const value = await contractToUse.paused()
+      return Boolean(value)
+    } catch (error) {
+      console.error('Error checking for paused state:', error)
+      return pausedCache?.value ?? false
+    }
+  })()
+
+  pausedCache = {
+    value: pausedCache?.value ?? false,
+    updatedAt: pausedCache?.updatedAt ?? 0,
+    inFlight: fetchPromise,
+  }
+
   try {
-    return await contractToUse.paused()
-  } catch (error) {
-    console.error('Error checking for paused state:', error)
-    return false
+    const value = await fetchPromise
+    pausedCache = { value, updatedAt: Date.now() }
+    return value
+  } finally {
+    if (pausedCache?.inFlight === fetchPromise) {
+      pausedCache = {
+        value: pausedCache.value,
+        updatedAt: pausedCache.updatedAt,
+      }
+    }
   }
 }

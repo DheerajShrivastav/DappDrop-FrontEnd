@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -89,6 +89,8 @@ export default function CampaignDetailsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isActivating, setIsActivating] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const fetchInFlightRef = useRef<Promise<void> | null>(null)
+  const lastFetchRef = useRef(0)
 
   // Winner selection state
   const [numberOfWinners, setNumberOfWinners] = useState(1)
@@ -327,59 +329,73 @@ export default function CampaignDetailsPage() {
   const fetchAllCampaignData = useCallback(
     async (forceRefresh: boolean = false) => {
       if (!campaignId) return
+      const now = Date.now()
+      if (!forceRefresh && now - lastFetchRef.current < 800) return
+      if (fetchInFlightRef.current) return fetchInFlightRef.current
 
-      setIsLoading(true)
-      const fetchedCampaign = await getCampaignByIdWithMetadata(
-        campaignId,
-        forceRefresh,
-      )
+      const fetchPromise = (async () => {
+        setIsLoading(true)
+        const fetchedCampaign = await getCampaignByIdWithMetadata(
+          campaignId,
+          forceRefresh,
+        )
 
-      if (fetchedCampaign) {
-        setCampaign(fetchedCampaign)
+        if (fetchedCampaign) {
+          setCampaign(fetchedCampaign)
 
-        let initialUserTasks = fetchedCampaign.tasks.map((task) => ({
-          taskId: task.id,
-          completed: false,
-        }))
-
-        if (address && isConnected) {
-          const taskCompletionStatus = await getUserTaskCompletionStatus(
-            campaignId,
-            address,
-            fetchedCampaign.tasks,
-          )
-
-          initialUserTasks = fetchedCampaign.tasks.map((task) => ({
+          let initialUserTasks = fetchedCampaign.tasks.map((task) => ({
             taskId: task.id,
-            completed: taskCompletionStatus[task.id] || false,
+            completed: false,
           }))
 
-          const hasJoined = await hasParticipated(campaignId, address)
-          setIsJoined(hasJoined)
+          if (address && isConnected) {
+            const taskCompletionStatus = await getUserTaskCompletionStatus(
+              campaignId,
+              address,
+              fetchedCampaign.tasks,
+            )
+
+            initialUserTasks = fetchedCampaign.tasks.map((task) => ({
+              taskId: task.id,
+              completed: taskCompletionStatus[task.id] || false,
+            }))
+
+            const hasJoined = await hasParticipated(campaignId, address)
+            setIsJoined(hasJoined)
+          }
+
+          setUserTasks(initialUserTasks)
+
+          const isHostForCampaign =
+            role === 'host' &&
+            address?.toLowerCase() === fetchedCampaign.host.toLowerCase()
+
+          if (isHostForCampaign && fetchedCampaign.participants > 0) {
+            const addresses = await getCampaignParticipantAddresses(campaignId)
+            setParticipantAddresses(addresses)
+            const data = await getCampaignParticipants(fetchedCampaign)
+            setParticipants(data)
+          } else {
+            setParticipantAddresses([])
+            setParticipants([])
+          }
+        } else {
+          toast({
+            variant: 'destructive',
+            title: 'Campaign Not Found',
+            description: 'Could not load data for this campaign.',
+          })
         }
+        setIsLoading(false)
+      })()
 
-        setUserTasks(initialUserTasks)
-
-        // Fetch participant count for all users
-        const addresses = await getCampaignParticipantAddresses(campaignId)
-        setParticipantAddresses(addresses)
-
-        // Fetch detailed participant data only for hosts (used in analytics)
-        if (
-          role === 'host' &&
-          address?.toLowerCase() === fetchedCampaign.host.toLowerCase()
-        ) {
-          const data = await getCampaignParticipants(fetchedCampaign)
-          setParticipants(data)
-        }
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Campaign Not Found',
-          description: 'Could not load data for this campaign.',
-        })
+      fetchInFlightRef.current = fetchPromise
+      try {
+        await fetchPromise
+      } finally {
+        fetchInFlightRef.current = null
+        lastFetchRef.current = Date.now()
       }
-      setIsLoading(false)
     },
     [campaignId, address, isConnected, role, toast],
   )
@@ -865,7 +881,7 @@ export default function CampaignDetailsPage() {
           <div className="space-y-6">
             <CampaignSidebar
               campaign={campaign}
-              participantCount={participantAddresses.length}
+              participantCount={campaign.participants}
               isHostOfCampaign={!!isHostOfCampaign}
               isRefreshing={isRefreshing}
               isUpdatingCampaign={isUpdatingCampaign}
