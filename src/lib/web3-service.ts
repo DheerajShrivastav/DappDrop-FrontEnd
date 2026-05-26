@@ -158,13 +158,17 @@ const mapContractDataToCampaign = (
 ): Campaign => {
   const statusMap = ['Draft', 'Open', 'Ended', 'Closed']
   const rewardTypeMap = ['ERC20', 'ERC721', 'None']
+  // Must match Solidity enum CampaignStorage.TaskType exactly:
+  // 0=SOCIAL_FOLLOW, 1=JOIN_DISCORD, 2=JOIN_TELEGRAM, 3=SOCIAL_REPOST,
+  // 4=ONCHAIN_TX, 5=HUMANITY_VERIFICATION, 6=SOCIAL_LIKE, 7=SOCIAL_POST,
+  // 8=WALLET_CONNECT, 9=ONCHAIN_HOLD_ERC20, 10=ONCHAIN_HOLD_ERC721
   const taskTypeMap: TaskType[] = [
-    'SOCIAL_FOLLOW',
-    'JOIN_DISCORD',
-    'JOIN_TELEGRAM',
-    'RETWEET',
-    'HUMANITY_VERIFICATION',
-    'ONCHAIN_TX',
+    'SOCIAL_FOLLOW',         // 0
+    'JOIN_DISCORD',          // 1
+    'JOIN_TELEGRAM',         // 2
+    'RETWEET',               // 3 (SOCIAL_REPOST in Solidity)
+    'ONCHAIN_TX',            // 4
+    'HUMANITY_VERIFICATION', // 5
   ]
 
   // Use stored reward name if available, otherwise fall back to generated text
@@ -807,13 +811,14 @@ export const createAndActivateCampaign = async (campaignData: any) => {
   // Check if localStorage is available (not server-side)
   const hasLocalStorage = typeof window !== 'undefined' && window.localStorage
 
+  // Must match Solidity enum CampaignStorage.TaskType exactly
   const taskTypeMap: Record<TaskType, number> = {
     SOCIAL_FOLLOW: 0,
     JOIN_DISCORD: 1,
     JOIN_TELEGRAM: 2,
-    RETWEET: 3,
-    HUMANITY_VERIFICATION: 4,
+    RETWEET: 3,               // SOCIAL_REPOST in Solidity
     ONCHAIN_TX: 4,
+    HUMANITY_VERIFICATION: 5,
   }
 
   try {
@@ -1144,13 +1149,14 @@ export const createCampaign = async (campaignData: any) => {
   // Check if localStorage is available (not server-side)
   const hasLocalStorage = typeof window !== 'undefined' && window.localStorage
 
+  // Must match Solidity enum CampaignStorage.TaskType exactly
   const taskTypeMap: Record<TaskType, number> = {
     SOCIAL_FOLLOW: 0,
     JOIN_DISCORD: 1,
     JOIN_TELEGRAM: 2,
-    RETWEET: 3,
-    HUMANITY_VERIFICATION: 4,
+    RETWEET: 3,               // SOCIAL_REPOST in Solidity
     ONCHAIN_TX: 4,
+    HUMANITY_VERIFICATION: 5,
   }
 
   try {
@@ -1865,10 +1871,77 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       campaignIdNumber,
       taskIndex,
     })
-    const tx = await contractWithSigner.completeTask(
-      campaignIdNumber,
-      taskIndex,
-    )
+
+    // Check the task type from the contract — HUMANITY_VERIFICATION (type 4) and
+    // other on-chain task types may cause estimateGas to fail with "missing revert
+    // data" because the RPC node doesn't return custom error data. In that case we
+    // send the tx with a manual gas limit to bypass the estimateGas pre-flight.
+    let taskTypeOnChain: number | null = null
+    try {
+      const taskData = await contractToRead.getCampaignTask(
+        campaignIdNumber,
+        taskIndex,
+      )
+      taskTypeOnChain = Number(taskData.taskType)
+      console.log('On-chain task type:', taskTypeOnChain)
+    } catch (e) {
+      console.warn('Could not read task type, proceeding with default flow')
+    }
+
+    // For ONCHAIN_TX (4), HUMANITY_VERIFICATION (5) and similar on-chain
+    // verified tasks, the contract's completeTask may revert during estimateGas
+    // because the contract performs direct on-chain verification that can fail
+    // silently (no revert data returned by the RPC). We handle this by:
+    // 1. First trying a staticCall to check if the tx would succeed
+    // 2. If staticCall succeeds, send with default gas estimation
+    // 3. If staticCall fails with "missing revert data", send with manual gas
+    const isOnChainVerifiedTask = taskTypeOnChain === 4 || taskTypeOnChain === 5
+
+    let tx
+    if (isOnChainVerifiedTask) {
+      // For on-chain verified tasks, try staticCall first to detect revert reasons
+      try {
+        await contractWithSigner.completeTask.staticCall(
+          campaignIdNumber,
+          taskIndex,
+        )
+        // staticCall succeeded — the actual tx should also succeed
+        tx = await contractWithSigner.completeTask(
+          campaignIdNumber,
+          taskIndex,
+        )
+      } catch (staticErr: any) {
+        console.warn('staticCall failed for on-chain task:', staticErr?.shortMessage || staticErr?.message)
+
+        // If "missing revert data" — the RPC just can't return the error.
+        // Try sending the tx with a manual gas limit (bypasses estimateGas).
+        if (
+          staticErr?.shortMessage?.includes('missing revert data') ||
+          staticErr?.message?.includes('missing revert data') ||
+          (staticErr?.code === 'CALL_EXCEPTION' && staticErr?.data === null)
+        ) {
+          console.log('Attempting tx with manual gas limit to bypass estimateGas...')
+          try {
+            tx = await contractWithSigner.completeTask(
+              campaignIdNumber,
+              taskIndex,
+              { gasLimit: 300000 },
+            )
+          } catch (manualGasErr: any) {
+            console.error('Manual gas tx also failed:', manualGasErr?.shortMessage || manualGasErr?.message)
+            throw manualGasErr
+          }
+        } else {
+          // staticCall gave us a real error — re-throw it
+          throw staticErr
+        }
+      }
+    } else {
+      tx = await contractWithSigner.completeTask(
+        campaignIdNumber,
+        taskIndex,
+      )
+    }
 
     console.log('Transaction sent:', tx.hash)
     await tx.wait()
