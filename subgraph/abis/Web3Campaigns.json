@@ -1,0 +1,1373 @@
+[
+  {
+    "type": "constructor",
+    "inputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "fallback",
+    "stateMutability": "payable"
+  },
+  {
+    "type": "receive",
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "DEFAULT_ADMIN_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "EMERGENCY_ADMIN",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "HOST_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "JOIN_COOLDOWN",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_CAMPAIGN_DURATION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_PARTICIPANTS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_SUSPICIOUS_SCORE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MIN_CAMPAIGN_DURATION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "RATE_LIMIT_COOLDOWN",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "VERSION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "addTaskToCampaign",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_taskType",
+        "type": "uint8",
+        "internalType": "enum CampaignStorage.TaskType"
+      },
+      {
+        "name": "_description",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "_verificationData",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "_isOptional",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimReward",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "closeCampaign",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "completeTask",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_taskIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createCampaign",
+    "inputs": [
+      {
+        "name": "_name",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "_startTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_endTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "createCampaignWithTasksAndReward",
+    "inputs": [
+      {
+        "name": "_name",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "_startTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_endTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_taskTypes",
+        "type": "uint8[]",
+        "internalType": "enum CampaignStorage.TaskType[]"
+      },
+      {
+        "name": "_descriptions",
+        "type": "string[]",
+        "internalType": "string[]"
+      },
+      {
+        "name": "_verificationData",
+        "type": "bytes[]",
+        "internalType": "bytes[]"
+      },
+      {
+        "name": "_isOptional",
+        "type": "bool[]",
+        "internalType": "bool[]"
+      },
+      {
+        "name": "_rewardType",
+        "type": "uint8",
+        "internalType": "enum CampaignStorage.RewardType"
+      },
+      {
+        "name": "_tokenAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_amountOrTokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "emergencyPause",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "emergencyUnpause",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "endCampaign",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getCampaign",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct CampaignStorage.Campaign",
+        "components": [
+          {
+            "name": "id",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "host",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "startTime",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "endTime",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "status",
+            "type": "uint8",
+            "internalType": "enum CampaignStorage.CampaignStatus"
+          },
+          {
+            "name": "tasks",
+            "type": "tuple[]",
+            "internalType": "struct CampaignStorage.CampaignTask[]",
+            "components": [
+              {
+                "name": "taskType",
+                "type": "uint8",
+                "internalType": "enum CampaignStorage.TaskType"
+              },
+              {
+                "name": "description",
+                "type": "string",
+                "internalType": "string"
+              },
+              {
+                "name": "verificationData",
+                "type": "bytes",
+                "internalType": "bytes"
+              },
+              {
+                "name": "isOptional",
+                "type": "bool",
+                "internalType": "bool"
+              }
+            ]
+          },
+          {
+            "name": "reward",
+            "type": "tuple",
+            "internalType": "struct CampaignStorage.CampaignReward",
+            "components": [
+              {
+                "name": "rewardType",
+                "type": "uint8",
+                "internalType": "enum CampaignStorage.RewardType"
+              },
+              {
+                "name": "tokenAddress",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "amountOrTokenId",
+                "type": "uint256",
+                "internalType": "uint256"
+              }
+            ]
+          },
+          {
+            "name": "createdAt",
+            "type": "uint224",
+            "internalType": "uint224"
+          },
+          {
+            "name": "totalParticipants",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getCampaignCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getCampaignTask",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_taskIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct CampaignStorage.CampaignTask",
+        "components": [
+          {
+            "name": "taskType",
+            "type": "uint8",
+            "internalType": "enum CampaignStorage.TaskType"
+          },
+          {
+            "name": "description",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "verificationData",
+            "type": "bytes",
+            "internalType": "bytes"
+          },
+          {
+            "name": "isOptional",
+            "type": "bool",
+            "internalType": "bool"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getCampaignsByHost",
+    "inputs": [
+      {
+        "name": "_host",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getRoleAdmin",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "grantHostRole",
+    "inputs": [
+      {
+        "name": "_account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "grantRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "hasClaimedReward",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_participant",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hasCompletedTask",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_participant",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_taskIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hasParticipated",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_participant",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hasRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "openCampaign",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "paused",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "renounceRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "callerConfirmation",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "revokeHostRole",
+    "inputs": [
+      {
+        "name": "_account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "revokeRole",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setCampaignReward",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_rewardType",
+        "type": "uint8",
+        "internalType": "enum CampaignStorage.RewardType"
+      },
+      {
+        "name": "_tokenAddress",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_amountOrTokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "supportsInterface",
+    "inputs": [
+      {
+        "name": "interfaceId",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "verifyTaskCompletion",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_participant",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_taskIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "CampaignCreated",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "host",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "startTime",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "endTime",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "CampaignStatusUpdated",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "newStatus",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CampaignStorage.CampaignStatus"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "EmergencyPause",
+    "inputs": [
+      {
+        "name": "admin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "EmergencyUnpause",
+    "inputs": [
+      {
+        "name": "admin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "timestamp",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FundsReceived",
+    "inputs": [
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ParticipantTaskCompleted",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "participant",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "taskId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Paused",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RewardClaimed",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "participant",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "rewardType",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CampaignStorage.RewardType"
+      },
+      {
+        "name": "tokenAddress",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "amountOrTokenId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RewardSet",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "rewardType",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CampaignStorage.RewardType"
+      },
+      {
+        "name": "tokenAddress",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "amountOrTokenId",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RoleAdminChanged",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "previousAdminRole",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "newAdminRole",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RoleGranted",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RoleRevoked",
+    "inputs": [
+      {
+        "name": "role",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "sender",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SecurityViolationDetected",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "reason",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SuspiciousActivity",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "activity",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TaskAddedToCampaign",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "taskId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "taskType",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CampaignStorage.TaskType"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Unpaused",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "AccessControlBadConfirmation",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "AccessControlUnauthorizedAccount",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "neededRole",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "EnforcedPause",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ExpectedPause",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ReentrancyGuardReentrantCall",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__AllTasksNotCompleted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__AlreadyClaimed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__CallerIsNotHost",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__CampaignAlreadyEnded",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__CampaignAlreadyStarted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__CampaignEnded",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__CampaignNotFound",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__CampaignNotOpen",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__CampaignNotYetEnded",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__CampaignStartTimeNotYetStrated",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__ERC20TransferFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__ERC721TransferFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InsufficientERC20Allowance",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InsufficientERC20Balance",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InvalidCampaignDuration",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InvalidRewardAmount",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InvalidRewardType",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InvalidTaskType",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InvalidVerificationData",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__NoRewardSet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__NotHoldingSpecificERC721",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__PosterCannotAcceptOwnTask",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__RewardAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__TaskAlreadyCompleted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__TaskNotFound",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__TaskNotVerifiableByHost",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__TransferFailed",
+    "inputs": []
+  }
+]

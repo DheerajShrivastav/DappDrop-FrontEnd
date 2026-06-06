@@ -27,6 +27,10 @@ const config = {
   discordBotInviteUrl: process.env.NEXT_PUBLIC_DISCORD_BOT_INVITE_URL,
   telegramBotUsername: process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME,
   uploadthingAppId: process.env.UPLOADTHING_APP_ID || '',
+  // The Graph subgraph endpoint. When set, list queries use the subgraph
+  // instead of direct RPC calls, dramatically reducing blockchain load.
+  // Format: https://api.studio.thegraph.com/query/<id>/<subgraph-name>/version/latest
+  graphApiUrl: process.env.NEXT_PUBLIC_GRAPH_API_URL || '',
 }
 
 // Warn if critical config is missing (only in development)
