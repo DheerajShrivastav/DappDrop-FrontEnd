@@ -1,4 +1,3 @@
-import { BigInt, Bytes } from '@graphprotocol/graph-ts'
 
 import {
   CampaignCreated,
@@ -31,7 +30,7 @@ export function handleCampaignCreated(event: CampaignCreated): void {
   campaign.totalParticipants = 0
   campaign.createdAt = event.block.timestamp
   campaign.createdAtBlock = event.block.number
-  campaign.rewardType = null
+  // rewardType, rewardTokenAddress, rewardAmountOrTokenId are set by RewardSet event
   campaign.rewardTokenAddress = null
   campaign.rewardAmountOrTokenId = null
   campaign.save()

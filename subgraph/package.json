@@ -4,13 +4,13 @@
   "scripts": {
     "codegen": "graph codegen",
     "build": "graph build",
-    "deploy:studio": "graph deploy --studio dappdrop",
+    "deploy:studio": "graph deploy dapp-drop-testing --node https://api.studio.thegraph.com/deploy/ --ipfs https://api.thegraph.com/ipfs/api/v0",
     "deploy:hosted": "graph deploy --product hosted-service $GRAPH_HOSTED_SERVICE_NAME",
     "create:local": "graph create --node http://localhost:8020/ dappdrop",
     "deploy:local": "graph deploy --node http://localhost:8020/ --ipfs http://localhost:5001 dappdrop"
   },
   "dependencies": {
-    "@graphprotocol/graph-cli": "^0.91.0",
+    "@graphprotocol/graph-cli": "^0.91.1",
     "@graphprotocol/graph-ts": "^0.35.1"
   }
 }
