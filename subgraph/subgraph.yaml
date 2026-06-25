@@ -8,9 +8,9 @@ dataSources:
     source:
       address: "0xA36842072E058BcdC0eaE4DE2B0F7f3d8b32cDe4"
       abi: Web3Campaigns
-      # Set this to the block your contract was deployed on for faster syncing.
-      # Find it by looking up the contract address on Sepolia Etherscan.
-      startBlock: 0
+      # Contract deployment block on Sepolia (found via eth_getCode binary search).
+      # Indexing starts here instead of genesis, making (re)syncs near-instant.
+      startBlock: 10907101
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7

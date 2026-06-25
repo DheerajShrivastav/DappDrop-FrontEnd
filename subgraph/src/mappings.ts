@@ -80,7 +80,7 @@ export function handleParticipantTaskCompleted(
 
   // Load or create Participation
   let participation = Participation.load(participationId)
-  const isNew = participation == null
+  const isNewParticipant = participation == null
 
   if (participation == null) {
     participation = new Participation(participationId)
@@ -92,20 +92,12 @@ export function handleParticipantTaskCompleted(
     participation.lastInteractionAt = event.block.timestamp
   }
 
-  participation.tasksCompleted = participation.tasksCompleted + 1
   participation.lastInteractionAt = event.block.timestamp
-  participation.save()
 
-  // Increment campaign participant count only on first task completion
-  if (isNew) {
-    let campaign = Campaign.load(campaignId)
-    if (campaign != null) {
-      campaign.totalParticipants = campaign.totalParticipants + 1
-      campaign.save()
-    }
-  }
-
-  // Create TaskCompletion record
+  // Only count a distinct task completion once. The contract reverts on
+  // duplicate completion, but guarding here keeps tasksCompleted provably
+  // equal to the number of TaskCompletion records even if an event is ever
+  // reprocessed (e.g. chain reorg).
   const completionId = participationId
     .concat('-')
     .concat(event.params.taskId.toString())
@@ -118,6 +110,20 @@ export function handleParticipantTaskCompleted(
     completion.completedAt = event.block.timestamp
     completion.completedAtBlock = event.block.number
     completion.save()
+
+    participation.tasksCompleted = participation.tasksCompleted + 1
+  }
+
+  participation.save()
+
+  // Increment campaign participant count only when this address participates
+  // for the first time.
+  if (isNewParticipant) {
+    let campaign = Campaign.load(campaignId)
+    if (campaign != null) {
+      campaign.totalParticipants = campaign.totalParticipants + 1
+      campaign.save()
+    }
   }
 }
 
