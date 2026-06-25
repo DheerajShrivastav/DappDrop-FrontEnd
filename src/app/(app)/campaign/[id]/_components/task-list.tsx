@@ -7,6 +7,7 @@ import {
   MessageSquare,
   Bot,
   ShieldCheck,
+  AlertTriangle,
 } from 'lucide-react'
 
 import type { Campaign, UserTask, Task as TaskType } from '@/lib/types'
@@ -44,6 +45,7 @@ interface TaskListProps {
   campaign: Campaign
   userTasks: UserTask[]
   role: string | null
+  isTimeExpiredNotClosed?: boolean
   onOpenVerifyDialog: (taskId: string, taskType: TaskType['type']) => void
 }
 
@@ -51,6 +53,7 @@ export function TaskList({
   campaign,
   userTasks,
   role,
+  isTimeExpiredNotClosed,
   onOpenVerifyDialog,
 }: TaskListProps) {
   const completedTasksCount = userTasks.filter((ut) => ut.completed).length
@@ -58,6 +61,26 @@ export function TaskList({
 
   return (
     <>
+      {/* Expired-but-not-closed warning banner */}
+      {isTimeExpiredNotClosed && (
+        <motion.div
+          initial={{ y: -10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.4 }}
+          className="flex items-start gap-3 p-4 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-900"
+        >
+          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-amber-500" />
+          <div>
+            <p className="font-semibold text-sm">Campaign end time has passed</p>
+            <p className="text-sm mt-0.5 text-amber-800">
+              This campaign has passed its end date but has not been officially
+              closed on-chain by the creator. Task interactions are disabled
+              until the campaign is closed.
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {/* Progress Card */}
       {role === 'participant' && (
         <motion.div
@@ -150,7 +173,11 @@ export function TaskList({
                     {role === 'participant' &&
                       !isCompleted &&
                       campaign.status === 'Open' &&
-                      (campaign.participants >= 1000 ? (
+                      (isTimeExpiredNotClosed ? (
+                        <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-700">
+                          Expired
+                        </Badge>
+                      ) : campaign.participants >= 1000 ? (
                         <Badge variant="destructive" className="bg-red-500">
                           Campaign Full
                         </Badge>

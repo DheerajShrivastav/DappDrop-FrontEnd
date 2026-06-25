@@ -139,6 +139,16 @@ export default function CampaignDetailsPage() {
     taskId: string,
     taskType: TaskType['type'],
   ) => {
+    if (isTimeExpiredNotClosed) {
+      toast({
+        variant: 'destructive',
+        title: 'Campaign Expired',
+        description:
+          'This campaign\'s end time has passed but it has not been officially closed by the creator. No new interactions are possible.',
+      })
+      return
+    }
+
     console.log('Opening verify dialog for task:', taskId, taskType)
     setVerifyingTaskId(taskId)
     setVerifyingTaskType(taskType)
@@ -818,6 +828,11 @@ export default function CampaignDetailsPage() {
     campaign &&
     address?.toLowerCase() === campaign.host.toLowerCase()
 
+  // Campaign is open on-chain but its end time has already passed —
+  // the creator forgot to call endCampaign(). Users cannot interact.
+  const isTimeExpiredNotClosed =
+    campaign?.status === 'Open' && new Date() > new Date(campaign.endDate)
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -852,7 +867,7 @@ export default function CampaignDetailsPage() {
   return (
     <div className="min-h-screen bg-gradient-soft">
       {/* Hero Section */}
-      <CampaignHero campaign={campaign} />
+      <CampaignHero campaign={campaign} isTimeExpiredNotClosed={!!isTimeExpiredNotClosed} />
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
@@ -863,6 +878,7 @@ export default function CampaignDetailsPage() {
               campaign={campaign}
               userTasks={userTasks}
               role={role}
+              isTimeExpiredNotClosed={!!isTimeExpiredNotClosed}
               onOpenVerifyDialog={handleOpenVerifyDialog}
             />
 
@@ -885,6 +901,7 @@ export default function CampaignDetailsPage() {
               isHostOfCampaign={!!isHostOfCampaign}
               isRefreshing={isRefreshing}
               isUpdatingCampaign={isUpdatingCampaign}
+              isTimeExpiredNotClosed={!!isTimeExpiredNotClosed}
               campaignActionToConfirm={campaignActionToConfirm}
               onShare={handleShare}
               onRefresh={handleRefresh}

@@ -8,8 +8,15 @@ import { ArrowLeft } from 'lucide-react'
 import type { Campaign } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { AlertTriangle } from 'lucide-react'
 
-export function CampaignHero({ campaign }: { campaign: Campaign }) {
+export function CampaignHero({
+  campaign,
+  isTimeExpiredNotClosed,
+}: {
+  campaign: Campaign
+  isTimeExpiredNotClosed?: boolean
+}) {
   return (
     <motion.div
       className="relative h-[400px] w-full overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200"
@@ -58,9 +65,17 @@ export function CampaignHero({ campaign }: { campaign: Campaign }) {
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.6 }}
           >
-            <Badge className="mb-4 bg-white/20 backdrop-blur-sm text-white border-white/30">
-              {campaign.status}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              <Badge className="bg-white/20 backdrop-blur-sm text-white border-white/30">
+                {campaign.status}
+              </Badge>
+              {isTimeExpiredNotClosed && (
+                <Badge className="bg-amber-500/90 backdrop-blur-sm text-white border-amber-400/50 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  End time passed — not yet closed
+                </Badge>
+              )}
+            </div>
             <h1 className="text-4xl md:text-5xl font-headline font-bold text-white mb-3">
               {campaign.title}
             </h1>

@@ -12,6 +12,7 @@ import {
   Rocket,
   XCircle,
   Info,
+  AlertTriangle,
 } from 'lucide-react'
 
 import type { Campaign } from '@/lib/types'
@@ -29,6 +30,7 @@ interface CampaignSidebarProps {
   isHostOfCampaign: boolean
   isRefreshing: boolean
   isUpdatingCampaign: boolean
+  isTimeExpiredNotClosed?: boolean
   campaignActionToConfirm: 'launch' | 'end' | null
   onShare: () => void
   onRefresh: () => void
@@ -41,6 +43,7 @@ export function CampaignSidebar({
   isHostOfCampaign,
   isRefreshing,
   isUpdatingCampaign,
+  isTimeExpiredNotClosed,
   campaignActionToConfirm,
   onShare,
   onRefresh,
@@ -69,6 +72,19 @@ export function CampaignSidebar({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Expired-but-not-closed warning */}
+          {isTimeExpiredNotClosed && (
+            <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-300 bg-amber-50">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
+              <p className="text-xs text-amber-800 leading-relaxed">
+                End time has passed but this campaign is not yet closed on-chain.
+                {isHostOfCampaign
+                  ? ' Please end the campaign below so participants can claim rewards.'
+                  : ' Avoid interacting until the creator closes it.'}
+              </p>
+            </div>
+          )}
+
           {/* About This Campaign */}
           {campaign.description && !campaign.description.startsWith('A campaign hosted by') && (
             <div className="p-3 bg-gradient-to-br from-slate-50 to-blue-50/50 rounded-lg border border-slate-200/60">
@@ -139,7 +155,7 @@ export function CampaignSidebar({
               {campaign.status === 'Open' && (
                 <Button
                   variant="destructive"
-                  className="w-full"
+                  className={`w-full ${isTimeExpiredNotClosed ? 'animate-pulse' : ''}`}
                   onClick={() => onCampaignAction('end')}
                   disabled={isUpdatingCampaign}
                 >
@@ -148,7 +164,7 @@ export function CampaignSidebar({
                   ) : (
                     <XCircle className="h-4 w-4 mr-2" />
                   )}
-                  End Campaign
+                  {isTimeExpiredNotClosed ? 'End Campaign (Required)' : 'End Campaign'}
                 </Button>
               )}
             </div>
