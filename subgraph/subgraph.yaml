@@ -1,0 +1,39 @@
+specVersion: 0.0.5
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: Web3Campaigns
+    network: sepolia
+    source:
+      address: "0xA36842072E058BcdC0eaE4DE2B0F7f3d8b32cDe4"
+      abi: Web3Campaigns
+      # Contract deployment block on Sepolia (found via eth_getCode binary search).
+      # Indexing starts here instead of genesis, making (re)syncs near-instant.
+      startBlock: 10907101
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Campaign
+        - Task
+        - Participation
+        - TaskCompletion
+      abis:
+        - name: Web3Campaigns
+          file: ./abis/Web3Campaigns.json
+      eventHandlers:
+        - event: CampaignCreated(indexed uint256,indexed address,string,uint256,uint256)
+          handler: handleCampaignCreated
+        - event: CampaignStatusUpdated(indexed uint256,uint8)
+          handler: handleCampaignStatusUpdated
+        - event: TaskAddedToCampaign(indexed uint256,indexed uint256,uint8,string)
+          handler: handleTaskAddedToCampaign
+        - event: ParticipantTaskCompleted(indexed uint256,indexed address,indexed uint256)
+          handler: handleParticipantTaskCompleted
+        - event: RewardSet(indexed uint256,uint8,address,uint256)
+          handler: handleRewardSet
+        - event: RewardClaimed(indexed uint256,indexed address,uint8,address,uint256)
+          handler: handleRewardClaimed
+      file: ./src/mappings.ts

@@ -4,6 +4,12 @@ import type { Campaign, ParticipantData, TaskType } from './types'
 import config from '@/app/config'
 import Web3Campaigns from './abi/Web3Campaigns.json'
 import { addDays, endOfDay, differenceInSeconds } from 'date-fns'
+import {
+  getGraphCampaigns,
+  getGraphCampaignsByHost,
+  getGraphParticipantAddresses,
+  getGraphParticipants,
+} from './graph-service'
 
 // Extend the Window interface to include ethereum
 declare global {
@@ -414,6 +420,13 @@ export const connectWallet = async (): Promise<string | null> => {
 }
 
 export const getAllCampaigns = async (): Promise<Campaign[]> => {
+  // --- Fast path: The Graph subgraph (single query, no N+1 RPC calls) ---
+  const graphResult = await getGraphCampaigns()
+  if (graphResult !== null) {
+    return graphResult
+  }
+
+  // --- Fallback: direct RPC (original behaviour when Graph is not configured) ---
   const contractToUse = readOnlyContract
   if (!contractToUse) {
     console.warn('Contract not initialized, trying to initialize read-only...')
@@ -427,7 +440,6 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
       })
       return []
     }
-    // If it was just initialized, use it
     return getAllCampaigns()
   }
 
@@ -438,14 +450,10 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
     if (campaignCount === 0) return []
 
     const campaigns = []
-    // Start from 1 as campaign IDs are 1-based index
     for (let i = 1; i <= campaignCount; i++) {
       try {
         const campaignData = await contractToUse.getCampaign(i)
         if (Number(campaignData.status) !== 3) {
-          // Not 'Closed'
-
-          // Fetch image URL and metadata from database if available
           let imageUrl: string | undefined
           let campaignMeta:
             | {
@@ -498,7 +506,6 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
         }
       }
     }
-    // Show open and ended campaigns, but not drafts
     return campaigns.filter((c) => c.status === 'Open' || c.status === 'Ended')
   } catch (error: any) {
     if (error.code === 'CALL_EXCEPTION') {
@@ -527,6 +534,13 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
 export const getCampaignsByHostAddress = async (
   hostAddress: string,
 ): Promise<Campaign[]> => {
+  // --- Fast path: The Graph subgraph ---
+  const graphResult = await getGraphCampaignsByHost(hostAddress)
+  if (graphResult !== null) {
+    return graphResult
+  }
+
+  // --- Fallback: direct RPC ---
   const contractToUse = readOnlyContract ?? contract
   if (!contractToUse) {
     console.warn('Contract not initialized for getting host campaigns.')
@@ -544,7 +558,6 @@ export const getCampaignsByHostAddress = async (
       try {
         const campaignData = await contractToUse.getCampaign(id)
 
-        // Fetch image URL and metadata from database if available
         let imageUrl: string | undefined
         let campaignMeta:
           | {
@@ -2295,11 +2308,9 @@ export const getUserTaskCompletionStatus = async (
 export const getCampaignParticipantAddresses = async (
   campaignId: string,
 ): Promise<string[]> => {
-  console.log(
-    'getCampaignParticipantAddresses called with campaignId:',
-    campaignId,
-  )
-
+  // TTL + in-flight dedup cover BOTH the Graph fast path and the RPC fallback
+  // below, so repeated calls (e.g. host analytics re-renders) don't re-hit
+  // the network every time.
   const cacheKey = `${config.chainId}:${config.campaignFactoryAddress ?? 'unknown'}:${campaignId}`
   const cached = participantAddressesCache.get(cacheKey)
   const now = Date.now()
@@ -2313,6 +2324,23 @@ export const getCampaignParticipantAddresses = async (
   }
 
   const fetchPromise = (async () => {
+    // --- Fast path: The Graph subgraph (replaces chunked event log scanning) ---
+    const graphResult = await getGraphParticipantAddresses(campaignId)
+    if (graphResult !== null) {
+      participantAddressesCache.set(cacheKey, {
+        addresses: graphResult,
+        lastBlock: cached?.lastBlock ?? 0,
+        updatedAt: Date.now(),
+      })
+      return graphResult
+    }
+
+    // --- Fallback: event log scan (original behaviour) ---
+    console.log(
+      'getCampaignParticipantAddresses called with campaignId:',
+      campaignId,
+    )
+
     let contractToUse = getReadOnlyContract() ?? contract
 
     if (!contractToUse) {
@@ -2474,6 +2502,9 @@ export const getCampaignParticipantAddresses = async (
 export const getCampaignParticipants = async (
   campaign: Campaign,
 ): Promise<ParticipantData[]> => {
+  // TTL + in-flight dedup cover BOTH the Graph fast path and the RPC fallback
+  // below, so repeated calls (e.g. host analytics re-renders) don't re-hit
+  // the network every time.
   const cacheKey = `${config.chainId}:${config.campaignFactoryAddress ?? 'unknown'}:${campaign.id}`
   const cached = participantDetailsCache.get(cacheKey)
   const now = Date.now()
@@ -2487,6 +2518,17 @@ export const getCampaignParticipants = async (
   }
 
   const fetchPromise = (async () => {
+    // --- Fast path: The Graph subgraph (replaces M×T hasCompletedTask RPC calls) ---
+    const graphResult = await getGraphParticipants(campaign.id)
+    if (graphResult !== null) {
+      participantDetailsCache.set(cacheKey, {
+        data: graphResult,
+        updatedAt: Date.now(),
+      })
+      return graphResult
+    }
+
+    // --- Fallback: per-participant RPC calls (original behaviour) ---
     const contractToUse = getReadOnlyContract() ?? contract
     if (!contractToUse) return cached?.data ?? []
 

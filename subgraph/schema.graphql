@@ -1,0 +1,51 @@
+type Campaign @entity {
+  id: ID! # on-chain campaignId as string
+  host: Bytes!
+  name: String!
+  startTime: BigInt!
+  endTime: BigInt!
+  # 0 = Draft, 1 = Open, 2 = Ended, 3 = Closed
+  status: Int!
+  totalParticipants: Int!
+  createdAt: BigInt!
+  createdAtBlock: BigInt!
+
+  # Reward info (set via RewardSet event)
+  rewardType: Int # 0 = ERC20, 1 = ERC721, 2 = None
+  rewardTokenAddress: Bytes
+  rewardAmountOrTokenId: BigInt
+
+  tasks: [Task!]! @derivedFrom(field: "campaign")
+  participations: [Participation!]! @derivedFrom(field: "campaign")
+}
+
+type Task @entity {
+  id: ID! # "{campaignId}-{taskId}"
+  campaign: Campaign!
+  taskId: BigInt!
+  # 0=SOCIAL_FOLLOW, 1=JOIN_DISCORD, 2=JOIN_TELEGRAM, 3=RETWEET, 4=ONCHAIN_TX, 5=HUMANITY_VERIFICATION
+  taskType: Int!
+  description: String!
+  addedAtBlock: BigInt!
+}
+
+type Participation @entity {
+  id: ID! # "{campaignId}-{participantAddress}"
+  campaign: Campaign!
+  participant: Bytes!
+  hasClaimedReward: Boolean!
+  tasksCompleted: Int!
+  firstInteractionAt: BigInt!
+  lastInteractionAt: BigInt!
+
+  completions: [TaskCompletion!]! @derivedFrom(field: "participation")
+}
+
+type TaskCompletion @entity {
+  id: ID! # "{campaignId}-{participantAddress}-{taskId}"
+  participation: Participation!
+  campaign: Campaign!
+  taskId: BigInt!
+  completedAt: BigInt!
+  completedAtBlock: BigInt!
+}
