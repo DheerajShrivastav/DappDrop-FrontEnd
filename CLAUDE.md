@@ -27,7 +27,7 @@ DappDrop is a **Next.js 15 App Router** project. The core split is:
 
 - **`src/app/(marketing)/`** — SSR-only public pages (landing, about, changelog). No wallet or blockchain code.
 - **`src/app/(app)/`** — Client-side authenticated app. All blockchain interaction happens here.
-- **`src/app/api/`** — Next.js API routes that run server-side. Handles social verification, Humanity Protocol, campaign metadata CRUD, and image uploads.
+- **`src/app/api/`** — Next.js API routes that run server-side. Handles social verification, Humanity Protocol, campaign metadata CRUD, image uploads, and batch off-chain metadata fetches (`/api/campaigns/metadata-batch`).
 
 ### Blockchain interaction layer
 
@@ -37,11 +37,16 @@ The file maintains two contract instances:
 - `contract` — signer-backed (requires connected wallet, used for writes)
 - `readOnlyContract` — provider-backed with `NEXT_PUBLIC_RPC_URL` (used for reads, no wallet needed)
 
+**`src/lib/graph-service.ts`** is a GraphQL client (`graphql-request`) that sits in front of the most expensive RPC paths. When `NEXT_PUBLIC_GRAPH_API_URL` is set, these four functions query the deployed subgraph instead of making N+1 RPC calls: `getGraphCampaigns`, `getGraphCampaignsByHost`, `getGraphParticipantAddresses`, `getGraphParticipants`. Each returns `null` when the env var is unset, and the callers in `web3-service.ts` fall back to direct RPC in that case.
+
 Key read functions and their cost:
-- `getAllCampaigns()` — calls `getCampaignCount()` then loops `getCampaign(i)` for every campaign. **Expensive — N+1 RPC calls.**
-- `getCampaignByIdWithMetadata()` — single `getCampaign()` + DB fetch for off-chain metadata
-- `getCampaignParticipantAddresses()` — queries `ParticipantTaskCompleted` events with incremental block caching
-- `getCampaignParticipants()` — per-participant concurrent calls (limit 3) for task completion status
+- `getAllCampaigns()` — **Graph fast path** (single query) when `NEXT_PUBLIC_GRAPH_API_URL` is set; falls back to `getCampaignCount()` + N×`getCampaign(i)` RPC loop.
+- `getCampaignsByHostAddress()` — **Graph fast path**; falls back to filtering all campaigns by host address via RPC.
+- `getCampaignByIdWithMetadata()` — single `getCampaign()` + DB fetch for off-chain metadata (no Graph path — single-campaign fetch is already O(1)).
+- `getCampaignParticipantAddresses()` — **Graph fast path** inside the 30s TTL cache; falls back to `ParticipantTaskCompleted` event log scanning.
+- `getCampaignParticipants()` — **Graph fast path** inside the 30s TTL cache; falls back to per-participant concurrent calls (limit 3).
+
+`hasParticipated`, `getUserTaskCompletionStatus`, and `isHost` intentionally stay on direct RPC — they gate the connected user's own actions and must not have subgraph indexing lag.
 
 In-memory caches (30s TTL + in-flight deduplication) exist for: `hasParticipated`, `isHost`, `isPaused`, participant addresses, and participant details. Cache keys include `chainId` and `contractAddress` to prevent cross-network leakage.
 
@@ -100,6 +105,7 @@ All config is centralized in `src/app/config.ts`.
 | `TELEGRAM_BOT_TOKEN` | Telegram membership verification |
 | `NEXT_PUBLIC_HUMANITY_CLIENT_ID` | Humanity Protocol OAuth |
 | `UPLOADTHING_SECRET` / `UPLOADTHING_TOKEN` | Campaign image uploads |
+| `NEXT_PUBLIC_GRAPH_API_URL` | The Graph subgraph endpoint; enables fast-path list queries (optional — falls back to RPC) |
 
 ### UI component conventions
 

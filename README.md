@@ -82,6 +82,8 @@ Unlike traditional airdrop platforms plagued by bots and multi-account farming, 
 
 ### ⚡ Performance Optimized
 
+- **The Graph Subgraph** — Campaign list and participant queries hit a single GraphQL endpoint instead of N+1 RPC calls; direct RPC is kept as a fallback
+- **Batch Metadata API** — `/api/campaigns/metadata-batch` fetches off-chain metadata for a campaign list in one DB query
 - **Turbopack** — Lightning-fast dev server with `next dev --turbopack`
 - **Dynamic Imports** — Heavy components (modals, analytics) lazy-loaded on demand
 - **Optimized Package Imports** — Tree-shaken Radix UI, Lucide, ethers, and more
@@ -114,8 +116,16 @@ Unlike traditional airdrop platforms plagued by bots and multi-account farming, 
               │  ├─ completeTask()     │  │  CampaignTaskMeta    │
               │  ├─ claimReward()      │  │  SocialVerification  │
               │  └─ endCampaign()      │  │  PaymentVerification │
-              └────────────────────────┘  │  Analytics           │
-                                          └──────────────────────┘
+              └────────────┬───────────┘  └──────────────────────┘
+                           │
+              ┌────────────▼───────────┐
+              │   The Graph (optional) │
+              │                        │
+              │  campaigns             │
+              │  tasks                 │
+              │  participations        │
+              │  taskCompletions       │
+              └────────────────────────┘
                             │
               ┌─────────────▼──────────────────┐
               │       External Services        │
@@ -133,6 +143,7 @@ Unlike traditional airdrop platforms plagued by bots and multi-account farming, 
 - **On-chain**: Campaign creation, task completion, reward distribution, participation records
 - **Off-chain**: Social verification proofs, campaign images, metadata caching, analytics
 - **Hybrid**: Task status checked via smart contract view functions for performance, with DB cache as fallback
+- **Indexed**: The Graph subgraph (optional) replaces N+1 RPC calls for campaign list and participant queries; direct RPC remains the fallback when `NEXT_PUBLIC_GRAPH_API_URL` is unset
 
 ---
 
@@ -146,6 +157,7 @@ Unlike traditional airdrop platforms plagued by bots and multi-account farming, 
 | **Animations**  | Framer Motion                                        |
 | **Blockchain**  | Ethers.js, Viem, Wagmi v2                            |
 | **Wallet**      | RainbowKit (MetaMask, WalletConnect, Coinbase, etc.) |
+| **Indexing**    | The Graph (subgraph for campaign/participant queries) |
 | **Database**    | PostgreSQL (Neon) + Prisma ORM                       |
 | **Auth**        | NextAuth.js (Discord OAuth) + Wallet Signatures      |
 | **Identity**    | Humanity Protocol React SDK                          |
@@ -209,6 +221,8 @@ Open [http://localhost:3000](http://localhost:3000) — you'll need a wallet con
 | `NEXT_PUBLIC_CAMPAIGN_FACTORY_CONTRACT` | ✅       | Deployed smart contract address (Sepolia)                               |
 | `NEXT_PUBLIC_SEPOLIA_RPC_URL`           | ✅       | Sepolia RPC endpoint (Alchemy, Infura, or public)                       |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`  | ✅       | WalletConnect Cloud project ID                                          |
+| **The Graph**                           |          |                                                                         |
+| `NEXT_PUBLIC_GRAPH_API_URL`             | ⚙️       | Subgraph Studio query URL; enables fast campaign/participant queries     |
 | **AI**                                  |          |                                                                         |
 | `GEMINI_API_KEY`                        | ✅       | [Google AI Studio](https://aistudio.google.com/app/apikey) API key      |
 | **Auth**                                |          |                                                                         |
@@ -252,6 +266,11 @@ Open [http://localhost:3000](http://localhost:3000) — you'll need a wallet con
 ## Project Structure
 
 ```text
+subgraph/                    # The Graph subgraph (AssemblyScript, deployed to Subgraph Studio)
+├── schema.graphql           # Campaign / Task / Participation / TaskCompletion entities
+├── subgraph.yaml            # Data sources, event handlers, start blocks
+└── src/mappings.ts          # AssemblyScript event handlers
+
 src/
 ├── app/
 │   ├── (marketing)/         # Landing page, about, changelog (SSR)
@@ -264,7 +283,7 @@ src/
 │   └── api/                 # Next.js API routes
 │       ├── verify-task/     # Social & on-chain task verification
 │       ├── verify-humanity/ # Humanity Protocol server-side verification
-│       ├── campaigns/       # Campaign CRUD operations
+│       ├── campaigns/       # Campaign CRUD + batch metadata endpoint
 │       └── uploadthing/     # Image upload handler
 ├── components/              # Reusable UI components
 ├── context/                 # React context providers
@@ -273,6 +292,7 @@ src/
 │   └── humanity-provider.tsx # Humanity Protocol SDK provider
 ├── lib/                     # Business logic & utilities
 │   ├── web3-service.ts      # Blockchain interaction layer
+│   ├── graph-service.ts     # The Graph GraphQL client (fast-path list queries)
 │   ├── humanity-presets.ts  # Verification preset registry
 │   ├── humanity-service.ts  # Humanity API service
 │   └── verification-service.ts # Task verification backend
