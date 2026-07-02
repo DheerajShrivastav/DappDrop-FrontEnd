@@ -18,6 +18,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ metadata: {} })
     }
 
+    if (rawIds.length > 500) {
+      return NextResponse.json({ error: 'Too many ids (max 500)' }, { status: 400 })
+    }
+
     const campaignIds = rawIds
       .map((id) => parseInt(id, 10))
       .filter((id) => !isNaN(id))

@@ -195,7 +195,11 @@ interface OffChainMeta {
 async function fetchOffChainMetadataBatch(
   campaignIds: string[],
 ): Promise<Record<string, OffChainMeta>> {
-  if (typeof window === 'undefined' || campaignIds.length === 0) return {}
+  if (campaignIds.length === 0) return {}
+  if (typeof window === 'undefined') {
+    console.warn('[graph-service] fetchOffChainMetadataBatch called server-side; off-chain metadata will be empty')
+    return {}
+  }
 
   try {
     const params = new URLSearchParams()
@@ -249,7 +253,7 @@ function mapGraphCampaign(
       `A campaign hosted by ${gc.host} with the name ${gc.name}.`,
     startDate: new Date(Number(gc.startTime) * 1000),
     endDate: new Date(Number(gc.endTime) * 1000),
-    status: STATUS_MAP[gc.status] as Campaign['status'],
+    status: (STATUS_MAP[gc.status] ?? (() => { console.warn(`[graph-service] Unknown campaign status index: ${gc.status}`); return 'Draft' })()) as Campaign['status'],
     participants: gc.totalParticipants,
     host: gc.host,
     tasks: gc.tasks.map((t) => ({
