@@ -45,6 +45,11 @@ const TASK_TYPE_MAP = [
 // GraphQL fragments & queries
 // ---------------------------------------------------------------------------
 
+// The Graph enforces a hard max of 1000 for `first` on any field. Campaign
+// task lists are inherently small (a handful of tasks per campaign), so 1000
+// effectively removes truncation risk there without needing pagination.
+const MAX_PAGE_SIZE = 1000
+
 const CAMPAIGN_FIELDS = gql`
   fragment CampaignFields on Campaign {
     id
@@ -57,7 +62,7 @@ const CAMPAIGN_FIELDS = gql`
     rewardType
     rewardTokenAddress
     rewardAmountOrTokenId
-    tasks(orderBy: taskId, orderDirection: asc, first: 50) {
+    tasks(orderBy: taskId, orderDirection: asc, first: ${MAX_PAGE_SIZE}) {
       taskId
       taskType
       description
@@ -65,14 +70,18 @@ const CAMPAIGN_FIELDS = gql`
   }
 `
 
+// Campaigns and participations, unlike tasks, can realistically exceed 1000
+// rows over the platform's lifetime, so these are paginated with skip below
+// rather than relying on a single first:1000 request.
 const GET_ALL_CAMPAIGNS = gql`
   ${CAMPAIGN_FIELDS}
-  query GetAllCampaigns {
+  query GetAllCampaigns($first: Int!, $skip: Int!) {
     campaigns(
       where: { status_in: [1, 2] }
       orderBy: createdAt
       orderDirection: desc
-      first: 100
+      first: $first
+      skip: $skip
     ) {
       ...CampaignFields
     }
@@ -81,12 +90,13 @@ const GET_ALL_CAMPAIGNS = gql`
 
 const GET_CAMPAIGNS_BY_HOST = gql`
   ${CAMPAIGN_FIELDS}
-  query GetCampaignsByHost($host: Bytes!) {
+  query GetCampaignsByHost($host: Bytes!, $first: Int!, $skip: Int!) {
     campaigns(
       where: { host: $host }
       orderBy: createdAt
       orderDirection: desc
-      first: 100
+      first: $first
+      skip: $skip
     ) {
       ...CampaignFields
     }
@@ -94,10 +104,11 @@ const GET_CAMPAIGNS_BY_HOST = gql`
 `
 
 const GET_PARTICIPANT_ADDRESSES = gql`
-  query GetParticipantAddresses($campaignId: ID!) {
+  query GetParticipantAddresses($campaignId: ID!, $first: Int!, $skip: Int!) {
     participations(
       where: { campaign: $campaignId }
-      first: 1000
+      first: $first
+      skip: $skip
     ) {
       participant
     }
@@ -105,10 +116,11 @@ const GET_PARTICIPANT_ADDRESSES = gql`
 `
 
 const GET_PARTICIPANTS = gql`
-  query GetParticipants($campaignId: ID!) {
+  query GetParticipants($campaignId: ID!, $first: Int!, $skip: Int!) {
     participations(
       where: { campaign: $campaignId }
-      first: 1000
+      first: $first
+      skip: $skip
     ) {
       participant
       hasClaimedReward
@@ -116,6 +128,28 @@ const GET_PARTICIPANTS = gql`
     }
   }
 `
+
+/**
+ * Runs `fetchPage(skip)` repeatedly, accumulating results, until a page comes
+ * back smaller than MAX_PAGE_SIZE (meaning there's nothing left to fetch).
+ * Used for entity lists that can plausibly exceed a single page over the
+ * platform's lifetime (campaigns, participations).
+ */
+async function fetchAllPages<T>(
+  fetchPage: (first: number, skip: number) => Promise<T[]>,
+): Promise<T[]> {
+  const results: T[] = []
+  let skip = 0
+
+  while (true) {
+    const page = await fetchPage(MAX_PAGE_SIZE, skip)
+    results.push(...page)
+    if (page.length < MAX_PAGE_SIZE) break
+    skip += MAX_PAGE_SIZE
+  }
+
+  return results
+}
 
 // ---------------------------------------------------------------------------
 // Graph campaign data shape (returned by subgraph)
@@ -248,10 +282,14 @@ export async function getGraphCampaigns(): Promise<Campaign[] | null> {
   if (!client) return null
 
   try {
-    const data = await client.request<{ campaigns: GraphCampaign[] }>(
-      GET_ALL_CAMPAIGNS,
+    const campaigns = await fetchAllPages<GraphCampaign>((first, skip) =>
+      client
+        .request<{ campaigns: GraphCampaign[] }>(GET_ALL_CAMPAIGNS, {
+          first,
+          skip,
+        })
+        .then((data) => data.campaigns),
     )
-    const campaigns = data.campaigns
 
     const meta = await fetchOffChainMetadataBatch(campaigns.map((c) => c.id))
     return campaigns.map((c) => mapGraphCampaign(c, meta[c.id] ?? {}))
@@ -272,11 +310,16 @@ export async function getGraphCampaignsByHost(
   if (!client) return null
 
   try {
-    const data = await client.request<{ campaigns: GraphCampaign[] }>(
-      GET_CAMPAIGNS_BY_HOST,
-      { host: hostAddress.toLowerCase() },
+    const host = hostAddress.toLowerCase()
+    const campaigns = await fetchAllPages<GraphCampaign>((first, skip) =>
+      client
+        .request<{ campaigns: GraphCampaign[] }>(GET_CAMPAIGNS_BY_HOST, {
+          host,
+          first,
+          skip,
+        })
+        .then((data) => data.campaigns),
     )
-    const campaigns = data.campaigns
 
     const meta = await fetchOffChainMetadataBatch(campaigns.map((c) => c.id))
     return campaigns.map((c) => mapGraphCampaign(c, meta[c.id] ?? {}))
@@ -298,11 +341,16 @@ export async function getGraphParticipantAddresses(
   if (!client) return null
 
   try {
-    const data = await client.request<{
-      participations: { participant: string }[]
-    }>(GET_PARTICIPANT_ADDRESSES, { campaignId })
+    const participations = await fetchAllPages<{ participant: string }>(
+      (first, skip) =>
+        client
+          .request<{
+            participations: { participant: string }[]
+          }>(GET_PARTICIPANT_ADDRESSES, { campaignId, first, skip })
+          .then((data) => data.participations),
+    )
 
-    return data.participations.map((p) => p.participant.toLowerCase())
+    return participations.map((p) => p.participant.toLowerCase())
   } catch (err) {
     console.error('[graph-service] getGraphParticipantAddresses failed:', err)
     return null
@@ -321,12 +369,17 @@ export async function getGraphParticipants(
   if (!client) return null
 
   try {
-    const data = await client.request<{ participations: GraphParticipation[] }>(
-      GET_PARTICIPANTS,
-      { campaignId },
+    const participations = await fetchAllPages<GraphParticipation>(
+      (first, skip) =>
+        client
+          .request<{ participations: GraphParticipation[] }>(
+            GET_PARTICIPANTS,
+            { campaignId, first, skip },
+          )
+          .then((data) => data.participations),
     )
 
-    return data.participations.map((p) => ({
+    return participations.map((p) => ({
       address: p.participant.toLowerCase(),
       tasksCompleted: p.tasksCompleted,
       claimed: p.hasClaimedReward,

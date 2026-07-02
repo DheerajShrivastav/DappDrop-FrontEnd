@@ -2308,18 +2308,9 @@ export const getUserTaskCompletionStatus = async (
 export const getCampaignParticipantAddresses = async (
   campaignId: string,
 ): Promise<string[]> => {
-  // --- Fast path: The Graph subgraph (replaces chunked event log scanning) ---
-  const graphResult = await getGraphParticipantAddresses(campaignId)
-  if (graphResult !== null) {
-    return graphResult
-  }
-
-  // --- Fallback: event log scan (original behaviour) ---
-  console.log(
-    'getCampaignParticipantAddresses called with campaignId:',
-    campaignId,
-  )
-
+  // TTL + in-flight dedup cover BOTH the Graph fast path and the RPC fallback
+  // below, so repeated calls (e.g. host analytics re-renders) don't re-hit
+  // the network every time.
   const cacheKey = `${config.chainId}:${config.campaignFactoryAddress ?? 'unknown'}:${campaignId}`
   const cached = participantAddressesCache.get(cacheKey)
   const now = Date.now()
@@ -2333,6 +2324,23 @@ export const getCampaignParticipantAddresses = async (
   }
 
   const fetchPromise = (async () => {
+    // --- Fast path: The Graph subgraph (replaces chunked event log scanning) ---
+    const graphResult = await getGraphParticipantAddresses(campaignId)
+    if (graphResult !== null) {
+      participantAddressesCache.set(cacheKey, {
+        addresses: graphResult,
+        lastBlock: cached?.lastBlock ?? 0,
+        updatedAt: Date.now(),
+      })
+      return graphResult
+    }
+
+    // --- Fallback: event log scan (original behaviour) ---
+    console.log(
+      'getCampaignParticipantAddresses called with campaignId:',
+      campaignId,
+    )
+
     let contractToUse = getReadOnlyContract() ?? contract
 
     if (!contractToUse) {
@@ -2494,13 +2502,9 @@ export const getCampaignParticipantAddresses = async (
 export const getCampaignParticipants = async (
   campaign: Campaign,
 ): Promise<ParticipantData[]> => {
-  // --- Fast path: The Graph subgraph (replaces M×T hasCompletedTask RPC calls) ---
-  const graphResult = await getGraphParticipants(campaign.id)
-  if (graphResult !== null) {
-    return graphResult
-  }
-
-  // --- Fallback: per-participant RPC calls (original behaviour) ---
+  // TTL + in-flight dedup cover BOTH the Graph fast path and the RPC fallback
+  // below, so repeated calls (e.g. host analytics re-renders) don't re-hit
+  // the network every time.
   const cacheKey = `${config.chainId}:${config.campaignFactoryAddress ?? 'unknown'}:${campaign.id}`
   const cached = participantDetailsCache.get(cacheKey)
   const now = Date.now()
@@ -2514,6 +2518,17 @@ export const getCampaignParticipants = async (
   }
 
   const fetchPromise = (async () => {
+    // --- Fast path: The Graph subgraph (replaces M×T hasCompletedTask RPC calls) ---
+    const graphResult = await getGraphParticipants(campaign.id)
+    if (graphResult !== null) {
+      participantDetailsCache.set(cacheKey, {
+        data: graphResult,
+        updatedAt: Date.now(),
+      })
+      return graphResult
+    }
+
+    // --- Fallback: per-participant RPC calls (original behaviour) ---
     const contractToUse = getReadOnlyContract() ?? contract
     if (!contractToUse) return cached?.data ?? []
 
