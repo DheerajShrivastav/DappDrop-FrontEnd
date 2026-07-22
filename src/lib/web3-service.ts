@@ -1,6 +1,7 @@
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers'
 import { toast } from '@/hooks/use-toast'
 import type { Campaign, ParticipantData, TaskType } from './types'
+import { fromOnChainTaskType, toOnChainTaskType, OnChainTaskType } from './task-types'
 import config from '@/app/config'
 import Web3Campaigns from './abi/Web3Campaigns.json'
 import { addDays, endOfDay, differenceInSeconds } from 'date-fns'
@@ -162,27 +163,19 @@ const mapContractDataToCampaign = (
     rewardName?: string | null
   },
 ): Campaign => {
-  const statusMap = ['Draft', 'Open', 'Ended', 'Closed']
-  const rewardTypeMap = ['ERC20', 'ERC721', 'None']
-  // Must match Solidity enum CampaignStorage.TaskType exactly:
-  // 0=SOCIAL_FOLLOW, 1=JOIN_DISCORD, 2=JOIN_TELEGRAM, 3=SOCIAL_REPOST,
-  // 4=ONCHAIN_TX, 5=HUMANITY_VERIFICATION, 6=SOCIAL_LIKE, 7=SOCIAL_POST,
-  // 8=WALLET_CONNECT, 9=ONCHAIN_HOLD_ERC20, 10=ONCHAIN_HOLD_ERC721
-  const taskTypeMap: TaskType[] = [
-    'SOCIAL_FOLLOW',         // 0
-    'JOIN_DISCORD',          // 1
-    'JOIN_TELEGRAM',         // 2
-    'RETWEET',               // 3 (SOCIAL_REPOST in Solidity)
-    'ONCHAIN_TX',            // 4
-    'HUMANITY_VERIFICATION', // 5
-  ]
+  const statusMap = ['Draft', 'Open', 'Ended', 'Closed', 'Cancelled']
 
-  // Use stored reward name if available, otherwise fall back to generated text
-  let rewardName = campaignMetadata?.rewardName || `Reward for ${contractData.name}`
-  if (!campaignMetadata?.rewardName && Number(contractData.reward.rewardType) === 2) {
-    // "None" type - use a more descriptive fallback
-    rewardName = 'A special off-chain reward'
-  }
+  // v0.6.0: on-chain task type is an advisory uint8; the app type is resolved through the
+  // canonical taxonomy (docs/DECISIONS_v0.6.0.md Decision 2). DISCORD_JOIN is shared by
+  // Discord and Telegram — the platform discriminator comes from off-chain metadata, which
+  // is joined later in getCampaignByIdWithMetadata. Without it we default to JOIN_DISCORD.
+  // TODO(P0): thread metadata.platform in here so Telegram tasks resolve to JOIN_TELEGRAM
+  // at map time rather than only after the metadata enrichment pass.
+
+  // Reward data is no longer on-chain (the `reward` struct field was removed in v0.6.0).
+  // Use the stored reward name/type from off-chain metadata.
+  const rewardName =
+    campaignMetadata?.rewardName || `Reward for ${contractData.name}`
 
   // Use stored descriptions if available, otherwise fall back to generated placeholders
   const shortDescription = campaignMetadata?.shortDescription || `A campaign hosted by ${contractData.host}`
@@ -215,7 +208,8 @@ const mapContractDataToCampaign = (
       | 'Draft'
       | 'Open'
       | 'Ended'
-      | 'Closed',
+      | 'Closed'
+      | 'Cancelled',
     participants: Number(contractData.totalParticipants),
     host: contractData.host,
     tasks: contractData.tasks.map((task: any, index: number) => {
@@ -237,7 +231,7 @@ const mapContractDataToCampaign = (
 
       // For Discord tasks, try to load invite link from task metadata
       let discordInviteLink = ''
-      if (taskTypeMap[Number(task.taskType)] === 'JOIN_DISCORD') {
+      if (fromOnChainTaskType(Number(task.taskType)) === 'JOIN_DISCORD') {
         if (taskMetadata && Array.isArray(taskMetadata)) {
           const metadata = taskMetadata.find((tm) => tm.taskIndex === index)
           if (metadata && metadata.discordInviteLink) {
@@ -258,19 +252,20 @@ const mapContractDataToCampaign = (
 
       return {
         id: index.toString(),
-        type: taskTypeMap[Number(task.taskType)] as TaskType,
+        type: fromOnChainTaskType(Number(task.taskType)) as TaskType,
         description: task.description,
         verificationData: verificationDataString,
         discordInviteLink: discordInviteLink || undefined,
       }
     }),
+    // v0.6.0: reward data comes from off-chain metadata, not the on-chain struct.
+    // TODO(P1): populate type/tokenAddress/amount from the settlement views
+    // (getERC20Settlement / NFT module escrow / tiered module) per docs/REWARD_SYSTEM.md.
     reward: {
-      type: rewardTypeMap[Number(contractData.reward.rewardType)] as
-        | 'ERC20'
-        | 'ERC721'
-        | 'None',
-      tokenAddress: contractData.reward.tokenAddress,
-      amount: contractData.reward.amountOrTokenId.toString(),
+      type: (campaignMetadata as { rewardType?: 'ERC20' | 'ERC721' | 'None' })
+        ?.rewardType || 'None',
+      tokenAddress: '',
+      amount: undefined,
       name: rewardName,
     },
     imageUrl: imageUrl || `https://placehold.co/600x400`,
@@ -812,6 +807,18 @@ export const createAndActivateCampaign = async (campaignData: any) => {
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
 
+  // ── QUARANTINED (v0.6.0) ──────────────────────────────────────────────────────────
+  // TODO(P1): `createCampaignWithTasksAndReward` was REMOVED in v0.6.0 (it baked the old
+  // direct-reward model into one tx). Rebuild this as the multi-step Draft flow:
+  //   createCampaign → batchAddTasks/addTaskToCampaign → configureERC20Reward +
+  //   fundCampaignERC20 (or depositERC721/1155Rewards, or module setRankTiers/setScoreTiers)
+  //   → openCampaign. See docs/GAP_ANALYSIS_v0.6.0.md §2.4 and PRD FR-H2..H6. The legacy
+  //   body below is retained as reference and is intentionally unreachable.
+  throw new Error(
+    'Campaign creation is being rebuilt for the v0.6.0 escrow/settlement contracts (P1). ' +
+      'The single-transaction create+reward path no longer exists on-chain.',
+  )
+
   // Use the actual dates provided by the user, but ensure start time is not in the past
   const now = Math.floor(Date.now() / 1000)
   const userStartTime = Math.floor(campaignData.dates.from.getTime() / 1000)
@@ -824,16 +831,6 @@ export const createAndActivateCampaign = async (campaignData: any) => {
   // Check if localStorage is available (not server-side)
   const hasLocalStorage = typeof window !== 'undefined' && window.localStorage
 
-  // Must match Solidity enum CampaignStorage.TaskType exactly
-  const taskTypeMap: Record<TaskType, number> = {
-    SOCIAL_FOLLOW: 0,
-    JOIN_DISCORD: 1,
-    JOIN_TELEGRAM: 2,
-    RETWEET: 3,               // SOCIAL_REPOST in Solidity
-    ONCHAIN_TX: 4,
-    HUMANITY_VERIFICATION: 5,
-  }
-
   try {
     // Prepare task arrays for unified call
     const taskTypes: number[] = []
@@ -842,7 +839,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     const isOptionals: boolean[] = []
 
     for (const task of campaignData.tasks) {
-      taskTypes.push(taskTypeMap[task.type as TaskType])
+      // Route through the canonical taxonomy — never hardcode enum numbers (Decision 2).
+      taskTypes.push(toOnChainTaskType(task.type as TaskType))
       descriptions.push(task.description)
       verificationDatas.push(
         ethers.encodeBytes32String(task.verificationData || ''),
@@ -1155,22 +1153,23 @@ export const createCampaign = async (campaignData: any) => {
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
 
+  // ── QUARANTINED (v0.6.0) ──────────────────────────────────────────────────────────
+  // TODO(P1): same as createAndActivateCampaign — `createCampaignWithTasksAndReward` is
+  // gone in v0.6.0. Rebuild as the multi-step Draft flow (createCampaign → batchAddTasks →
+  // configureERC20Reward + fundCampaignERC20 / deposits / tiered module → keep in Draft).
+  // See docs/GAP_ANALYSIS_v0.6.0.md §2.4 and PRD FR-H2..H6. Legacy body below is
+  // intentionally unreachable and kept only for reference.
+  throw new Error(
+    'Campaign creation is being rebuilt for the v0.6.0 escrow/settlement contracts (P1). ' +
+      'The single-transaction create+reward path no longer exists on-chain.',
+  )
+
   // Use the actual dates provided by the user
   const userStartTime = Math.floor(campaignData.dates.from.getTime() / 1000)
   const userEndTime = Math.floor(campaignData.dates.to.getTime() / 1000)
 
   // Check if localStorage is available (not server-side)
   const hasLocalStorage = typeof window !== 'undefined' && window.localStorage
-
-  // Must match Solidity enum CampaignStorage.TaskType exactly
-  const taskTypeMap: Record<TaskType, number> = {
-    SOCIAL_FOLLOW: 0,
-    JOIN_DISCORD: 1,
-    JOIN_TELEGRAM: 2,
-    RETWEET: 3,               // SOCIAL_REPOST in Solidity
-    ONCHAIN_TX: 4,
-    HUMANITY_VERIFICATION: 5,
-  }
 
   try {
     // Prepare task arrays for unified call
@@ -1180,7 +1179,8 @@ export const createCampaign = async (campaignData: any) => {
     const isOptionals: boolean[] = []
 
     for (const task of campaignData.tasks) {
-      taskTypes.push(taskTypeMap[task.type as TaskType])
+      // Route through the canonical taxonomy — never hardcode enum numbers (Decision 2).
+      taskTypes.push(toOnChainTaskType(task.type as TaskType))
       descriptions.push(task.description)
       verificationDatas.push(
         ethers.encodeBytes32String(task.verificationData || ''),
@@ -1885,10 +1885,17 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       taskIndex,
     })
 
-    // Check the task type from the contract — HUMANITY_VERIFICATION (type 4) and
-    // other on-chain task types may cause estimateGas to fail with "missing revert
-    // data" because the RPC node doesn't return custom error data. In that case we
-    // send the tx with a manual gas limit to bypass the estimateGas pre-flight.
+    // Read the on-chain task type. In v0.6.0, completeTask self-verifies ONLY the two
+    // hold types (ONCHAIN_HOLD_ERC20 = 8, ONCHAIN_HOLD_ERC721 = 9); their in-tx balance
+    // check can make estimateGas fail with "missing revert data" when the RPC doesn't
+    // return custom error data, so those get the manual-gas-limit path below.
+    //
+    // TODO(P1): every OTHER task type (social, discord/telegram, humanity, onchain_tx) is
+    // an ATTESTED task in v0.6.0 — completeTask will revert TaskManagedBySignature for any
+    // index an attestation has touched. They must settle via the backend SIGNER_ROLE service
+    // (verifyTaskCompletionWithSignature), NOT this client call. See docs/GAP_ANALYSIS §3,
+    // docs/DECISIONS_v0.6.0.md Decision 2, PRD FR-T1/FR-T3/BR-V*. This function should narrow
+    // to self-verify hold tasks once the signer service lands.
     let taskTypeOnChain: number | null = null
     try {
       const taskData = await contractToRead.getCampaignTask(
@@ -1901,14 +1908,13 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       console.warn('Could not read task type, proceeding with default flow')
     }
 
-    // For ONCHAIN_TX (4), HUMANITY_VERIFICATION (5) and similar on-chain
-    // verified tasks, the contract's completeTask may revert during estimateGas
-    // because the contract performs direct on-chain verification that can fail
-    // silently (no revert data returned by the RPC). We handle this by:
-    // 1. First trying a staticCall to check if the tx would succeed
-    // 2. If staticCall succeeds, send with default gas estimation
-    // 3. If staticCall fails with "missing revert data", send with manual gas
-    const isOnChainVerifiedTask = taskTypeOnChain === 4 || taskTypeOnChain === 5
+    // Hold tasks (8/9) may revert during estimateGas without decodable data; handle via:
+    // 1. staticCall to detect a real revert reason
+    // 2. on success, send with default gas estimation
+    // 3. on "missing revert data", send with a manual gas limit
+    const isOnChainVerifiedTask =
+      taskTypeOnChain === OnChainTaskType.ONCHAIN_HOLD_ERC20 ||
+      taskTypeOnChain === OnChainTaskType.ONCHAIN_HOLD_ERC721
 
     let tx
     if (isOnChainVerifiedTask) {
@@ -2170,7 +2176,7 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
           const now = Math.floor(Date.now() / 1000)
 
           if (Number(campaignData.status) !== 1) {
-            description = `Campaign is not open. Current status: ${['Draft', 'Open', 'Ended', 'Closed'][Number(campaignData.status)] || campaignData.status}.`
+            description = `Campaign is not open. Current status: ${['Draft', 'Open', 'Ended', 'Closed', 'Cancelled'][Number(campaignData.status)] || campaignData.status}.`
           } else if (
             userAddress.toLowerCase() === campaignData.host.toLowerCase()
           ) {
@@ -2553,6 +2559,11 @@ export const getCampaignParticipants = async (
       participantAddresses,
       PARTICIPANT_QUERY_CONCURRENCY,
       async (address) => {
+        // TODO(P1): `hasClaimedReward` still exists in the v0.6.0 ABI but is not the
+        // authoritative claim signal for escrow settlement. Claim status must be read
+        // per settlement mode: hasClaimedERC20(id, account) for Merkle ERC20,
+        // NFTSettlementModule.isNFTLeafClaimed for NFT, tiered module state for tiered.
+        // See docs/GAP_ANALYSIS_v0.6.0.md §2.1.
         const hasClaimed = await contractToUse.hasClaimedReward(
           campaignIdNumber,
           address,
