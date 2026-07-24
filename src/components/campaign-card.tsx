@@ -11,7 +11,7 @@ import {
     CardTitle,
 } from './ui/card'
 import { Badge } from './ui/badge'
-import { Users, Gift, Calendar, Rocket, XCircle, Loader2, ArrowRight } from 'lucide-react'
+import { Users, Gift, Calendar, Rocket, XCircle, Loader2, ArrowRight, Award } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { format } from 'date-fns'
@@ -19,6 +19,11 @@ import { useWallet } from '@/context/wallet-provider'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from './ui/button'
 import { openCampaign, endCampaign, isPaused } from '@/lib/web3-service'
+import {
+    getLifecycleState,
+    settlementModeLabel,
+    type LifecycleState,
+} from '@/lib/campaign-lifecycle'
 import {
     AlertDialog,
     AlertDialogAction,
@@ -98,14 +103,29 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
         setIsDialogOpen(true)
     }
 
-    const getBadgeStyles = () => {
-        switch (campaign.status) {
-            case 'Open':
+    // Participant-facing lifecycle state (NFR-9) — drives the status badge label + colour.
+    const lifecycle = getLifecycleState(campaign)
+    const maxParticipants = campaign.settlement?.maxParticipants ?? 0
+    const settlementLabel = settlementModeLabel(campaign.settlement?.mode)
+
+    const lifecycleBadgeStyles = (state: LifecycleState): string => {
+        switch (state) {
+            case 'open':
                 return 'bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20 border-green-400/50'
-            case 'Draft':
+            case 'claims_open':
+            case 'closed_claimable':
+                return 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400/50'
+            case 'allocations_published':
+                return 'bg-amber-500 hover:bg-amber-600 text-white border-amber-400/50'
+            case 'ended_finalizing':
+                return 'bg-blue-500 hover:bg-blue-600 text-white border-blue-400/50'
+            case 'overdue_fallback':
+                return 'bg-orange-600 hover:bg-orange-700 text-white border-orange-400/50'
+            case 'draft':
                 return 'bg-slate-500 hover:bg-slate-600 text-white border-slate-400/50'
-            case 'Ended':
-                return 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/20 border-red-400/50'
+            case 'swept':
+            case 'cancelled':
+                return 'bg-slate-400 hover:bg-slate-500 text-white border-slate-300/50'
             default:
                 return 'bg-slate-100 text-slate-800'
         }
@@ -133,14 +153,21 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
                             <Badge
                                 className={cn(
                                     "absolute top-4 right-4 px-3 py-1 text-xs font-semibold backdrop-blur-md border",
-                                    getBadgeStyles()
+                                    lifecycleBadgeStyles(lifecycle.state)
                                 )}
                             >
-                                {campaign.status === 'Open' && <span className="mr-1.5 relative flex h-2 w-2">
+                                {lifecycle.state === 'open' && <span className="mr-1.5 relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
                                 </span>}
-                                {campaign.status}
+                                {lifecycle.label}
+                            </Badge>
+                            <Badge
+                                variant="secondary"
+                                className="absolute top-4 left-4 px-2.5 py-1 text-xs font-medium backdrop-blur-md border border-white/20 bg-black/40 text-white"
+                            >
+                                <Award className="h-3 w-3 mr-1.5" />
+                                {settlementLabel}
                             </Badge>
                         </div>
                     </CardHeader>
@@ -167,7 +194,13 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
                 <CardFooter className="bg-secondary/10 border-t p-4 flex justify-between items-center gap-4">
                     <div className="flex items-center text-sm font-medium text-muted-foreground">
                         <Users className="h-4 w-4 mr-2 text-primary/70" />
-                        <span>{campaign.participants.toLocaleString()} <span className="hidden sm:inline">participants</span></span>
+                        <span>
+                            {campaign.participants.toLocaleString()}
+                            {maxParticipants > 0 && (
+                                <span className="text-muted-foreground/70">/{maxParticipants.toLocaleString()}</span>
+                            )}{' '}
+                            <span className="hidden sm:inline">participants</span>
+                        </span>
                     </div>
 
                     {isHost && onUpdate ? (

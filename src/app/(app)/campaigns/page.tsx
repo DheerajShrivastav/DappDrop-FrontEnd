@@ -1,40 +1,56 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
-import { Loader2 } from 'lucide-react'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { Loader2, Search } from 'lucide-react'
 import { CampaignCard } from '@/components/campaign-card'
 import { getAllCampaigns, hasParticipated } from '@/lib/web3-service'
-import type { Campaign } from '@/lib/types'
+import type { Campaign, SettlementMode } from '@/lib/types'
+import { getLifecycleState } from '@/lib/campaign-lifecycle'
 import { useWallet } from '@/context/wallet-provider'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+
+// FR-D2 discovery controls. Filtering/sorting runs client-side over indexer data so no page
+// blocks on a live RPC call (NFR-4).
+type SortKey = 'newest' | 'ending_soon' | 'most_participants'
+type StatusFilter = 'all' | 'open' | 'claimable' | 'closed'
+type RewardFilter = 'all' | 'ERC20' | 'ERC721'
+type ModeFilter = 'all' | SettlementMode
 
 export default function CampaignsPage() {
   const { role, address } = useWallet()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [participantCampaigns, setParticipantCampaigns] = useState<Campaign[]>(
-    [],
-  )
+  const [participantCampaigns, setParticipantCampaigns] = useState<Campaign[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingParticipant, setIsLoadingParticipant] = useState(false)
   const initialLoadRef = useRef(false)
 
+  const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<SortKey>('newest')
+  const [status, setStatus] = useState<StatusFilter>('all')
+  const [reward, setReward] = useState<RewardFilter>('all')
+  const [mode, setMode] = useState<ModeFilter>('all')
+
   const fetchAllCampaigns = async () => {
     setIsLoading(true)
-    const fetchedCampaigns = await getAllCampaigns()
-    setCampaigns(fetchedCampaigns)
+    setCampaigns(await getAllCampaigns())
     setIsLoading(false)
   }
 
   const fetchParticipantCampaigns = async (allCampaigns: Campaign[]) => {
     if (role === 'participant' && address) {
       setIsLoadingParticipant(true)
-      const joinedCampaigns = []
+      const joined: Campaign[] = []
       for (const campaign of allCampaigns) {
-        const joined = await hasParticipated(campaign.id, address)
-        if (joined) {
-          joinedCampaigns.push(campaign)
-        }
+        if (await hasParticipated(campaign.id, address)) joined.push(campaign)
       }
-      setParticipantCampaigns(joinedCampaigns)
+      setParticipantCampaigns(joined)
       setIsLoadingParticipant(false)
     }
   }
@@ -50,29 +66,51 @@ export default function CampaignsPage() {
     if (role === 'participant' && address && campaigns.length > 0) {
       fetchParticipantCampaigns(campaigns)
     }
-    if (role !== 'participant') {
-      setParticipantCampaigns([])
-    }
+    if (role !== 'participant') setParticipantCampaigns([])
   }, [role, address, campaigns])
+
+  const visibleCampaigns = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const now = new Date()
+    return campaigns
+      .filter((c) => {
+        if (q && !`${c.title} ${c.description}`.toLowerCase().includes(q)) return false
+        if (reward !== 'all' && c.reward.type !== reward) return false
+        if (mode !== 'all' && (c.settlement?.mode ?? 'UNSET') !== mode) return false
+        if (status !== 'all') {
+          const state = getLifecycleState(c, now).state
+          if (status === 'open' && state !== 'open') return false
+          if (
+            status === 'claimable' &&
+            !['claims_open', 'allocations_published', 'closed_claimable'].includes(state)
+          )
+            return false
+          if (status === 'closed' && !['swept', 'cancelled'].includes(state)) return false
+        }
+        return true
+      })
+      .sort((a, b) => {
+        if (sort === 'ending_soon') return a.endDate.getTime() - b.endDate.getTime()
+        if (sort === 'most_participants') return b.participants - a.participants
+        // newest — createdAt isn't on the client type; endDate desc is the available proxy
+        return b.endDate.getTime() - a.endDate.getTime()
+      })
+  }, [campaigns, search, sort, status, reward, mode])
 
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-12">
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold tracking-tight mb-2">
-            Explore Campaigns
-          </h1>
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold tracking-tight mb-2">Explore Campaigns</h1>
           <p className="text-muted-foreground text-lg">
             Discover active campaigns and start earning rewards
           </p>
         </div>
 
-        {/* Participant's Joined Campaigns */}
+        {/* Participant's joined campaigns */}
         {role === 'participant' && participantCampaigns.length > 0 && (
           <section className="mb-16">
-            <h2 className="text-2xl font-bold tracking-tight mb-6">
-              Your Joined Campaigns
-            </h2>
+            <h2 className="text-2xl font-bold tracking-tight mb-6">Your Joined Campaigns</h2>
             {isLoadingParticipant ? (
               <div className="flex justify-center items-center h-32">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -87,26 +125,70 @@ export default function CampaignsPage() {
           </section>
         )}
 
-        {/* All Active Campaigns */}
+        {/* Filters / sort / search */}
+        <div className="mb-8 flex flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search campaigns…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={status} onValueChange={(v) => setStatus(v as StatusFilter)}>
+            <SelectTrigger className="w-[160px]"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="claimable">Claimable</SelectItem>
+              <SelectItem value="closed">Closed / ended</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={reward} onValueChange={(v) => setReward(v as RewardFilter)}>
+            <SelectTrigger className="w-[150px]"><SelectValue placeholder="Reward" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All rewards</SelectItem>
+              <SelectItem value="ERC20">Token (ERC20)</SelectItem>
+              <SelectItem value="ERC721">NFT</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={mode} onValueChange={(v) => setMode(v as ModeFilter)}>
+            <SelectTrigger className="w-[170px]"><SelectValue placeholder="Settlement" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All settlement</SelectItem>
+              <SelectItem value="MERKLE_ERC20">Token · Merkle</SelectItem>
+              <SelectItem value="RANK_TIERED">Token · Rank-tiered</SelectItem>
+              <SelectItem value="SCORE_TIERED">Token · Score-tiered</SelectItem>
+              <SelectItem value="NFT">NFT</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={sort} onValueChange={(v) => setSort(v as SortKey)}>
+            <SelectTrigger className="w-[170px]"><SelectValue placeholder="Sort" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="ending_soon">Ending soon</SelectItem>
+              <SelectItem value="most_participants">Most participants</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <section>
-          <h2 className="text-2xl font-bold tracking-tight mb-6">
-            Active Campaigns
-          </h2>
           {isLoading ? (
             <div className="flex justify-center items-center h-64">
               <Loader2 className="h-16 w-16 animate-spin text-primary" />
             </div>
-          ) : campaigns.length > 0 ? (
+          ) : visibleCampaigns.length > 0 ? (
             <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-              {campaigns.map((campaign) => (
+              {visibleCampaigns.map((campaign) => (
                 <CampaignCard key={campaign.id} campaign={campaign} />
               ))}
             </div>
           ) : (
             <div className="text-center py-16 bg-card rounded-lg border-2 border-dashed">
-              <h3 className="text-xl font-semibold">No Active Campaigns</h3>
+              <h3 className="text-xl font-semibold">No campaigns match your filters</h3>
               <p className="text-muted-foreground mt-2">
-                Check back later for new opportunities to engage!
+                Try clearing the search or filters to see more.
               </p>
             </div>
           )}

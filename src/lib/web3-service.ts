@@ -1,6 +1,12 @@
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers'
 import { toast } from '@/hooks/use-toast'
-import type { Campaign, ParticipantData, TaskType } from './types'
+import type {
+  Campaign,
+  CampaignSettlement,
+  ParticipantData,
+  SettlementMode,
+  TaskType,
+} from './types'
 import { fromOnChainTaskType, toOnChainTaskType, OnChainTaskType } from './task-types'
 import config from '@/app/config'
 import Web3Campaigns from './abi/Web3Campaigns.json'
@@ -720,6 +726,80 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
   }
 }
 
+const ZERO_ROOT = '0x' + '00'.repeat(32)
+
+/**
+ * Read a campaign's on-chain settlement/lifecycle facts directly (O(1) RPC). Powers the
+ * lifecycle-state ladder (NFR-9) on the single-campaign detail path, which does not go
+ * through the subgraph. Best-effort: returns undefined if reads fail.
+ *
+ * BR-I4: this IS a direct-RPC read, so it is authoritative enough to display; the eventual
+ * claim action (P1) still re-simulates against chain state at execution time.
+ */
+export const getCampaignSettlement = async (
+  id: string,
+): Promise<CampaignSettlement | undefined> => {
+  let c = contract ?? readOnlyContract
+  if (!c) {
+    initializeReadOnlyProvider()
+    c = readOnlyContract
+  }
+  if (!c) return undefined
+
+  try {
+    const [erc20, maxP, nftModule, rewardModule] = await Promise.all([
+      c.getERC20Settlement(id), // [token, escrowed, distributed, merkleRoot, closedAt, swept]
+      c.getMaxParticipants(id),
+      c.getCampaignNFTModule(id),
+      c.getCampaignRewardModule(id),
+    ])
+
+    const token: string = erc20.token ?? erc20[0]
+    const escrowed = (erc20.escrowed ?? erc20[1]).toString()
+    const merkleRoot: string = erc20.merkleRoot ?? erc20[3]
+    const closedAtRaw = Number(erc20.closedAt ?? erc20[4])
+    const swept: boolean = erc20.swept ?? erc20[5]
+
+    const hasErc20Root = Boolean(merkleRoot && merkleRoot !== ZERO_ROOT)
+    let erc20RootPublishedAt: Date | undefined
+    if (hasErc20Root) {
+      const claimableAt = Number(await c.getERC20ClaimableAt(id))
+      if (claimableAt > 0) {
+        erc20RootPublishedAt = new Date((claimableAt - 24 * 3600) * 1000)
+      }
+    }
+
+    const nftPinned = Boolean(nftModule && nftModule !== ethers.ZeroAddress)
+    const rewardPinned = Boolean(rewardModule && rewardModule !== ethers.ZeroAddress)
+
+    // Mode derivation from cheap entrypoint reads. NOTE: rank-vs-score is not distinguishable
+    // here without a module read, so a tiered campaign resolves to a generic tiered mode on
+    // this RPC path — the subgraph reports the exact one. Lifecycle behavior is identical for
+    // both tiered variants (claims open at Ended, no dispute window), so this is display-only
+    // imprecision. TODO(P1): read the pinned module to label rank vs score precisely.
+    let mode: SettlementMode = 'UNSET'
+    if (hasErc20Root) mode = 'MERKLE_ERC20'
+    else if (nftPinned) mode = 'NFT'
+    else if (rewardPinned) mode = 'RANK_TIERED'
+
+    return {
+      mode,
+      maxParticipants: Number(maxP),
+      closedAt: closedAtRaw > 0 ? new Date(closedAtRaw * 1000) : undefined,
+      erc20Token: token && token !== ethers.ZeroAddress ? token : undefined,
+      erc20EscrowedNet: escrowed,
+      erc20MerkleRoot: hasErc20Root ? merkleRoot : null,
+      erc20RootPublishedAt,
+      erc20Swept: swept,
+      nftModule: nftPinned ? nftModule : undefined,
+      rewardModule: rewardPinned ? rewardModule : undefined,
+    }
+  } catch (e) {
+    console.warn(`getCampaignSettlement failed for ${id}:`, e)
+    return undefined
+  }
+}
+
 // Enhanced function to get campaign by ID with Discord invite links for client-side use
 export const getCampaignByIdWithMetadata = async (
   id: string,
@@ -732,6 +812,9 @@ export const getCampaignByIdWithMetadata = async (
   // First get the basic campaign data
   const campaign = await getCampaignById(id)
   if (!campaign) return null
+
+  // Attach on-chain settlement/lifecycle facts for the NFR-9 state ladder (best-effort).
+  campaign.settlement = await getCampaignSettlement(id)
 
   console.log(`Base campaign data fetched for ${id}:`, {
     status: campaign.status,

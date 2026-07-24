@@ -6,11 +6,10 @@ dataSources:
     name: Web3Campaigns
     network: sepolia
     source:
-      address: "0xA36842072E058BcdC0eaE4DE2B0F7f3d8b32cDe4"
+      # v0.6.0 entrypoint (docs/deployments/sepolia.md). Holds all funds + campaign state.
+      address: "0xf0A2Fac02ffBA4A7762f2f0d611253B6C97bB1B3"
       abi: Web3Campaigns
-      # Contract deployment block on Sepolia (found via eth_getCode binary search).
-      # Indexing starts here instead of genesis, making (re)syncs near-instant.
-      startBlock: 10907101
+      startBlock: 11314275
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7
@@ -20,20 +19,111 @@ dataSources:
         - Task
         - Participation
         - TaskCompletion
+        - Claim
       abis:
         - name: Web3Campaigns
           file: ./abis/Web3Campaigns.json
       eventHandlers:
+        # --- lifecycle ---
         - event: CampaignCreated(indexed uint256,indexed address,string,uint256,uint256)
           handler: handleCampaignCreated
         - event: CampaignStatusUpdated(indexed uint256,uint8)
           handler: handleCampaignStatusUpdated
+        - event: CampaignCancelled(indexed uint256,indexed address,uint256)
+          handler: handleCampaignCancelled
+        - event: MaxParticipantsUpdated(indexed uint256,uint256)
+          handler: handleMaxParticipantsUpdated
+        # --- tasks ---
         - event: TaskAddedToCampaign(indexed uint256,indexed uint256,uint8,string)
           handler: handleTaskAddedToCampaign
+        # --- participation / completion ---
         - event: ParticipantTaskCompleted(indexed uint256,indexed address,indexed uint256)
           handler: handleParticipantTaskCompleted
-        - event: RewardSet(indexed uint256,uint8,address,uint256)
-          handler: handleRewardSet
-        - event: RewardClaimed(indexed uint256,indexed address,uint8,address,uint256)
-          handler: handleRewardClaimed
+        - event: TaskVerifiedWithSignature(indexed uint256,indexed address,indexed uint256,bool,uint256,address)
+          handler: handleTaskVerifiedWithSignature
+        # --- ERC20 reward config / funding / settlement ---
+        - event: ERC20RewardConfigured(indexed uint256,indexed address)
+          handler: handleERC20RewardConfigured
+        - event: CampaignFundedERC20(indexed uint256,indexed address,uint256)
+          handler: handleCampaignFundedERC20
+        - event: ProtocolFeeCollected(indexed uint256,indexed address,uint256)
+          handler: handleProtocolFeeCollected
+        - event: ERC20MerkleRootSet(indexed uint256,bytes32)
+          handler: handleERC20MerkleRootSet
+        - event: ERC20RewardClaimed(indexed uint256,indexed address,uint256)
+          handler: handleERC20RewardClaimed
+        - event: ERC20RewardClaimedOnChain(indexed uint256,indexed address,uint256,uint256)
+          handler: handleERC20RewardClaimedOnChain
+        - event: UnclaimedERC20Swept(indexed uint256,indexed address,uint256)
+          handler: handleUnclaimedERC20Swept
+        # --- NFT deposits (custody stays on entrypoint) ---
+        - event: NFTRewardsDeposited(indexed uint256,indexed address,uint8,uint256)
+          handler: handleNFTRewardsDeposited
+        # --- off-chain informational reward ---
+        - event: OffChainRewardConfigured(indexed uint256,string)
+          handler: handleOffChainRewardConfigured
+        # --- SETTLER_ROLE fallback (abandoned-campaign path, NFR-11) ---
+        - event: FallbackRootPublished(indexed uint256,indexed address)
+          handler: handleFallbackRootPublished
+        - event: FallbackClosed(indexed uint256,indexed address)
+          handler: handleFallbackClosed
+        # --- module pins: spawn per-campaign satellite templates (Decision 3) ---
+        - event: RewardModulePinned(indexed uint256,indexed address)
+          handler: handleRewardModulePinned
+        - event: NFTModulePinned(indexed uint256,indexed address)
+          handler: handleNFTModulePinned
       file: ./src/mappings.ts
+
+templates:
+  # Per-campaign pinned OnChainRewardModule instance (tiered settlement). Spawned on
+  # RewardModulePinned so satellite events are indexed by the actual pinned address,
+  # never a static one (NFR-2, Decision 3).
+  - kind: ethereum/contract
+    name: OnChainRewardModule
+    network: sepolia
+    source:
+      abi: OnChainRewardModule
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Campaign
+      abis:
+        - name: OnChainRewardModule
+          file: ./abis/OnChainRewardModule.json
+      eventHandlers:
+        - event: RankTiersConfigured(indexed uint256,uint256)
+          handler: handleRankTiersConfigured
+        - event: ScoreTiersConfigured(indexed uint256,uint256)
+          handler: handleScoreTiersConfigured
+        - event: TaskPointsSet(indexed uint256,uint256)
+          handler: handleTaskPointsSet
+      file: ./src/module-mappings.ts
+
+  # Per-campaign pinned NFTSettlementModule instance (NFT Merkle settlement).
+  - kind: ethereum/contract
+    name: NFTSettlementModule
+    network: sepolia
+    source:
+      abi: NFTSettlementModule
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.7
+      language: wasm/assemblyscript
+      entities:
+        - Campaign
+        - Claim
+      abis:
+        - name: NFTSettlementModule
+          file: ./abis/NFTSettlementModule.json
+      eventHandlers:
+        - event: NFTMerkleRootSet(indexed uint256,bytes32)
+          handler: handleNFTMerkleRootSet
+        - event: NFTRewardClaimed(indexed uint256,indexed address,uint8,address,uint256,uint256)
+          handler: handleNFTRewardClaimed
+        - event: UnclaimedNFTsWithdrawn(indexed uint256,indexed address,uint8,uint256)
+          handler: handleUnclaimedNFTsWithdrawn
+        - event: FallbackRootPublished(indexed uint256,indexed address)
+          handler: handleNFTFallbackRootPublished
+      file: ./src/module-mappings.ts

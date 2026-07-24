@@ -1,29 +1,75 @@
+# Web3Campaigns v0.6.0 subgraph schema.
+# Model: escrow + post-end Merkle/tiered settlement. The chain is the source of truth for
+# money (BR-I4) — this index is for discovery/display/scheduling only. Off-chain metadata
+# (task platform/instructions, campaign imagery/description) lives in Postgres, joined by
+# the frontend; it is intentionally NOT here.
+
+# Settlement mode a campaign has committed to. UNSET until the first mode-committing action.
+enum SettlementMode {
+  UNSET
+  MERKLE_ERC20 # setERC20MerkleRoot published a root
+  RANK_TIERED # OnChainRewardModule.setRankTiers
+  SCORE_TIERED # OnChainRewardModule.setScoreTiers
+  NFT # NFT deposit / NFTSettlementModule root
+}
+
 type Campaign @entity {
   id: ID! # on-chain campaignId as string
   host: Bytes!
   name: String!
   startTime: BigInt!
   endTime: BigInt!
-  # 0 = Draft, 1 = Open, 2 = Ended, 3 = Closed
+  # 0 Draft, 1 Open, 2 Ended, 3 Closed, 4 Cancelled (CampaignStorage.CampaignStatus)
   status: Int!
   totalParticipants: Int!
+  # 0 = unlimited (the default); else the host-set cap (setMaxParticipants).
+  maxParticipants: BigInt!
   createdAt: BigInt!
   createdAtBlock: BigInt!
+  closedAt: BigInt # set when status -> Closed; drives the 30-day grace clock
+  cancelledAt: BigInt
+  refundedERC20: BigInt
 
-  # Reward info (set via RewardSet event)
-  rewardType: Int # 0 = ERC20, 1 = ERC721, 2 = None
-  rewardTokenAddress: Bytes
-  rewardAmountOrTokenId: BigInt
+  # --- settlement mode (derived from the first mode-committing event) ---
+  settlementMode: SettlementMode!
+
+  # --- ERC20 reward / escrow (configureERC20Reward + fundCampaignERC20) ---
+  erc20Token: Bytes
+  erc20EscrowedNet: BigInt! # sum of CampaignFundedERC20 amounts (NET of protocol fee)
+  erc20FeePaid: BigInt! # sum of ProtocolFeeCollected (0 while fees disabled)
+  erc20MerkleRoot: Bytes
+  erc20RootPublishedAt: BigInt # last time the ERC20 root's VALUE changed (dispute-window anchor)
+  erc20Swept: Boolean!
+  erc20SweptAt: BigInt
+
+  # --- NFT settlement (pinned NFTSettlementModule) ---
+  nftModule: Bytes # per-campaign pinned module (NFTModulePinned)
+  nftMerkleRoot: Bytes
+  nftRootPublishedAt: BigInt
+
+  # --- tiered settlement (pinned OnChainRewardModule) ---
+  rewardModule: Bytes # per-campaign pinned module (RewardModulePinned)
+  tierCount: Int
+
+  # --- SETTLER_ROLE fallback (NFR-11) ---
+  fallbackRootPublished: Boolean!
+  fallbackClosed: Boolean!
+
+  # --- off-chain informational reward (contract treats as informational only) ---
+  offChainRewardDescription: String
 
   tasks: [Task!]! @derivedFrom(field: "campaign")
   participations: [Participation!]! @derivedFrom(field: "campaign")
+  claims: [Claim!]! @derivedFrom(field: "campaign")
 }
 
 type Task @entity {
   id: ID! # "{campaignId}-{taskId}"
   campaign: Campaign!
   taskId: BigInt!
-  # 0=SOCIAL_FOLLOW, 1=JOIN_DISCORD, 2=JOIN_TELEGRAM, 3=RETWEET, 4=ONCHAIN_TX, 5=HUMANITY_VERIFICATION
+  # Raw on-chain CampaignStorage.TaskType (0..9). NOTE: DISCORD_JOIN (4) is shared by
+  # Discord and Telegram — task identity is disambiguated by off-chain metadata.platform,
+  # NOT this raw enum (docs/DECISIONS_v0.6.0.md Decision 2). Do not key analytics off it.
   taskType: Int!
   description: String!
   addedAtBlock: BigInt!
@@ -33,11 +79,9 @@ type Participation @entity {
   id: ID! # "{campaignId}-{participantAddress}"
   campaign: Campaign!
   participant: Bytes!
-  hasClaimedReward: Boolean!
-  tasksCompleted: Int!
+  tasksCompleted: Int! # count of currently-completed tasks (revocations decrement)
   firstInteractionAt: BigInt!
   lastInteractionAt: BigInt!
-
   completions: [TaskCompletion!]! @derivedFrom(field: "participation")
 }
 
@@ -46,6 +90,27 @@ type TaskCompletion @entity {
   participation: Participation!
   campaign: Campaign!
   taskId: BigInt!
+  completed: Boolean! # current state; a completed=false attestation flips this back
+  # SELF (completeTask, holds) or ATTESTATION (verifyTaskCompletionWithSignature). Null
+  # until known; the attested path overwrites to ATTESTATION.
+  method: String
+  attestationVersion: BigInt # latest version from TaskVerifiedWithSignature
   completedAt: BigInt!
   completedAtBlock: BigInt!
+}
+
+# One claim of a reward from escrow. Kind distinguishes the settlement path.
+type Claim @entity {
+  id: ID! # "{campaignId}-{kind}-{account}[-{tokenId}]"
+  campaign: Campaign!
+  account: Bytes!
+  kind: String! # ERC20_MERKLE | ERC20_TIERED | NFT
+  amount: BigInt!
+  rankOrScore: BigInt # tiered only
+  tokenStandard: Int # NFT only: 0 ERC721, 1 ERC1155
+  token: Bytes # NFT only
+  tokenId: BigInt # NFT only
+  claimedAt: BigInt!
+  claimedAtBlock: BigInt!
+  txHash: Bytes!
 }

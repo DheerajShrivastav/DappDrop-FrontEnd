@@ -1,21 +1,28 @@
 /**
- * graph-service.ts
+ * graph-service.ts — GraphQL client for the v0.6.0 The Graph subgraph (Decision 3).
  *
- * GraphQL client for The Graph subgraph. Replaces the expensive N+1 RPC calls
- * in web3-service.ts for read-heavy list and analytics queries:
- *   - getAllCampaigns()          → getGraphCampaigns()
- *   - getCampaignsByHostAddress() → getGraphCampaignsByHost()
- *   - getCampaignParticipantAddresses() → getGraphParticipantAddresses()
- *   - getCampaignParticipants()  → getGraphParticipants()
+ * Fast path for read-heavy list/discovery queries, replacing N+1 RPC calls in
+ * web3-service.ts. Returns null when NEXT_PUBLIC_GRAPH_API_URL is unset so callers fall
+ * back to direct RPC against the correct v0.6.0 contract.
  *
- * Write operations and per-user real-time checks (hasParticipated,
- * getUserTaskCompletionStatus, isHost) remain in web3-service.ts because
- * they need a signer or require zero indexing lag.
+ * BR-I4: value-bearing decisions (claim eligibility, allocation totals, sweep availability)
+ * MUST re-verify against a direct RPC read at execution time — never trust this cache for
+ * money. These functions serve discovery/display/scheduling only.
+ *
+ * Write ops and per-user gating checks (hasParticipated, getUserTaskCompletionStatus,
+ * isHost) stay on direct RPC in web3-service.ts (zero indexing lag for the user's own
+ * actions).
  */
 
 import { GraphQLClient, gql } from 'graphql-request'
 import config from '@/app/config'
-import type { Campaign, ParticipantData } from './types'
+import type {
+  Campaign,
+  CampaignSettlement,
+  ParticipantData,
+  SettlementMode,
+} from './types'
+import { fromOnChainTaskType } from './task-types'
 
 // ---------------------------------------------------------------------------
 // Client setup
@@ -26,28 +33,15 @@ function getClient(): GraphQLClient | null {
   return new GraphQLClient(config.graphApiUrl)
 }
 
-// ---------------------------------------------------------------------------
-// Type maps (must stay in sync with Solidity enums in Web3Campaigns.sol)
-// ---------------------------------------------------------------------------
+/** Returns true when a Graph API URL is configured and queries can be made. */
+export function isGraphConfigured(): boolean {
+  return Boolean(config.graphApiUrl)
+}
 
-const STATUS_MAP = ['Draft', 'Open', 'Ended', 'Closed'] as const
-const REWARD_TYPE_MAP = ['ERC20', 'ERC721', 'None'] as const
-const TASK_TYPE_MAP = [
-  'SOCIAL_FOLLOW',          // 0
-  'JOIN_DISCORD',           // 1
-  'JOIN_TELEGRAM',          // 2
-  'RETWEET',                // 3
-  'ONCHAIN_TX',             // 4
-  'HUMANITY_VERIFICATION',  // 5
-] as const
+// v0.6.0 lifecycle: Draft, Open, Ended, Closed, Cancelled.
+const STATUS_MAP = ['Draft', 'Open', 'Ended', 'Closed', 'Cancelled'] as const
 
-// ---------------------------------------------------------------------------
-// GraphQL fragments & queries
-// ---------------------------------------------------------------------------
-
-// The Graph enforces a hard max of 1000 for `first` on any field. Campaign
-// task lists are inherently small (a handful of tasks per campaign), so 1000
-// effectively removes truncation risk there without needing pagination.
+// The Graph caps `first` at 1000; task lists are tiny, so 1000 removes truncation risk.
 const MAX_PAGE_SIZE = 1000
 
 const CAMPAIGN_FIELDS = gql`
@@ -59,9 +53,27 @@ const CAMPAIGN_FIELDS = gql`
     endTime
     status
     totalParticipants
-    rewardType
-    rewardTokenAddress
-    rewardAmountOrTokenId
+    maxParticipants
+    createdAt
+    closedAt
+    cancelledAt
+    refundedERC20
+    settlementMode
+    erc20Token
+    erc20EscrowedNet
+    erc20FeePaid
+    erc20MerkleRoot
+    erc20RootPublishedAt
+    erc20Swept
+    erc20SweptAt
+    nftModule
+    nftMerkleRoot
+    nftRootPublishedAt
+    rewardModule
+    tierCount
+    fallbackRootPublished
+    fallbackClosed
+    offChainRewardDescription
     tasks(orderBy: taskId, orderDirection: asc, first: ${MAX_PAGE_SIZE}) {
       taskId
       taskType
@@ -70,14 +82,12 @@ const CAMPAIGN_FIELDS = gql`
   }
 `
 
-// Campaigns and participations, unlike tasks, can realistically exceed 1000
-// rows over the platform's lifetime, so these are paginated with skip below
-// rather than relying on a single first:1000 request.
+// Discovery lists Open (1) and Ended (2) campaigns; the UI filters/sorts client-side.
 const GET_ALL_CAMPAIGNS = gql`
   ${CAMPAIGN_FIELDS}
   query GetAllCampaigns($first: Int!, $skip: Int!) {
     campaigns(
-      where: { status_in: [1, 2] }
+      where: { status_in: [1, 2, 3] }
       orderBy: createdAt
       orderDirection: desc
       first: $first
@@ -104,55 +114,41 @@ const GET_CAMPAIGNS_BY_HOST = gql`
 `
 
 const GET_PARTICIPANT_ADDRESSES = gql`
-  query GetParticipantAddresses($campaignId: ID!, $first: Int!, $skip: Int!) {
-    participations(
-      where: { campaign: $campaignId }
-      first: $first
-      skip: $skip
-    ) {
+  query GetParticipantAddresses($campaignId: String!, $first: Int!, $skip: Int!) {
+    participations(where: { campaign: $campaignId }, first: $first, skip: $skip) {
       participant
     }
   }
 `
 
 const GET_PARTICIPANTS = gql`
-  query GetParticipants($campaignId: ID!, $first: Int!, $skip: Int!) {
-    participations(
-      where: { campaign: $campaignId }
-      first: $first
-      skip: $skip
-    ) {
+  query GetParticipants($campaignId: String!, $first: Int!, $skip: Int!) {
+    participations(where: { campaign: $campaignId }, first: $first, skip: $skip) {
       participant
-      hasClaimedReward
       tasksCompleted
+    }
+    claims(where: { campaign: $campaignId }, first: $first, skip: $skip) {
+      account
     }
   }
 `
 
-/**
- * Runs `fetchPage(skip)` repeatedly, accumulating results, until a page comes
- * back smaller than MAX_PAGE_SIZE (meaning there's nothing left to fetch).
- * Used for entity lists that can plausibly exceed a single page over the
- * platform's lifetime (campaigns, participations).
- */
 async function fetchAllPages<T>(
   fetchPage: (first: number, skip: number) => Promise<T[]>,
 ): Promise<T[]> {
   const results: T[] = []
   let skip = 0
-
   while (true) {
     const page = await fetchPage(MAX_PAGE_SIZE, skip)
     results.push(...page)
     if (page.length < MAX_PAGE_SIZE) break
     skip += MAX_PAGE_SIZE
   }
-
   return results
 }
 
 // ---------------------------------------------------------------------------
-// Graph campaign data shape (returned by subgraph)
+// Graph response shapes
 // ---------------------------------------------------------------------------
 
 interface GraphTask {
@@ -169,38 +165,47 @@ interface GraphCampaign {
   endTime: string
   status: number
   totalParticipants: number
-  rewardType: number | null
-  rewardTokenAddress: string | null
-  rewardAmountOrTokenId: string | null
+  maxParticipants: string
+  createdAt: string
+  closedAt: string | null
+  cancelledAt: string | null
+  refundedERC20: string | null
+  settlementMode: SettlementMode
+  erc20Token: string | null
+  erc20EscrowedNet: string
+  erc20FeePaid: string
+  erc20MerkleRoot: string | null
+  erc20RootPublishedAt: string | null
+  erc20Swept: boolean
+  erc20SweptAt: string | null
+  nftModule: string | null
+  nftMerkleRoot: string | null
+  nftRootPublishedAt: string | null
+  rewardModule: string | null
+  tierCount: number | null
+  fallbackRootPublished: boolean
+  fallbackClosed: boolean
+  offChainRewardDescription: string | null
   tasks: GraphTask[]
 }
-
-interface GraphParticipation {
-  participant: string
-  hasClaimedReward: boolean
-  tasksCompleted: number
-}
-
-// ---------------------------------------------------------------------------
-// Off-chain metadata batch fetch
-// ---------------------------------------------------------------------------
 
 interface OffChainMeta {
   imageUrl?: string
   shortDescription?: string
   longDescription?: string
   rewardName?: string
+  rewardType?: 'ERC20' | 'ERC721' | 'None'
 }
+
+// ---------------------------------------------------------------------------
+// Off-chain metadata batch fetch (Postgres, via the app API)
+// ---------------------------------------------------------------------------
 
 async function fetchOffChainMetadataBatch(
   campaignIds: string[],
 ): Promise<Record<string, OffChainMeta>> {
   if (campaignIds.length === 0) return {}
-  if (typeof window === 'undefined') {
-    console.warn('[graph-service] fetchOffChainMetadataBatch called server-side; off-chain metadata will be empty')
-    return {}
-  }
-
+  if (typeof window === 'undefined') return {}
   try {
     const params = new URLSearchParams()
     campaignIds.forEach((id) => params.append('ids', id))
@@ -210,22 +215,17 @@ async function fetchOffChainMetadataBatch(
       return data.metadata ?? {}
     }
   } catch {
-    // Fall through to individual fetches
+    /* fall through to individual fetches */
   }
-
-  // Fallback: parallel individual fetches (original behaviour)
   const entries = await Promise.all(
     campaignIds.map(async (id) => {
       try {
         const res = await fetch(`/api/campaigns/${id}/image`)
-        if (res.ok) {
-          const d = await res.json()
-          return [id, d as OffChainMeta] as const
-        }
+        if (res.ok) return [id, (await res.json()) as OffChainMeta] as const
       } catch {
         /* ignore */
       }
-      return [id, {}] as const
+      return [id, {} as OffChainMeta] as const
     }),
   )
   return Object.fromEntries(entries)
@@ -235,14 +235,47 @@ async function fetchOffChainMetadataBatch(
 // Mapper: Graph campaign → Campaign (frontend type)
 // ---------------------------------------------------------------------------
 
-function mapGraphCampaign(
-  gc: GraphCampaign,
-  meta: OffChainMeta,
-): Campaign {
-  const rewardTypeIndex = gc.rewardType ?? 2
+const tsToDate = (v: string | null | undefined): Date | undefined =>
+  v == null ? undefined : new Date(Number(v) * 1000)
+
+// Reward type shown in discovery, derived from the committed settlement mode. Real figures
+// (token/amount) come from indexed escrow; a campaign that hasn't committed a mode yet
+// renders as "None" (graceful degradation — foundation-swap review item (a)).
+function rewardTypeFromMode(
+  mode: SettlementMode,
+): 'ERC20' | 'ERC721' | 'None' {
+  if (mode === 'NFT') return 'ERC721'
+  if (mode === 'UNSET') return 'None'
+  return 'ERC20'
+}
+
+function mapGraphCampaign(gc: GraphCampaign, meta: OffChainMeta): Campaign {
+  const settlement: CampaignSettlement = {
+    mode: gc.settlementMode,
+    maxParticipants: Number(gc.maxParticipants),
+    closedAt: tsToDate(gc.closedAt),
+    cancelledAt: tsToDate(gc.cancelledAt),
+    refundedERC20: gc.refundedERC20 ?? undefined,
+    erc20Token: gc.erc20Token ?? undefined,
+    erc20EscrowedNet: gc.erc20EscrowedNet,
+    erc20FeePaid: gc.erc20FeePaid,
+    erc20MerkleRoot: gc.erc20MerkleRoot,
+    erc20RootPublishedAt: tsToDate(gc.erc20RootPublishedAt),
+    erc20Swept: gc.erc20Swept,
+    erc20SweptAt: tsToDate(gc.erc20SweptAt),
+    nftModule: gc.nftModule ?? undefined,
+    nftMerkleRoot: gc.nftMerkleRoot,
+    nftRootPublishedAt: tsToDate(gc.nftRootPublishedAt),
+    rewardModule: gc.rewardModule ?? undefined,
+    tierCount: gc.tierCount ?? undefined,
+    fallbackRootPublished: gc.fallbackRootPublished,
+    fallbackClosed: gc.fallbackClosed,
+  }
+
+  const rewardType = meta.rewardType ?? rewardTypeFromMode(gc.settlementMode)
   const rewardName =
     meta.rewardName ??
-    (rewardTypeIndex === 2 ? 'A special off-chain reward' : `Reward for ${gc.name}`)
+    (rewardType === 'None' ? 'Reward to be announced' : `Reward for ${gc.name}`)
 
   return {
     id: gc.id,
@@ -253,48 +286,42 @@ function mapGraphCampaign(
       `A campaign hosted by ${gc.host} with the name ${gc.name}.`,
     startDate: new Date(Number(gc.startTime) * 1000),
     endDate: new Date(Number(gc.endTime) * 1000),
-    status: (STATUS_MAP[gc.status] ?? (() => { console.warn(`[graph-service] Unknown campaign status index: ${gc.status}`); return 'Draft' })()) as Campaign['status'],
+    status: (STATUS_MAP[gc.status] ?? 'Draft') as Campaign['status'],
     participants: gc.totalParticipants,
     host: gc.host,
     tasks: gc.tasks.map((t) => ({
+      // Raw on-chain enum → app task type; DISCORD_JOIN's Telegram case needs
+      // metadata.platform, joined later by the caller (Decision 2). Default: Discord.
       id: t.taskId.toString(),
-      type: (TASK_TYPE_MAP[t.taskType] ?? 'SOCIAL_FOLLOW') as Campaign['tasks'][number]['type'],
+      type: fromOnChainTaskType(t.taskType),
       description: t.description,
       verificationData: '',
     })),
     reward: {
-      type: REWARD_TYPE_MAP[rewardTypeIndex] as Campaign['reward']['type'],
-      tokenAddress: gc.rewardTokenAddress ?? '0x0000000000000000000000000000000000000000',
-      amount: gc.rewardAmountOrTokenId ?? '0',
+      type: rewardType,
+      tokenAddress: gc.erc20Token ?? '',
+      amount: gc.erc20EscrowedNet !== '0' ? gc.erc20EscrowedNet : undefined,
       name: rewardName,
     },
+    settlement,
     imageUrl: meta.imageUrl ?? 'https://placehold.co/600x400',
     'data-ai-hint': 'blockchain technology',
   }
 }
 
 // ---------------------------------------------------------------------------
-// Public API
+// Public API (null => Graph not configured; caller falls back to RPC)
 // ---------------------------------------------------------------------------
 
-/**
- * Replaces getAllCampaigns() — single GraphQL query instead of N+1 RPC calls.
- * Returns null when The Graph is not configured so callers can fall back to RPC.
- */
 export async function getGraphCampaigns(): Promise<Campaign[] | null> {
   const client = getClient()
   if (!client) return null
-
   try {
     const campaigns = await fetchAllPages<GraphCampaign>((first, skip) =>
       client
-        .request<{ campaigns: GraphCampaign[] }>(GET_ALL_CAMPAIGNS, {
-          first,
-          skip,
-        })
-        .then((data) => data.campaigns),
+        .request<{ campaigns: GraphCampaign[] }>(GET_ALL_CAMPAIGNS, { first, skip })
+        .then((d) => d.campaigns),
     )
-
     const meta = await fetchOffChainMetadataBatch(campaigns.map((c) => c.id))
     return campaigns.map((c) => mapGraphCampaign(c, meta[c.id] ?? {}))
   } catch (err) {
@@ -303,16 +330,11 @@ export async function getGraphCampaigns(): Promise<Campaign[] | null> {
   }
 }
 
-/**
- * Replaces getCampaignsByHostAddress() — single GraphQL query instead of N+1 RPC calls.
- * Returns null when The Graph is not configured.
- */
 export async function getGraphCampaignsByHost(
   hostAddress: string,
 ): Promise<Campaign[] | null> {
   const client = getClient()
   if (!client) return null
-
   try {
     const host = hostAddress.toLowerCase()
     const campaigns = await fetchAllPages<GraphCampaign>((first, skip) =>
@@ -322,9 +344,8 @@ export async function getGraphCampaignsByHost(
           first,
           skip,
         })
-        .then((data) => data.campaigns),
+        .then((d) => d.campaigns),
     )
-
     const meta = await fetchOffChainMetadataBatch(campaigns.map((c) => c.id))
     return campaigns.map((c) => mapGraphCampaign(c, meta[c.id] ?? {}))
   } catch (err) {
@@ -333,27 +354,20 @@ export async function getGraphCampaignsByHost(
   }
 }
 
-/**
- * Replaces getCampaignParticipantAddresses() — single GraphQL query instead of
- * event log scanning with chunked block range queries.
- * Returns null when The Graph is not configured.
- */
 export async function getGraphParticipantAddresses(
   campaignId: string,
 ): Promise<string[] | null> {
   const client = getClient()
   if (!client) return null
-
   try {
-    const participations = await fetchAllPages<{ participant: string }>(
-      (first, skip) =>
-        client
-          .request<{
-            participations: { participant: string }[]
-          }>(GET_PARTICIPANT_ADDRESSES, { campaignId, first, skip })
-          .then((data) => data.participations),
+    const participations = await fetchAllPages<{ participant: string }>((first, skip) =>
+      client
+        .request<{ participations: { participant: string }[] }>(
+          GET_PARTICIPANT_ADDRESSES,
+          { campaignId, first, skip },
+        )
+        .then((d) => d.participations),
     )
-
     return participations.map((p) => p.participant.toLowerCase())
   } catch (err) {
     console.error('[graph-service] getGraphParticipantAddresses failed:', err)
@@ -361,40 +375,26 @@ export async function getGraphParticipantAddresses(
   }
 }
 
-/**
- * Replaces getCampaignParticipants() — single GraphQL query instead of
- * M×T contract calls (one per participant per task).
- * Returns null when The Graph is not configured.
- */
 export async function getGraphParticipants(
   campaignId: string,
 ): Promise<ParticipantData[] | null> {
   const client = getClient()
   if (!client) return null
-
   try {
-    const participations = await fetchAllPages<GraphParticipation>(
-      (first, skip) =>
-        client
-          .request<{ participations: GraphParticipation[] }>(
-            GET_PARTICIPANTS,
-            { campaignId, first, skip },
-          )
-          .then((data) => data.participations),
-    )
+    // Single query returns participations + the set of accounts that have claimed.
+    const data = await client.request<{
+      participations: { participant: string; tasksCompleted: number }[]
+      claims: { account: string }[]
+    }>(GET_PARTICIPANTS, { campaignId, first: MAX_PAGE_SIZE, skip: 0 })
 
-    return participations.map((p) => ({
+    const claimed = new Set(data.claims.map((c) => c.account.toLowerCase()))
+    return data.participations.map((p) => ({
       address: p.participant.toLowerCase(),
       tasksCompleted: p.tasksCompleted,
-      claimed: p.hasClaimedReward,
+      claimed: claimed.has(p.participant.toLowerCase()),
     }))
   } catch (err) {
     console.error('[graph-service] getGraphParticipants failed:', err)
     return null
   }
-}
-
-/** Returns true when a Graph API URL is configured and queries can be made. */
-export function isGraphConfigured(): boolean {
-  return Boolean(config.graphApiUrl)
 }

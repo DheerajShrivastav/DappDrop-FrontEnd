@@ -48,6 +48,7 @@ import {
 import { CampaignHero } from './_components/campaign-hero'
 import { CampaignSidebar } from './_components/campaign-sidebar'
 import { TaskList } from './_components/task-list'
+import { CampaignLifecycleBanner } from './_components/campaign-lifecycle-banner'
 
 // Lazy-load heavy dialog components (only loaded when opened)
 const TaskVerificationForm = dynamic(
@@ -868,6 +869,11 @@ export default function CampaignDetailsPage() {
     <div className="min-h-screen bg-gradient-soft">
       {/* Hero Section */}
       <CampaignHero campaign={campaign} isTimeExpiredNotClosed={!!isTimeExpiredNotClosed} />
+
+      {/* Lifecycle state ladder (NFR-9): honest, named state with claim/sweep timing. */}
+      <div className="container mx-auto px-4 pt-8">
+        <CampaignLifecycleBanner campaign={campaign} />
+      </div>
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-12">
