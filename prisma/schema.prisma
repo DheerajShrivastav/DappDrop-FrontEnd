@@ -152,6 +152,37 @@ model Analytics {
   timestamp DateTime @default(now())
 }
 
+// Append-only audit log of every EIP-712 attestation the SIGNER_ROLE service signs
+// (PRD BR-V4). Records who/what/when + the evidence that justified signing. Deliberately
+// does NOT store the raw signature or any key material — the signature is returned to the
+// caller for submission/self-submit but never persisted or logged.
+model AttestationRecord {
+  id          String @id @default(cuid())
+  campaignId  Int
+  taskIndex   Int
+  participant String // lowercased wallet the attestation is FOR
+
+  completed Boolean // the `completed` flag that was signed (true = task done)
+  version   Int // the version signed (= on-chain current + 1 at signing time)
+  deadline  DateTime // signature deadline (<= 1h from signing, BR-V2)
+
+  signerAddress String // address derived from the signing key (NOT the key itself)
+  evidence      Json // verifier result snapshot that justified this signature
+
+  submitted Boolean @default(false) // did the backend submit the tx itself?
+  txHash    String? // set once submitted on-chain
+
+  createdAt DateTime @default(now())
+
+  // Concurrency guard: two near-simultaneous requests can both read the same on-chain
+  // version and both sign it, but only the first INSERT for a given
+  // (campaign, task, wallet, version) wins — the second gets a clean "try again" error
+  // instead of handing out a second signature doomed to revert (see src/lib/signer.ts).
+  @@unique([campaignId, taskIndex, participant, version])
+  @@index([campaignId, taskIndex, participant])
+  @@index([participant])
+}
+
 // x402 Payment Protocol - Minimal implementation (like Humanity Protocol)
 model PaymentVerification {
   id              String    @id @default(cuid())
