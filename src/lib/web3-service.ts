@@ -726,6 +726,48 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
   }
 }
 
+/**
+ * Construct a Web3Campaigns entrypoint Contract bound to an arbitrary runner (a
+ * JsonRpcProvider for reads, or a Wallet for signing/sending). This is the single place
+ * outside this module's own client-side `contract`/`readOnlyContract` singletons that ABI +
+ * address wiring happens — server-only services (e.g. src/lib/signer.ts) MUST go through
+ * this instead of constructing `new ethers.Contract(...)` themselves, per this repo's
+ * "never instantiate a Contract outside web3-service.ts" convention (CLAUDE.md).
+ */
+export const getEntrypointContract = (
+  runner: ethers.ContractRunner,
+): Contract => new ethers.Contract(config.addresses.entrypoint, Web3Campaigns.abi, runner) as Contract
+
+/**
+ * The shared read-only entrypoint contract (server- and client-safe), initializing the
+ * module-level read-only provider on first use if needed. For server callers that only need
+ * view calls (e.g. the signer service reading task type / attestation version).
+ */
+export const getEntrypointReadContract = (): Contract => {
+  const c = getReadOnlyContract()
+  if (!c) throw new Error('Read-only contract could not be initialized')
+  return c
+}
+
+/**
+ * O(1) on-chain check for a single participant/task. Used where a caller must distinguish
+ * "already completed on-chain" from "verified in our DB cache but never actually recorded
+ * on-chain" (e.g. a verifier route deciding whether to skip re-attesting a cached PASS).
+ */
+export const hasCompletedTaskOnChain = async (
+  campaignId: number,
+  participant: string,
+  taskIndex: number,
+): Promise<boolean> => {
+  try {
+    const c = getEntrypointReadContract()
+    return await c.hasCompletedTask(campaignId, participant, taskIndex)
+  } catch (e) {
+    console.warn('hasCompletedTaskOnChain failed:', e)
+    return false
+  }
+}
+
 const ZERO_ROOT = '0x' + '00'.repeat(32)
 
 /**
@@ -2299,6 +2341,36 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     console.error('Parsed error description:', description)
     throw new Error(description)
   }
+}
+
+/**
+ * Self-submit fallback for an attested task (BR-V3). When the backend signed a
+ * TaskAttestation but could not submit it (relayer down/unfunded), the connected wallet
+ * submits `verifyTaskCompletionWithSignature` itself using the returned signature. The
+ * recovered signer must hold SIGNER_ROLE, so a user cannot forge completion this way — they
+ * can only broadcast an attestation the backend already signed for them.
+ */
+export const submitAttestationFromWallet = async (
+  campaignId: string,
+  participant: string,
+  taskIndex: number,
+  completed: boolean,
+  deadline: number,
+  signature: string,
+) => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  const tx = await contractWithSigner.verifyTaskCompletionWithSignature(
+    parseInt(campaignId, 10),
+    participant,
+    taskIndex,
+    completed,
+    deadline,
+    signature,
+  )
+  const receipt = await tx.wait()
+  return receipt?.hash as string | undefined
 }
 
 // Function to check if a user has completed specific tasks in a campaign
