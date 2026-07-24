@@ -4,6 +4,8 @@ import {
   verifyPaymentTransaction,
   parsePaymentInfo,
 } from '@/lib/payment-verification'
+import { attestAndRespond } from '@/lib/attest-response'
+import { hasCompletedTaskOnChain } from '@/lib/web3-service'
 
 /**
  * Verify payment transaction for a task
@@ -52,12 +54,37 @@ export async function POST(request: NextRequest) {
     })
 
     if (existing?.verified) {
-      console.log('✅ Payment already verified')
-      return NextResponse.json({
-        verified: true,
-        message: 'Payment already verified',
-        transactionHash: existing.transactionHash,
+      // Cached PASS in our DB does not guarantee the on-chain completion ever landed — the
+      // first attestation may have been signed but never submitted (backend down) AND never
+      // self-submitted by the client. Only skip re-attesting if the chain agrees it's done;
+      // otherwise fall through and attest again so the client gets a signature to submit.
+      const alreadyOnChain = await hasCompletedTaskOnChain(
+        campaignId,
+        userAddress.toLowerCase(),
+        taskIndex,
+      )
+      if (alreadyOnChain) {
+        console.log('✅ Payment already verified and recorded on-chain')
+        return NextResponse.json({
+          success: true,
+          verified: true,
+          message: 'Payment already verified',
+          transactionHash: existing.transactionHash,
+        })
+      }
+      console.log('ℹ️ Payment verified in cache but not yet recorded on-chain — re-attesting')
+      const attestResponse = await attestAndRespond(campaignId, taskIndex, userAddress, {
+        taskType: 'ONCHAIN_TX',
+        platform: 'onchain',
+        paymentTxHash: existing.transactionHash,
+        source: 'cache-hit-reattest',
+        checkedAt: new Date().toISOString(),
       })
+      const attestBody = await attestResponse.json()
+      return NextResponse.json(
+        { ...attestBody, paymentTransactionHash: existing.transactionHash },
+        { status: attestResponse.status },
+      )
     }
 
     // Check for replay attack (transaction hash already used)
@@ -150,11 +177,20 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Payment verified and cached')
 
-    return NextResponse.json({
-      verified: true,
-      message: 'Payment verified successfully',
-      transactionHash,
+    // ONCHAIN_TX PASS → sign (and best-effort submit) the EIP-712 attestation, returning the
+    // signature for self-submit fallback (BR-V3). The txHash proof stays in the response too.
+    const attestResponse = await attestAndRespond(campaignId, taskIndex, userAddress, {
+      taskType: 'ONCHAIN_TX',
+      platform: 'onchain',
+      paymentTxHash: transactionHash,
+      checkedAt: new Date().toISOString(),
     })
+    // Preserve the payment proof alongside the attestation fields for the client.
+    const attestBody = await attestResponse.json()
+    return NextResponse.json(
+      { ...attestBody, paymentTransactionHash: transactionHash },
+      { status: attestResponse.status },
+    )
   } catch (error) {
     console.error('❌ Payment verification error:', error)
     return NextResponse.json(
