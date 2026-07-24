@@ -21,6 +21,7 @@ import {
   openCampaign,
   endCampaign,
   completeTask,
+  submitAttestationFromWallet,
   getUserTaskCompletionStatus,
 } from '@/lib/web3-service'
 
@@ -160,8 +161,77 @@ export default function CampaignDetailsPage() {
     } else if (taskType === 'ONCHAIN_TX') {
       setPaymentTaskId(taskId)
       setIsPaymentDialogOpen(true)
+    } else if (
+      taskType === 'ONCHAIN_HOLD_ERC20' ||
+      taskType === 'ONCHAIN_HOLD_ERC721'
+    ) {
+      // Self-verified on-chain in completeTask (FR-T2) — the contract checks the balance
+      // in-transaction, so this NEVER goes through the backend verifier/signer (which
+      // explicitly rejects these two types). No dialog: it's a direct wallet transaction.
+      handleHoldTaskCompletion(taskId)
     } else {
       setIsVerifyDialogOpen(true)
+    }
+  }
+
+  // FR-T2: ONCHAIN_HOLD_ERC20/ERC721 are the only task types that always cost the
+  // participant gas. TODO(P1): pre-check the on-chain balance and warn *before* the user
+  // pays gas for a doomed tx (the wizard/task metadata carries the token+threshold needed
+  // to do this) — for now this goes straight to the wallet transaction.
+  const handleHoldTaskCompletion = async (taskId: string) => {
+    if (!isConnected || !address || !campaign) {
+      toast({
+        variant: 'destructive',
+        title: 'Wallet Not Connected',
+        description: 'Please connect your wallet.',
+      })
+      return
+    }
+
+    const taskIndex = campaign.tasks.findIndex((task) => task.id === taskId)
+    if (taskIndex === -1) return
+
+    const alreadyDone = userTasks.find((ut) => ut.taskId === taskId)?.completed
+    if (alreadyDone) {
+      toast({
+        title: 'Task Already Completed',
+        description: 'This task was already completed.',
+      })
+      return
+    }
+
+    setUserTasks((prevTasks) =>
+      prevTasks.map((task) =>
+        task.taskId === taskId ? { ...task, isCompleting: true } : task,
+      ),
+    )
+
+    try {
+      await completeTask(campaignId, taskIndex)
+      setUserTasks((prevTasks) =>
+        prevTasks.map((task) =>
+          task.taskId === taskId ? { ...task, completed: true } : task,
+        ),
+      )
+      await fetchAllCampaignData()
+      if (!isJoined) setIsJoined(true)
+      toast({
+        title: 'Task Completed!',
+        description: 'Great job, one step closer to your reward.',
+      })
+    } catch (error: any) {
+      const message = String(error?.message ?? error ?? '')
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: message || 'Failed to complete task.',
+      })
+    } finally {
+      setUserTasks((prevTasks) =>
+        prevTasks.map((task) =>
+          task.taskId === taskId ? { ...task, isCompleting: false } : task,
+        ),
+      )
     }
   }
 
@@ -178,7 +248,7 @@ export default function CampaignDetailsPage() {
         title: 'Wallet Not Connected',
         description: 'Please connect your wallet.',
       })
-      return
+      return false
     }
 
     setUserTasks((prevTasks) =>
@@ -266,17 +336,31 @@ export default function CampaignDetailsPage() {
       const result = await response.json()
 
       if (!response.ok || !result.success || !result.verified) {
-        throw new Error(result.error || 'Verification failed.')
+        throw new Error(result.message || result.error || 'Verification failed.')
       }
 
-      // Backend verification successful - now complete the task on blockchain
-      // Find the task index from the task ID
-      const taskIndex = campaign.tasks.findIndex((task) => task.id === taskId)
-      if (taskIndex === -1) {
-        throw new Error('Task not found in campaign')
+      // v0.6.0: attested tasks are recorded via an EIP-712 signature, NOT the old
+      // client completeTask (which now reverts TaskManagedBySignature). The backend signs
+      // and, by default, submits. If it couldn't submit, self-submit the returned signature
+      // from the connected wallet (BR-V3 fallback).
+      if (result.attested) {
+        if (result.submitted) {
+          // Backend already recorded completion on-chain — nothing more to do.
+        } else if (result.attestation?.signature) {
+          await submitAttestationFromWallet(
+            campaignId,
+            result.attestation.participant,
+            result.attestation.taskIndex,
+            result.attestation.completed,
+            result.attestation.deadline,
+            result.attestation.signature,
+          )
+        } else {
+          throw new Error(
+            'Verified, but completion could not be recorded on-chain. Please try again.',
+          )
+        }
       }
-
-      await completeTask(campaignId, taskIndex)
 
       toast({
         title: 'Task Completed!',
@@ -315,6 +399,8 @@ export default function CampaignDetailsPage() {
       if (!isJoined) {
         setIsJoined(true)
       }
+
+      return true
     } catch (error: any) {
       const message = String(error?.message ?? error ?? '')
       let description = message || 'Failed to complete task.'
@@ -325,6 +411,7 @@ export default function CampaignDetailsPage() {
           'The maximum participant limit for this campaign has been reached.'
       }
       toast({ variant: 'destructive', title: 'Error', description })
+      return false
     } finally {
       setUserTasks((prevTasks) =>
         prevTasks.map((task) =>
@@ -556,9 +643,40 @@ export default function CampaignDetailsPage() {
                 return
               }
 
-              completeTask(campaignId, taskIndex)
-                .then(() => {
-                  // Only mark as verified AFTER the on-chain call succeeds
+              // v0.6.0: HUMANITY_VERIFICATION is an attested task (completeTask now reverts
+              // TaskManagedBySignature for it). Route through the shared verify+attest flow —
+              // it POSTs /api/verify-task, signs/submits (or self-submits) the EIP-712
+              // attestation, updates userTasks, refreshes campaign data, and shows its own
+              // success/failure toast. handleTaskVerification never throws (it reports
+              // failure via its own toast + a `false` return), so we branch on the return
+              // value rather than try/catch.
+              ;(async () => {
+                const success = await handleTaskVerification(
+                  taskContext.taskId,
+                  'HUMANITY_VERIFICATION',
+                )
+                if (success) {
+                  setUserHumanityStatus(true)
+                  if (!isJoined) setIsJoined(true)
+                  return
+                }
+
+                // Failure path: re-check on-chain state directly — a prior attempt (or a
+                // backend-submitted attestation whose response we failed to process) may
+                // have actually completed the task despite the reported failure.
+                let taskAlreadyDone = false
+                try {
+                  const status = await getUserTaskCompletionStatus(
+                    campaignId,
+                    address,
+                    campaign.tasks,
+                  )
+                  taskAlreadyDone = status[taskContext.taskId] === true
+                } catch {
+                  /* ignore re-check errors */
+                }
+
+                if (taskAlreadyDone) {
                   setUserHumanityStatus(true)
                   setUserTasks((prevTasks) =>
                     prevTasks.map((task) =>
@@ -567,61 +685,17 @@ export default function CampaignDetailsPage() {
                         : task,
                     ),
                   )
-                  fetchAllCampaignData()
-                  if (!isJoined) setIsJoined(true)
                   toast({
-                    title: 'Task Completed!',
+                    title: 'Task Already Completed',
                     description:
-                      'Humanity verification successful and task marked complete.',
+                      'This task was already completed on the blockchain.',
                   })
-                })
-                .catch(async (err: any) => {
-                  console.error('Error completing task after OAuth:', err)
-                  const errMsg = err.message || ''
-                  // On any contract revert, re-check blockchain to see if the task
-                  // was actually already completed (error.reason can be null for custom errors)
-                  let taskAlreadyDone = false
-                  try {
-                    const status = await getUserTaskCompletionStatus(
-                      campaignId,
-                      address,
-                      campaign.tasks,
-                    )
-                    taskAlreadyDone = status[taskContext.taskId] === true
-                  } catch {
-                    /* ignore re-check errors */
-                  }
-
-                  if (
-                    taskAlreadyDone ||
-                    errMsg.includes('already completed') ||
-                    errMsg.includes('TaskAlreadyCompleted')
-                  ) {
-                    setUserHumanityStatus(true)
-                    setUserTasks((prevTasks) =>
-                      prevTasks.map((task) =>
-                        task.taskId === taskContext.taskId
-                          ? { ...task, completed: true }
-                          : task,
-                      ),
-                    )
-                    toast({
-                      title: 'Task Already Completed',
-                      description:
-                        'This task was already completed on the blockchain.',
-                    })
-                  } else {
-                    // Reset so the user can retry
-                    setUserHumanityStatus(null)
-                    toast({
-                      variant: 'destructive',
-                      title: 'Task Completion Failed',
-                      description:
-                        errMsg ||
-                        'Verified but could not complete task on blockchain. Please try again.',
-                    })
-                  }
-                })
+                } else {
+                  // handleTaskVerification already showed a specific destructive toast —
+                  // just reset local state so the user can retry.
+                  setUserHumanityStatus(null)
+                }
+              })()
               return
             }
           }
@@ -671,31 +745,20 @@ export default function CampaignDetailsPage() {
               'This humanity verification task was already completed.',
           })
         } else {
-          try {
-            await completeTask(campaignId, taskIndex)
-            // Only mark verified AFTER on-chain call succeeds
+          // v0.6.0: HUMANITY_VERIFICATION is attested, not self-verified — completeTask now
+          // reverts TaskManagedBySignature for it. Route through the shared verify+attest
+          // flow (never throws; reports failure via its own toast + a `false` return).
+          const success = await handleTaskVerification(
+            verifyingTaskId,
+            'HUMANITY_VERIFICATION',
+          )
+
+          if (success) {
             setUserHumanityStatus(true)
-            setUserTasks((prevTasks) =>
-              prevTasks.map((task) =>
-                task.taskId === verifyingTaskId
-                  ? { ...task, completed: true }
-                  : task,
-              ),
-            )
-            await fetchAllCampaignData()
             if (!isJoined) setIsJoined(true)
-            toast({
-              title: 'Task Completed!',
-              description:
-                'Humanity verification successful and task marked complete.',
-            })
-          } catch (err: any) {
-            console.warn(
-              'Error completing task on blockchain:',
-              err?.message || err,
-            )
-            const errMsg = err.message || ''
-            // Re-check blockchain to see if task was actually completed
+          } else {
+            // Re-check on-chain state directly before giving up — a prior attempt (or a
+            // backend-submitted attestation we failed to process) may have landed anyway.
             let taskAlreadyDone = false
             try {
               const status = await getUserTaskCompletionStatus(
@@ -708,11 +771,7 @@ export default function CampaignDetailsPage() {
               /* ignore re-check errors */
             }
 
-            if (
-              taskAlreadyDone ||
-              errMsg.includes('already completed') ||
-              errMsg.includes('TaskAlreadyCompleted')
-            ) {
+            if (taskAlreadyDone) {
               setUserHumanityStatus(true)
               setUserTasks((prevTasks) =>
                 prevTasks.map((task) =>
@@ -727,15 +786,8 @@ export default function CampaignDetailsPage() {
                   'This task was already completed on the blockchain.',
               })
             } else {
-              // Reset so user can retry
+              // handleTaskVerification already showed a specific destructive toast.
               setUserHumanityStatus(null)
-              toast({
-                variant: 'destructive',
-                title: 'Task Completion Failed',
-                description:
-                  errMsg ||
-                  'Verified but could not complete task on blockchain. Please try again.',
-              })
             }
           }
         }
@@ -925,7 +977,12 @@ export default function CampaignDetailsPage() {
           taskId={verifyingTaskId}
           taskType={verifyingTaskType}
           campaignId={campaignId}
-          onVerify={handleTaskVerification}
+          onVerify={async (taskId, taskType, discordData, telegramData) => {
+            // handleTaskVerification returns a success boolean for the humanity call sites
+            // that need to branch on it; this dialog only needs the side effects, so adapt
+            // to the Promise<void> shape the form expects.
+            await handleTaskVerification(taskId, taskType, discordData, telegramData)
+          }}
         />
       )}
 
