@@ -1905,6 +1905,352 @@ export const endCampaign = async (campaignId: string) => {
   }
 }
 
+// ---------------------------------------------------------------------------
+// P1 — Draft creation flow (FR-H2..H6). Replaces the removed single-tx
+// createCampaignWithTasksAndReward with the actual v0.6.0 multi-step Draft sequence:
+// createCampaign -> batchAddTasks -> configureERC20Reward -> fundCampaignERC20 ->
+// setMaxParticipants (optional) -> openCampaign (existing, unchanged export above).
+// ---------------------------------------------------------------------------
+
+const ERC20_MIN_ABI = [
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+]
+
+/** Read a reward token's decimals/symbol so funding amounts are converted correctly. */
+export const getERC20TokenInfo = async (
+  tokenAddress: string,
+): Promise<{ decimals: number; symbol: string } | null> => {
+  try {
+    const runner: ethers.ContractRunner | null =
+      provider ?? getReadOnlyContract()?.runner ?? null
+    if (!runner) return null
+    const token = new ethers.Contract(tokenAddress, ERC20_MIN_ABI, runner)
+    const [decimals, symbol] = await Promise.all([token.decimals(), token.symbol()])
+    return { decimals: Number(decimals), symbol: String(symbol) }
+  } catch (e) {
+    console.warn('getERC20TokenInfo failed:', e)
+    return null
+  }
+}
+
+export type DraftTaskInput = {
+  type: TaskType
+  description: string
+  verificationData?: string
+  isOptional?: boolean
+}
+
+/**
+ * createCampaign -> batchAddTasks, both Draft-only (FR-H2/H3). Task types route through the
+ * canonical taxonomy (src/lib/task-types.ts) — no hardcoded enum numbers (Decision 2). Tasks
+ * are capped at 20 by the contract; batchAddTasks itself caps at MAX_BATCH_SIZE=50, so the
+ * wizard's 20-task cap always fits in a single batch call.
+ */
+export const createDraftCampaignWithTasks = async (params: {
+  title: string
+  startTime: number // unix seconds
+  endTime: number
+  tasks: DraftTaskInput[]
+}): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+
+  try {
+    const tx = await contractWithSigner.createCampaign(
+      params.title,
+      params.startTime,
+      params.endTime,
+    )
+    const receipt = await tx.wait()
+    const event = receipt.logs
+      .map((log: any) => {
+        try {
+          return contract?.interface.parseLog(log) || null
+        } catch {
+          return null
+        }
+      })
+      .find((e: any) => e && e.name === 'CampaignCreated')
+    if (!event) throw new Error('CampaignCreated event not found')
+    const campaignId: bigint = event.args.campaignId
+
+    if (params.tasks.length > 0) {
+      const taskTypes = params.tasks.map((t) => toOnChainTaskType(t.type))
+      const descriptions = params.tasks.map((t) => t.description)
+      const verificationData = params.tasks.map((t) =>
+        ethers.encodeBytes32String(t.verificationData || ''),
+      )
+      const isOptional = params.tasks.map((t) => t.isOptional ?? false)
+
+      const batchTx = await contractWithSigner.batchAddTasks(
+        campaignId,
+        taskTypes,
+        descriptions,
+        verificationData,
+        isOptional,
+      )
+      await batchTx.wait()
+    }
+
+    return campaignId.toString()
+  } catch (error: any) {
+    console.error('Error creating draft campaign:', error)
+    const reason = error.reason || error.message || 'An unknown error occurred.'
+    toast({
+      variant: 'destructive',
+      title: 'Campaign Creation Failed',
+      description: reason,
+    })
+    throw error
+  }
+}
+
+/**
+ * configureERC20Reward -> (approve if needed) -> fundCampaignERC20 (FR-H4/H5). All Draft-only.
+ * `amountHumanReadable` is parsed against the token's OWN decimals (read on-chain), not a
+ * hardcoded 18 — the old pre-v0.6.0 code assumed 18 and would have silently mis-funded any
+ * token with a different decimals count.
+ */
+export const configureAndFundERC20Reward = async (
+  campaignId: string,
+  tokenAddress: string,
+  amountHumanReadable: string,
+): Promise<{ decimals: number; amountWei: bigint }> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const signerAddress = await signer.getAddress()
+  const contractWithSigner = contract.connect(signer) as Contract
+
+  const info = await getERC20TokenInfo(tokenAddress)
+  if (!info) {
+    throw new Error(
+      'Could not read this token contract (decimals/symbol). Confirm the address is a deployed ERC20 token on the target chain.',
+    )
+  }
+  const amountWei = ethers.parseUnits(amountHumanReadable, info.decimals)
+
+  try {
+    const configureTx = await contractWithSigner.configureERC20Reward(
+      campaignId,
+      tokenAddress,
+    )
+    await configureTx.wait()
+
+    const token = new ethers.Contract(tokenAddress, ERC20_MIN_ABI, signer)
+    const allowance: bigint = await token.allowance(
+      signerAddress,
+      config.addresses.entrypoint,
+    )
+    if (allowance < amountWei) {
+      const approveTx = await token.approve(config.addresses.entrypoint, amountWei)
+      await approveTx.wait()
+    }
+
+    const fundTx = await contractWithSigner.fundCampaignERC20(campaignId, amountWei)
+    await fundTx.wait()
+
+    return { decimals: info.decimals, amountWei }
+  } catch (error: any) {
+    console.error('Error configuring/funding ERC20 reward:', error)
+    const reason = error.reason || error.message || 'An unknown error occurred.'
+    toast({
+      variant: 'destructive',
+      title: 'Funding Failed',
+      description: reason,
+    })
+    throw error
+  }
+}
+
+/** setMaxParticipants — Draft-only, optional participant cap (FR-H2, FR-T6). 0 = unlimited. */
+export const setCampaignMaxParticipantsOnChain = async (
+  campaignId: string,
+  cap: number,
+): Promise<void> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.setMaxParticipants(campaignId, cap)
+    await tx.wait()
+  } catch (error: any) {
+    console.error('Error setting max participants:', error)
+    const reason = error.reason || error.message || 'An unknown error occurred.'
+    toast({
+      variant: 'destructive',
+      title: 'Failed to Set Participant Cap',
+      description: reason,
+    })
+    throw error
+  }
+}
+
+/**
+ * Whether a protocol fee module is currently registered (FR-H5 itemization). This
+ * deployment ships with none (fees disabled, gross = net) — reading it live rather than
+ * hardcoding false means the wizard stays honest if fees are ever enabled later without a
+ * code change (PRD Q2 default, docs/DECISIONS_v0.6.0.md).
+ */
+export const getProtocolFeeEnabled = async (): Promise<boolean> => {
+  try {
+    const c = getEntrypointReadContract()
+    const feeModule: string = await c.getFeeModule()
+    return feeModule !== ethers.ZeroAddress
+  } catch (e) {
+    console.warn('getProtocolFeeEnabled failed:', e)
+    return false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// P1 — Merkle settlement: host publish + participant self-claim (FR-M3, FR-C2, BR-M3)
+// ---------------------------------------------------------------------------
+
+/** Host-signed setERC20MerkleRoot — the pipeline PROPOSES, the host PUBLISHES (BR-M3). */
+export const submitERC20MerkleRoot = async (
+  campaignId: string,
+  root: string,
+): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.setERC20MerkleRoot(campaignId, root)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    // Re-thrown unmapped: mapContractRevertToMessage runs once, at the UI layer, against
+    // this original error object (its .reason/.shortMessage fields are what it inspects —
+    // wrapping in a plain Error here would lose them).
+    console.error('Error publishing Merkle root:', error)
+    throw error
+  }
+}
+
+/** Self-claim: claimERC20(campaignId, amount, proof) from the connected wallet (FR-C2). */
+export const claimERC20Reward = async (
+  campaignId: string,
+  amount: string,
+  proof: string[],
+): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.claimERC20(campaignId, amount, proof)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error claiming ERC20 reward:', error)
+    throw error
+  }
+}
+
+/**
+ * NFR-10: map every contract revert reachable from the wizard/claim UI to a specific,
+ * actionable message — a raw revert string reaching the user is a defect. Custom-error
+ * names are matched against `error.reason`/`error.data`/`error.message` since ethers
+ * surfaces them differently depending on RPC provider and call path (staticCall vs sent tx).
+ */
+export const mapContractRevertToMessage = (error: any): string => {
+  const raw: string =
+    error?.reason ||
+    error?.shortMessage ||
+    error?.error?.message ||
+    error?.message ||
+    ''
+
+  const has = (name: string) => raw.includes(name)
+
+  if (has('Web3Campaigns__AlreadyClaimedSettlement')) {
+    return 'This wallet has already claimed its reward for this campaign.'
+  }
+  if (has('Web3Campaigns__AlreadySwept')) {
+    return 'The host has already swept unclaimed funds for this campaign — claiming is closed.'
+  }
+  if (has('Web3Campaigns__RootDisputeWindowActive')) {
+    return 'Allocations were just published and are in their 24-hour community review window. Try again once it elapses.'
+  }
+  if (has('Web3Campaigns__MerkleRootNotSet')) {
+    return 'No reward allocation has been published for this campaign yet.'
+  }
+  if (has('Web3Campaigns__InvalidMerkleProof')) {
+    return 'This wallet has no allocation in this campaign, or the allocation data is stale — refresh and try again.'
+  }
+  if (has('Web3Campaigns__CampaignNotYetEnded')) {
+    return 'Claims open once the campaign has ended.'
+  }
+  if (has('Web3Campaigns__WrongSettlementMode')) {
+    return 'This campaign uses a different settlement mode than expected.'
+  }
+  if (has('Web3Campaigns__InsufficientEscrow')) {
+    return 'This campaign’s escrow cannot cover this claim — please contact the host.'
+  }
+  if (has('Web3Campaigns__CampaignNotFound')) {
+    return 'This campaign could not be found on-chain.'
+  }
+  if (has('Web3Campaigns__RootAlreadyPublished')) {
+    return 'A root has already been published for this campaign by the platform fallback — publish again to correct it.'
+  }
+  if (has('Web3Campaigns__ERC20RewardNotConfigured')) {
+    return 'This campaign has no ERC20 reward configured yet.'
+  }
+  if (has('Web3Campaigns__SettlementModeAlreadySet')) {
+    return 'This campaign already committed to a different settlement mode.'
+  }
+  if (has('Web3Campaigns__CallerIsNotHost')) {
+    return 'Only the campaign host can perform this action.'
+  }
+  if (has('EnforcedPause') || has('paused')) {
+    return 'The platform is temporarily paused for maintenance. Please try again shortly.'
+  }
+  if (error?.code === 'ACTION_REJECTED') {
+    return 'Transaction was rejected in your wallet.'
+  }
+
+  return raw || 'Transaction failed. Please try again.'
+}
+
+/**
+ * Direct-RPC settlement read for the claim UI's value-bearing checks (BR-I4) — never trust
+ * the indexer alone for whether a claim will actually succeed. Combines getERC20Settlement,
+ * getERC20ClaimableAt, and hasClaimedERC20 into one call site.
+ */
+export const getERC20SettlementOnChain = async (
+  campaignId: string,
+  wallet?: string,
+): Promise<{
+  token: string
+  escrowed: bigint
+  distributed: bigint
+  merkleRoot: string
+  closedAt: number
+  swept: boolean
+  claimableAt: number
+  hasClaimed: boolean
+}> => {
+  const c = getEntrypointReadContract()
+  const [settlement, claimableAt, hasClaimed] = await Promise.all([
+    c.getERC20Settlement(campaignId),
+    c.getERC20ClaimableAt(campaignId),
+    wallet ? c.hasClaimedERC20(campaignId, wallet) : Promise.resolve(false),
+  ])
+  return {
+    token: settlement.token,
+    escrowed: settlement.escrowed,
+    distributed: settlement.distributed,
+    merkleRoot: settlement.merkleRoot,
+    closedAt: Number(settlement.closedAt),
+    swept: settlement.swept,
+    claimableAt: Number(claimableAt),
+    hasClaimed,
+  }
+}
+
 export const completeTask = async (campaignId: string, taskIndex: number) => {
   if (!contract) throw new Error('Contract not initialized')
 
