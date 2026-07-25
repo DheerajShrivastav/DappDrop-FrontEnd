@@ -70,11 +70,17 @@ import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useWallet } from '@/context/wallet-provider'
 import React from 'react'
+import { BrowserProvider } from 'ethers'
+import { signAuthMessage } from '@/lib/wallet-auth'
 import type { TaskType } from '@/lib/types'
 import {
   becomeHost,
-  createCampaign,
-  createAndActivateCampaign,
+  createDraftCampaignWithTasks,
+  configureAndFundERC20Reward,
+  setCampaignMaxParticipantsOnChain,
+  getProtocolFeeEnabled,
+  openCampaign,
+  type DraftTaskInput,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
@@ -210,6 +216,16 @@ const campaignSchema = z.object({
       path: ['to'],
     }),
   imageUrl: z.string().url('Please enter a valid image URL.'),
+  // Per-campaign sybil-gating toggle (docs/HUMANITY_GATING.md). No contract field — an
+  // off-chain policy flag consumed by the allocation pipeline at tree-build time.
+  humanityGated: z.boolean().default(false),
+  maxParticipants: z
+    .string()
+    .optional()
+    .refine(
+      (v) => !v || (/^\d+$/.test(v) && Number(v) <= 100_000),
+      'Must be a whole number up to 100,000 (0 or blank = unlimited).',
+    ),
   tasks: z.array(taskSchema).min(1, 'At least one task is required.'),
   reward: z.discriminatedUnion('type', [
     z.object({
@@ -264,9 +280,25 @@ export default function CreateCampaignPage() {
   } | null>(null)
   const [isBecomingHost, setIsBecomingHost] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
-  const [createMode, setCreateMode] = useState<'draft' | 'activate'>('activate')
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [campaignCreated, setCampaignCreated] = useState(false)
+  // v0.6.0 Draft flow: creation is a multi-tx sequence (createCampaign -> batchAddTasks ->
+  // configureERC20Reward -> fund -> setMaxParticipants), always landing in Draft. Opening is
+  // a SEPARATE, explicit action gated by the go-live checklist below (FR-H6).
+  const [wizardPhase, setWizardPhase] = useState<'form' | 'created'>('form')
+  const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null)
+  const [creationProgress, setCreationProgress] = useState<string | null>(null)
+  // Resume state (FR-H7, re-enterable wizard): persisted the MOMENT each on-chain step
+  // succeeds, not just held in a local variable — if a LATER step in the sequence fails
+  // (funding is a common rejection point: the host declines the approve/fund tx in their
+  // wallet), retrying onSubmit must resume from the first step that hasn't succeeded, never
+  // re-run createDraftCampaignWithTasks (which would create a SECOND on-chain campaign and
+  // orphan the first, half-configured one).
+  const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null)
+  const [pendingFunded, setPendingFunded] = useState(false)
+  const [pendingCapSet, setPendingCapSet] = useState(false)
+  const [feeEnabled, setFeeEnabled] = useState(false)
+  const [isOpening, setIsOpening] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
   const { address, isConnected, role, checkRoles } = useWallet()
@@ -284,6 +316,8 @@ export default function CreateCampaignPage() {
         to: addDays(new Date(), 1),
       },
       imageUrl: `https://placehold.co/600x400`,
+      humanityGated: false,
+      maxParticipants: '',
       tasks: [
         {
           type: 'SOCIAL_FOLLOW',
@@ -307,12 +341,10 @@ export default function CreateCampaignPage() {
   const dates = form.watch('dates')
   const tasks = form.watch('tasks')
 
+  // v0.6.0 Draft flow (FR-H2..H6): createCampaign -> batchAddTasks -> configureERC20Reward
+  // -> fundCampaignERC20 -> setMaxParticipants (optional). Always lands in Draft — opening is
+  // a separate, explicit step gated by the go-live checklist (see wizardPhase==='created').
   const onSubmit = async (data: CampaignFormValues) => {
-    console.log('🚀 === FORM SUBMISSION STARTED ===')
-    console.log('📋 Form data received:', JSON.stringify(data, null, 2))
-    console.log('📋 Tasks in form data:', data.tasks)
-    console.log('📋 Create mode:', createMode)
-
     if (!isConnected || !address) {
       toast({
         variant: 'destructive',
@@ -321,35 +353,181 @@ export default function CreateCampaignPage() {
       })
       return
     }
-    setIsLoading(true)
-    try {
-      console.log('🔄 About to call campaign creation function...')
-      const campaignId =
-        createMode === 'activate'
-          ? await createAndActivateCampaign(data)
-          : await createCampaign(data)
-
-      console.log('✅ Campaign created successfully with ID:', campaignId)
-      console.log('📸 Image URL in form data:', data.imageUrl)
-
-      // Mark campaign as successfully created to prevent cleanup
-      setCampaignCreated(true)
-
-      const successMessage =
-        createMode === 'activate'
-          ? `Your campaign (ID: ${campaignId}) has been created and activated!`
-          : `Your campaign (ID: ${campaignId}) has been created in Draft status.`
-
+    if (data.reward.type !== 'ERC20') {
       toast({
-        title: 'Success!',
-        description: successMessage,
+        variant: 'destructive',
+        title: 'Not available yet',
+        description:
+          'NFT and off-chain rewards are coming in a later phase — choose ERC20 for now.',
       })
+      return
+    }
 
-      router.push(`/campaign/${campaignId}`)
+    setIsLoading(true)
+    // Resume from wherever a PRIOR attempt left off (FR-H7) — never re-run
+    // createDraftCampaignWithTasks once a campaign already exists on-chain for this
+    // wizard session, or a retry after e.g. a rejected funding tx would create a second,
+    // independent campaign and orphan the first, half-configured one.
+    let campaignId: string | null = pendingCampaignId
+    try {
+      if (!campaignId) {
+        // Contract requires strictly-future start times; nudge a "now" default forward
+        // rather than let the tx revert on a stale default.
+        const now = Math.floor(Date.now() / 1000)
+        const userStart = Math.floor(data.dates.from.getTime() / 1000)
+        const startTime = userStart <= now ? now + 60 : userStart
+        const endTime = Math.floor(data.dates.to.getTime() / 1000)
+
+        const draftTasks: DraftTaskInput[] = data.tasks.map((t) => ({
+          type: t.type,
+          description: t.description,
+          verificationData: t.verificationData || '',
+          isOptional: false,
+        }))
+
+        setCreationProgress('Creating campaign and adding tasks…')
+        campaignId = await createDraftCampaignWithTasks({
+          title: data.title,
+          startTime,
+          endTime,
+          tasks: draftTasks,
+        })
+        // Persist IMMEDIATELY — this on-chain campaign now exists regardless of whether
+        // any later step in this same submit succeeds.
+        setPendingCampaignId(campaignId)
+        setCampaignCreated(true)
+      }
+
+      if (!pendingFunded) {
+        setCreationProgress('Configuring and funding the reward pool…')
+        await configureAndFundERC20Reward(
+          campaignId,
+          data.reward.tokenAddress,
+          data.reward.amount,
+        )
+        setPendingFunded(true)
+      }
+
+      if (data.maxParticipants && Number(data.maxParticipants) > 0 && !pendingCapSet) {
+        setCreationProgress('Setting participant cap…')
+        await setCampaignMaxParticipantsOnChain(
+          campaignId,
+          Number(data.maxParticipants),
+        )
+        setPendingCapSet(true)
+      }
+
+      setCreationProgress('Saving campaign details…')
+      // Off-chain metadata: image/descriptions/reward name + the allocation policy and
+      // humanity-gating flag the pipeline will read at tree-build time (BR-G2).
+      try {
+        const authProvider = new BrowserProvider((window as any).ethereum)
+        const signer = await signAuthMessage(authProvider)
+        await fetch(`/api/campaigns/${campaignId}/image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: data.imageUrl || 'https://placehold.co/600x400',
+            signature: signer.signature,
+            message: signer.message,
+            shortDescription: data.shortDescription || '',
+            longDescription: data.description || '',
+            rewardType: data.reward.type,
+            rewardName: `${data.reward.amount} token pool`,
+            humanityGated: data.humanityGated,
+            allocationPolicy: 'EQUAL_SPLIT',
+          }),
+        })
+      } catch (metadataError) {
+        console.warn('Failed to save campaign metadata:', metadataError)
+      }
+
+      // Per-task off-chain metadata (Discord/Telegram/Humanity/payment) — unchanged from
+      // the prior flow, still off-chain and orthogonal to the v0.6.0 chain rewrite.
+      for (let i = 0; i < data.tasks.length; i++) {
+        const task = data.tasks[i]
+        try {
+          if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
+            await fetch('/api/campaign-task-metadata', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                campaignId: Number(campaignId),
+                taskIndex: i,
+                taskType: task.type,
+                discordInviteLink: task.discordInviteLink,
+                discordServerId: task.verificationData,
+              }),
+            })
+          } else if (task.type === 'JOIN_TELEGRAM' && task.telegramInviteLink) {
+            await fetch('/api/campaign-task-metadata', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                campaignId: Number(campaignId),
+                taskIndex: i,
+                taskType: task.type,
+                telegramChatId: task.verificationData,
+                telegramInviteLink: task.telegramInviteLink,
+              }),
+            })
+          } else if (task.type === 'HUMANITY_VERIFICATION') {
+            const preset = (task as any).humanityPreset
+            await fetch('/api/campaign-task-metadata', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                campaignId: Number(campaignId),
+                taskIndex: i,
+                taskType: task.type,
+                metadata: {
+                  humanityPreset:
+                    Array.isArray(preset) && preset.length > 0
+                      ? preset
+                      : [preset ?? 'is_human'],
+                },
+              }),
+            })
+          } else if (task.type === 'ONCHAIN_TX' && task.paymentRequired) {
+            await fetch('/api/campaign-task-metadata', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                campaignId: Number(campaignId),
+                taskIndex: i,
+                taskType: task.type,
+                metadata: {
+                  paymentRequired: true,
+                  paymentRecipient: task.paymentRecipient,
+                  chainId: task.chainId,
+                  network: task.network,
+                  tokenAddress: task.tokenAddress || null,
+                  tokenSymbol: task.tokenSymbol,
+                  amount: task.amount,
+                  amountDisplay: task.amountDisplay,
+                },
+              }),
+            })
+          }
+        } catch (e) {
+          console.warn(`Failed to store metadata for task ${i}:`, e)
+        }
+      }
+
+      setCreatedCampaignId(campaignId)
+      setWizardPhase('created')
+      setCreationProgress(null)
+      toast({
+        title: 'Campaign created!',
+        description: `Campaign ${campaignId} is funded and ready — open it when you're ready to go live.`,
+      })
     } catch (e) {
-      // Error toast is handled in the service
-      // Cleanup uploaded image if campaign creation failed
+      setCreationProgress(null)
+      // Error toast is already shown by the underlying web3-service call. Only clean up the
+      // uploaded image if we never got as far as creating the on-chain campaign — once it
+      // exists, the image is legitimately attached to it even if a later step failed.
       if (
+        !campaignId &&
         uploadedImageUrl &&
         uploadedImageUrl !== 'https://placehold.co/600x400'
       ) {
@@ -362,6 +540,14 @@ export default function CreateCampaignPage() {
   useEffect(() => {
     uploadedImageUrlRef.current = uploadedImageUrl
   }, [uploadedImageUrl])
+
+  // FR-H5: read live whether a protocol fee module is registered, so the funding
+  // itemization on the review step is honest rather than hardcoded.
+  useEffect(() => {
+    if (step === 4 && wizardPhase === 'form') {
+      getProtocolFeeEnabled().then(setFeeEnabled)
+    }
+  }, [step, wizardPhase])
 
   useEffect(() => {
     campaignCreatedRef.current = campaignCreated
@@ -1075,6 +1261,29 @@ export default function CreateCampaignPage() {
                               creation.
                             </div>
                           )}
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="humanityGated"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-lg border p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Humanity-verified participants only</FormLabel>
+                          <FormDescription>
+                            When enabled, the reward allocation is built only from wallets
+                            that have completed Humanity Protocol verification — unverified
+                            wallets get no allocation leaf and mathematically cannot claim
+                            (tree-build filtering, not an on-chain check).
+                          </FormDescription>
                         </div>
                       </FormItem>
                     )}
@@ -1847,6 +2056,16 @@ export default function CreateCampaignPage() {
                   <h2 className="text-xl font-semibold border-b pb-2">
                     {steps[2].name}
                   </h2>
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>ERC20 Merkle rewards only, for now</AlertTitle>
+                    <AlertDescription>
+                      NFT and off-chain rewards are coming in a later phase. This wizard
+                      escrows an ERC20 token pool that is split among qualifying
+                      participants after the campaign ends (equal split, per task
+                      completion — see below).
+                    </AlertDescription>
+                  </Alert>
                   <FormField
                     control={form.control}
                     name="reward.type"
@@ -1869,18 +2088,18 @@ export default function CreateCampaignPage() {
                             </FormItem>
                             <FormItem className="flex items-center space-x-3 space-y-0">
                               <FormControl>
-                                <RadioGroupItem value="ERC721" />
+                                <RadioGroupItem value="ERC721" disabled />
                               </FormControl>
-                              <FormLabel className="font-normal">
-                                ERC721 Token (NFT)
+                              <FormLabel className="font-normal text-muted-foreground">
+                                ERC721 Token (NFT) — coming in a later phase
                               </FormLabel>
                             </FormItem>
                             <FormItem className="flex items-center space-x-3 space-y-0">
                               <FormControl>
-                                <RadioGroupItem value="None" />
+                                <RadioGroupItem value="None" disabled />
                               </FormControl>
-                              <FormLabel className="font-normal">
-                                Other (Text description)
+                              <FormLabel className="font-normal text-muted-foreground">
+                                Other (Text description) — coming in a later phase
                               </FormLabel>
                             </FormItem>
                           </RadioGroup>
@@ -1910,14 +2129,20 @@ export default function CreateCampaignPage() {
                       name="reward.amount"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Amount per Participant</FormLabel>
+                          <FormLabel>Total Reward Pool</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
-                              placeholder="1000"
+                              placeholder="10000"
                               {...field}
                             />
                           </FormControl>
+                          <FormDescription>
+                            The total token pool escrowed on-chain. After the campaign ends,
+                            it is split equally among every wallet that completed all tasks
+                            (equal-split policy — the default for this phase). Individual
+                            wallet amounts are computed then, not now.
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -1941,10 +2166,31 @@ export default function CreateCampaignPage() {
                       )}
                     />
                   )}
+                  <FormField
+                    control={form.control}
+                    name="maxParticipants"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Participant Cap (optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            placeholder="Leave blank for unlimited"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Once this many wallets have qualified, joining closes
+                          (up to 100,000). Leave blank for unlimited.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </section>
               )}
 
-              {step === 4 && (
+              {step === 4 && wizardPhase === 'form' && (
                 <section className="space-y-6 animate-in fade-in-50">
                   <h2 className="text-xl font-semibold border-b pb-2">
                     {steps[3].name} &amp; Create
@@ -1957,20 +2203,26 @@ export default function CreateCampaignPage() {
                       {form.getValues('shortDescription')}
                     </p>
                     <div className="text-sm">
-                      <strong>Reward:</strong>{' '}
-                      {form.getValues('reward.type') === 'ERC20'
-                        ? `${form.getValues(
-                          'reward.amount',
-                        )} tokens from contract `
-                        : form.getValues('reward.type') === 'ERC721'
-                          ? `1 NFT from contract `
-                          : `${(form.getValues('reward') as any).name}`}
-                      {form.getValues('reward.type') !== 'None' && (
-                        <code className="text-xs bg-muted p-1 rounded">
-                          {(form.getValues('reward') as any).tokenAddress}
-                        </code>
-                      )}
+                      <strong>Reward pool:</strong>{' '}
+                      {form.getValues('reward.amount')} tokens from{' '}
+                      <code className="text-xs bg-muted p-1 rounded">
+                        {form.getValues('reward.tokenAddress')}
+                      </code>
                     </div>
+                    <div className="text-sm">
+                      <strong>Allocation policy:</strong> Equal split among
+                      wallets that complete every task
+                      {form.getValues('humanityGated')
+                        ? ' — Humanity-verified wallets only'
+                        : ''}
+                      .
+                    </div>
+                    {form.getValues('maxParticipants') && (
+                      <div className="text-sm">
+                        <strong>Participant cap:</strong>{' '}
+                        {form.getValues('maxParticipants')}
+                      </div>
+                    )}
                     <div className="text-sm">
                       <strong>Tasks:</strong>
                       <ul className="list-disc pl-5 mt-1 space-y-1">
@@ -1987,58 +2239,70 @@ export default function CreateCampaignPage() {
                         ))}
                       </ul>
                     </div>
-
-                    {/* Campaign Mode Selection */}
-                    <div className="mt-6 p-4 border rounded-lg bg-muted/30">
-                      <h3 className="font-medium mb-3">Campaign Activation</h3>
-                      <div className="space-y-2">
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="createMode"
-                            value="activate"
-                            checked={createMode === 'activate'}
-                            onChange={(e) => setCreateMode('activate')}
-                            className="text-primary focus:ring-primary"
-                          />
-                          <div>
-                            <span className="font-medium">
-                              Create & Activate
-                            </span>
-                            <p className="text-xs text-muted-foreground">
-                              Campaign becomes active immediately (recommended)
-                            </p>
-                          </div>
-                        </label>
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="createMode"
-                            value="draft"
-                            checked={createMode === 'draft'}
-                            onChange={(e) => setCreateMode('draft')}
-                            className="text-primary focus:ring-primary"
-                          />
-                          <div>
-                            <span className="font-medium">Create as Draft</span>
-                            <p className="text-xs text-muted-foreground">
-                              Campaign stays in draft mode until manually opened
-                            </p>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-
-                    <p className="text-xs pt-4 text-center text-muted-foreground">
-                      {createMode === 'activate'
-                        ? 'Your campaign will be created and become active based on your selected dates.'
-                        : 'Your campaign will be created in draft mode. You will need to open it manually for participants to join.'}
-                    </p>
                   </div>
+
+                  {/* FR-H5: itemize the funding transaction before the host signs it. */}
+                  <div className="rounded-lg border p-4 space-y-2">
+                    <h3 className="font-medium">Funding breakdown</h3>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Gross debit
+                      </span>
+                      <span>
+                        {form.getValues('reward.amount') || '0'} tokens
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Protocol fee {feeEnabled ? '' : '(disabled on this deployment)'}
+                      </span>
+                      <span>0 tokens</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-medium border-t pt-2">
+                      <span>Net escrowed</span>
+                      <span>
+                        {form.getValues('reward.amount') || '0'} tokens
+                      </span>
+                    </div>
+                  </div>
+
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>What happens when you click Create</AlertTitle>
+                    <AlertDescription>
+                      This runs several wallet transactions in sequence: create
+                      the campaign, add its tasks, configure the reward token,
+                      approve and fund the pool
+                      {form.getValues('maxParticipants')
+                        ? ', and set the participant cap'
+                        : ''}
+                      . The campaign is created in Draft — you open it live in
+                      a separate, final step.
+                    </AlertDescription>
+                  </Alert>
                 </section>
               )}
 
-              {step > 0 && (
+              {step === 4 && wizardPhase === 'created' && createdCampaignId && (
+                <GoLiveChecklist
+                  campaignId={createdCampaignId}
+                  isOpening={isOpening}
+                  onOpen={async () => {
+                    setIsOpening(true)
+                    try {
+                      await openCampaign(createdCampaignId, toast)
+                      router.push(`/campaign/${createdCampaignId}`)
+                    } catch {
+                      // Error toast already shown by openCampaign.
+                    } finally {
+                      setIsOpening(false)
+                    }
+                  }}
+                  onLater={() => router.push(`/campaign/${createdCampaignId}`)}
+                />
+              )}
+
+              {step > 0 && wizardPhase === 'form' && (
                 <div className="flex justify-between pt-4 mt-8 border-t">
                   <Button
                     type="button"
@@ -2060,7 +2324,7 @@ export default function CreateCampaignPage() {
                       {isLoading && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      Create Campaign
+                      {creationProgress || 'Create Campaign'}
                     </Button>
                   )}
                 </div>
@@ -2070,5 +2334,55 @@ export default function CreateCampaignPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+/** FR-H6: hard-blocks Open until tasks exist AND the reward is configured+funded — both are
+ * always true by the time this renders, since creation only reaches wizardPhase 'created'
+ * after the full Draft+fund sequence succeeds. Opening is a separate, explicit action; a
+ * completed Draft can sit indefinitely (FR-H7) via "I'll open it later". */
+function GoLiveChecklist({
+  campaignId,
+  isOpening,
+  onOpen,
+  onLater,
+}: {
+  campaignId: string
+  isOpening: boolean
+  onOpen: () => void
+  onLater: () => void
+}) {
+  return (
+    <section className="space-y-6 animate-in fade-in-50">
+      <h2 className="text-xl font-semibold border-b pb-2">Go live</h2>
+      <div className="rounded-lg border border-primary/20 bg-primary/5 p-6 space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Campaign {campaignId} was created and funded. It's in{' '}
+          <strong>Draft</strong> — participants can't see or join it until you
+          open it.
+        </p>
+        <ul className="space-y-2 text-sm">
+          <li className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-green-500" /> Tasks added
+          </li>
+          <li className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-green-500" /> Reward configured and
+            funded
+          </li>
+          <li className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-green-500" /> Start/end times valid
+          </li>
+        </ul>
+        <div className="flex gap-3 pt-2">
+          <Button onClick={onOpen} disabled={isOpening}>
+            {isOpening && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Open Campaign
+          </Button>
+          <Button variant="outline" onClick={onLater}>
+            I'll open it later
+          </Button>
+        </div>
+      </div>
+    </section>
   )
 }
