@@ -6,6 +6,7 @@ import config from '@/app/config'
 import { prisma } from './prisma'
 import { OnChainTaskType } from './task-types'
 import { getEntrypointContract, getEntrypointReadContract } from './web3-service'
+import { classifyAttestationConflict } from './signer-conflict'
 
 /**
  * EIP-712 attestation signer service (PRD BR-V*). The single, server-only place that holds
@@ -228,10 +229,35 @@ export async function attestTaskCompletion(params: {
   // 5. Append-only audit record (no signature, no key material) — BR-V4. The unique
   //    constraint on (campaignId, taskIndex, participant, version) is the concurrency guard:
   //    two near-simultaneous requests can both read the same currentVersion and both sign
-  //    it, but only the first INSERT wins — the second gets a clear "try again" error
-  //    instead of silently handing out a second, doomed-to-revert signature for the same
-  //    version.
+  //    it, but only the first INSERT wins.
+  //
+  //    A P2002 here has two different causes that need different handling:
+  //    (a) a GENUINE live race — a second request landed microseconds after the first and
+  //        lost the insert. The loser must be rejected (SignerConcurrentRequestError) —
+  //        proceeding would resubmit a signature the winner may already be submitting,
+  //        doubling relayer/gas work for one completion.
+  //    (b) a RETRY after a previous attempt signed successfully but never got submitted
+  //        (relayer down/unfunded, or the client lost the signature before self-submitting).
+  //        The version is still pending (nothing was ever accepted on-chain), so it's safe
+  //        to sign again for that SAME version — but with a FRESH deadline, not the stored
+  //        one: reusing a deadline that may already have expired would produce a signature
+  //        doomed to revert Web3Campaigns__SignatureExpired, and since nothing ever gets
+  //        accepted the version never advances, so every future retry would collide on the
+  //        same row and reproduce the same expired signature — a permanent deadlock. We
+  //        recover instead: re-sign the EXISTING record's (version, completed) with a new
+  //        deadline, persist it on the row, and retry submission.
+  //
+  //    The rate limiter above already rejects any request within SIGN_COOLDOWN_MS of the
+  //    last record for this (campaign, task, wallet), so by construction a request that
+  //    reaches this insert is either a genuine same-instant race (the colliding record is
+  //    only microseconds old — younger than the cooldown could have let a legitimate retry
+  //    through) or a legitimate retry (old enough that the rate limiter already let it
+  //    pass). That age is exactly how we disambiguate (a) from (b) below.
   let record: { id: string }
+  let signedVersion = nextVersion
+  let signedCompleted = completed
+  let signedDeadline = deadline
+  let finalSignature = signature
   try {
     record = await prisma.attestationRecord.create({
       data: {
@@ -247,10 +273,76 @@ export async function attestTaskCompletion(params: {
       },
     })
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+    if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') {
+      throw e
+    }
+
+    const existing = await prisma.attestationRecord.findUnique({
+      where: {
+        campaignId_taskIndex_participant_version: {
+          campaignId: params.campaignId,
+          taskIndex: params.taskIndex,
+          participant: participant.toLowerCase(),
+          version: Number(nextVersion),
+        },
+      },
+    })
+    if (!existing) {
+      // The row that caused the conflict vanished (shouldn't happen) — fail safe.
       throw new SignerConcurrentRequestError()
     }
-    throw e
+
+    // Re-verify the on-chain version hasn't moved past this one. If it has, something else
+    // (a different attestation, a revocation) already consumed this slot and the existing
+    // row is stale — no signature for it can ever be accepted again.
+    const liveVersion: bigint = await entrypoint.getTaskAttestationVersion(
+      params.campaignId,
+      participant,
+      params.taskIndex,
+    )
+
+    const resolution = classifyAttestationConflict({
+      existing: {
+        createdAt: existing.createdAt,
+        submitted: existing.submitted,
+        version: existing.version,
+      },
+      liveVersionOnChain: liveVersion,
+      cooldownMs: SIGN_COOLDOWN_MS,
+    })
+    if (resolution.action === 'reject') {
+      throw new SignerConcurrentRequestError()
+    }
+
+    // Safe retry: same (campaignId, taskIndex, participant, version) — reproducing the
+    // BYTE-IDENTICAL original signature was never required, only a VALID, non-expired one
+    // over that still-pending version. Reusing the row's stored deadline verbatim is
+    // actively wrong: if the retry happens more than DEADLINE_SECONDS after the original
+    // signing (the realistic case — the rate limiter already forces retries to be old
+    // enough to reach this branch), that deadline has already passed, so the re-signed
+    // attestation would revert Web3Campaigns__SignatureExpired on submission — and since
+    // nothing ever gets accepted, the version never advances, so EVERY future retry would
+    // collide on this same row and reproduce the same expired signature: a permanent
+    // deadlock for this participant/task with no recovery but manual DB intervention.
+    // Instead: sign a FRESH deadline for the same version and persist it on the row. A
+    // stale earlier signature (if it somehow lands later, e.g. a delayed self-submit)
+    // simply reverts on version mismatch once this one is accepted — harmless.
+    record = { id: existing.id }
+    signedVersion = BigInt(existing.version)
+    signedCompleted = existing.completed
+    signedDeadline = Math.floor(Date.now() / 1000) + DEADLINE_SECONDS
+    finalSignature = await wallet.signTypedData(attestationDomain(), ATTESTATION_TYPES, {
+      campaignId: BigInt(params.campaignId),
+      participant,
+      taskIndex: BigInt(params.taskIndex),
+      completed: signedCompleted,
+      version: signedVersion,
+      deadline: BigInt(signedDeadline),
+    })
+    await prisma.attestationRecord.update({
+      where: { id: existing.id },
+      data: { deadline: new Date(signedDeadline * 1000) },
+    })
   }
 
   // 6. Best-effort backend submission (BR-V3). Never throw on submit failure — the caller
@@ -265,9 +357,9 @@ export async function attestTaskCompletion(params: {
       params.campaignId,
       participant,
       params.taskIndex,
-      completed,
-      deadline,
-      signature,
+      signedCompleted,
+      signedDeadline,
+      finalSignature,
     )
     const receipt = await tx.wait()
     submitted = true
@@ -289,10 +381,10 @@ export async function attestTaskCompletion(params: {
     campaignId: params.campaignId,
     taskIndex: params.taskIndex,
     participant,
-    completed,
-    version: Number(nextVersion),
-    deadline,
-    signature,
+    completed: signedCompleted,
+    version: Number(signedVersion),
+    deadline: signedDeadline,
+    signature: finalSignature,
     submitted,
     txHash,
     submitError,
