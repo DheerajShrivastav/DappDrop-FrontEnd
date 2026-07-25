@@ -50,6 +50,8 @@ import { CampaignHero } from './_components/campaign-hero'
 import { CampaignSidebar } from './_components/campaign-sidebar'
 import { TaskList } from './_components/task-list'
 import { CampaignLifecycleBanner } from './_components/campaign-lifecycle-banner'
+import { MerkleSettlementPanel } from './_components/merkle-settlement-panel'
+import { ClaimPanel } from './_components/claim-panel'
 
 // Lazy-load heavy dialog components (only loaded when opened)
 const TaskVerificationForm = dynamic(
@@ -939,6 +941,12 @@ export default function CampaignDetailsPage() {
               isTimeExpiredNotClosed={!!isTimeExpiredNotClosed}
               onOpenVerifyDialog={handleOpenVerifyDialog}
             />
+
+            {/* Self-claim (FR-C1/C2) — any connected wallet with an allocation */}
+            <ClaimPanel campaign={campaign} />
+
+            {/* Host-only: review & publish the Merkle allocation (FR-M3) */}
+            {isHostOfCampaign && <MerkleSettlementPanel campaign={campaign} />}
 
             {/* Participant Analytics - Only for Host */}
             {isHostOfCampaign && (
