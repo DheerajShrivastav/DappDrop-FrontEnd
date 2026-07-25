@@ -101,6 +101,17 @@ model CampaignCache {
   rewardType String? // "ERC20", "ERC721", "None"
   rewardName String? // User-provided name/description for the reward
 
+  // v0.6.0 allocation policy (PRD BR-G2). No contract field for either — off-chain policy
+  // consumed by the allocation pipeline (src/lib/allocation.ts) at tree-build time.
+  // humanityGated: the per-campaign sybil-gating toggle (docs/HUMANITY_GATING.md) — for
+  // Merkle campaigns, enforcement is tree-build filtering (unverified wallets get no leaf).
+  humanityGated    Boolean @default(false)
+  // allocationPolicy: committed at creation, shown to participants before Open (FR-H4).
+  // CP2 ships one policy (PRD Q3 default): EQUAL_SPLIT among wallets that completed every
+  // task. The column is a string (not an enum) so new policies can be added without a
+  // migration once P3 needs them.
+  allocationPolicy String  @default("EQUAL_SPLIT")
+
   lastSyncedAt DateTime @default(now())
 }
 
@@ -181,6 +192,55 @@ model AttestationRecord {
   @@unique([campaignId, taskIndex, participant, version])
   @@index([campaignId, taskIndex, participant])
   @@index([participant])
+}
+
+// Allocation & Merkle pipeline (PRD BR-M1/M2/M4). One row per PROPOSED/PUBLISHED/SUPERSEDED
+// tree version for a campaign — versions are NEVER deleted (proofs must be servable for
+// years, BR-M2), superseded ones are just marked so the proof API only serves the active one.
+// The pipeline PROPOSES; the host reviews and PUBLISHES by signing setERC20MerkleRoot
+// themselves (BR-M3) — this table never grants the backend authority to publish on its own.
+model MerkleTree {
+  id          String @id @default(cuid())
+  campaignId  Int
+  version     Int // increments per (re)proposal for this campaign, starting at 1
+  root        String // 0x-prefixed bytes32, OZ StandardMerkleTree root
+  token       String // reward token address, for display/reconciliation
+  totalAmount String // sum of all entries, base units (string: exceeds safe JS integer range)
+  policy      String // allocation policy used to build this tree (see CampaignCache.allocationPolicy)
+  // Full StandardMerkleTree.dump() output — the only way to regenerate a wallet's proof
+  // later without recomputing the whole tree from scratch (BR-M2's "proofs servable for years").
+  treeJson    Json
+  // PROPOSED: pipeline output, not yet signed on-chain. PUBLISHED: the host (or, later,
+  // SETTLER_ROLE) actually called setERC20MerkleRoot with this root — cross-checked against
+  // chain state before being trusted for anything value-bearing (BR-I4). SUPERSEDED: a later
+  // version was proposed/published for this campaign.
+  status      String @default("PROPOSED")
+
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime? // best-effort, client-reported at the moment setERC20MerkleRoot succeeded
+
+  entries AllocationEntry[]
+
+  @@unique([campaignId, version])
+  @@index([campaignId, status])
+  @@index([campaignId, root])
+}
+
+// One qualifying wallet's allocation within a specific MerkleTree version.
+model AllocationEntry {
+  id             String     @id @default(cuid())
+  merkleTreeId   String
+  merkleTree     MerkleTree @relation(fields: [merkleTreeId], references: [id])
+  campaignId     Int // denormalized for a fast per-campaign+wallet lookup (proof API)
+  wallet         String // lowercased
+  amount         String // base units, as string (exceeds safe JS integer range)
+  leafIndex      Int // index into the OZ tree — required to regenerate this wallet's proof
+  tasksCompleted Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([merkleTreeId, wallet])
+  @@index([campaignId, wallet])
 }
 
 // x402 Payment Protocol - Minimal implementation (like Humanity Protocol)
