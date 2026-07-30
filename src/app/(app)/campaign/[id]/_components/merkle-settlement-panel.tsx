@@ -20,6 +20,7 @@ import {
   TableCell,
 } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
+import { Skeleton } from '@/components/ui/skeleton'
 import type { Campaign } from '@/lib/types'
 import { submitERC20MerkleRoot, mapContractRevertToMessage } from '@/lib/web3-service'
 import { ROOT_DISPUTE_WINDOW_MS } from '@/lib/campaign-lifecycle'
@@ -170,8 +171,10 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
       </CardHeader>
       <CardContent className="space-y-4">
         {isLoading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <div className="space-y-4">
+            <Skeleton className="h-4 w-2/3" />
+            <Skeleton className="h-40 w-full rounded-md" />
+            <Skeleton className="h-9 w-40 rounded-md" />
           </div>
         ) : (
           <>

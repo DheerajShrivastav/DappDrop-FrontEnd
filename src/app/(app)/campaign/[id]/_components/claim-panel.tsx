@@ -6,6 +6,7 @@ import { Loader2, Trophy, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useWallet } from '@/context/wallet-provider'
 import type { Campaign } from '@/lib/types'
 import { claimERC20Reward, mapContractRevertToMessage } from '@/lib/web3-service'
@@ -76,8 +77,12 @@ export function ClaimPanel({ campaign }: { campaign: Campaign }) {
   if (isLoading) {
     return (
       <Card>
-        <CardContent className="py-8 flex justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <CardHeader>
+          <Skeleton className="h-5 w-32" />
+          <Skeleton className="h-4 w-24" />
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-9 w-36 rounded-md" />
         </CardContent>
       </Card>
     )

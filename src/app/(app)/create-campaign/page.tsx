@@ -749,7 +749,7 @@ export default function CreateCampaignPage() {
   if (role !== 'host') {
     return (
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <Card className="bg-card border shadow-lg">
+        <Card className="bg-card border shadow-elevated">
           <CardHeader>
             <CardTitle className="text-3xl font-bold text-center flex items-center justify-center gap-2">
               <UserPlus /> Become a Host
@@ -793,7 +793,7 @@ export default function CreateCampaignPage() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
-      <Card className="bg-card border shadow-lg">
+      <Card className="bg-card border shadow-elevated">
         <CardHeader>
           <CardTitle className="text-3xl font-bold text-center">
             Create New Campaign
@@ -864,7 +864,7 @@ export default function CreateCampaignPage() {
                           'text-xs tabular-nums',
                           aiPrompt.trim().length < 20
                             ? 'text-muted-foreground'
-                            : 'text-green-500',
+                            : 'text-foreground font-medium',
                         )}
                       >
                         {aiPrompt.trim().length}/20 min
@@ -954,7 +954,7 @@ export default function CreateCampaignPage() {
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5">
                             {generationError.category === 'rate_limit' && (
-                              <Clock className="h-5 w-5 text-amber-500" />
+                              <Clock className="h-5 w-5 text-muted-foreground" />
                             )}
                             {generationError.category === 'network' && (
                               <Wifi className="h-5 w-5 text-destructive" />
@@ -1256,7 +1256,7 @@ export default function CreateCampaignPage() {
                             }}
                           />
                           {uploadedImageUrl && (
-                            <div className="mt-3 p-2 bg-green-500/10 border border-green-500/20 rounded text-sm text-green-600">
+                            <div className="mt-3 p-2 bg-status-claimable-bg border border-status-claimable-border rounded text-sm text-status-claimable-fg">
                               ✓ Image uploaded. You can change it after campaign
                               creation.
                             </div>
@@ -1300,10 +1300,7 @@ export default function CreateCampaignPage() {
                   {/* Discord Bot Warning - Show if Discord tasks exist but bot URL is not configured */}
                   {tasks.some((task) => task.type === 'JOIN_DISCORD') &&
                     !config.discordBotInviteUrl && (
-                      <Alert
-                        variant="destructive"
-                        className="border-red-200 bg-red-50"
-                      >
+                      <Alert variant="destructive">
                         <Bot className="h-4 w-4" />
                         <AlertTitle>Discord Bot Not Configured</AlertTitle>
                         <AlertDescription>
@@ -1318,10 +1315,7 @@ export default function CreateCampaignPage() {
                   {/* Telegram Bot Warning - Show if Telegram tasks exist but bot username is not configured */}
                   {tasks.some((task) => task.type === 'JOIN_TELEGRAM') &&
                     !config.telegramBotUsername && (
-                      <Alert
-                        variant="destructive"
-                        className="border-orange-200 bg-orange-50"
-                      >
+                      <Alert variant="destructive">
                         <Bot className="h-4 w-4" />
                         <AlertTitle>Telegram Bot Not Configured</AlertTitle>
                         <AlertDescription>
@@ -1418,7 +1412,7 @@ export default function CreateCampaignPage() {
                                   purposes.
                                 </FormDescription>
                                 <details className="mt-2">
-                                  <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                                     How to get your Discord Server ID
                                   </summary>
                                   <div className="mt-2 text-xs space-y-1 text-muted-foreground">
@@ -1457,14 +1451,14 @@ export default function CreateCampaignPage() {
                           />
 
                           {/* Discord Bot Setup Instructions */}
-                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
-                            <div className="flex items-center gap-2 text-blue-800">
+                          <div className="p-4 bg-secondary/40 border border-border rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-foreground">
                               <Bot className="h-5 w-5" />
                               <h4 className="font-semibold">
                                 Required: Add DappDrop Bot to Your Server
                               </h4>
                             </div>
-                            <p className="text-sm text-blue-700">
+                            <p className="text-sm text-muted-foreground">
                               To enable automatic verification of Discord join
                               tasks, you must add our bot to your Discord
                               server.
@@ -1475,7 +1469,7 @@ export default function CreateCampaignPage() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="w-fit bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
+                                  className="w-fit bg-background border-border text-foreground hover:bg-secondary"
                                   onClick={() =>
                                     window.open(
                                       config.discordBotInviteUrl!,
@@ -1487,12 +1481,12 @@ export default function CreateCampaignPage() {
                                   Add DappDrop Bot to Server
                                 </Button>
                               ) : (
-                                <p className="text-sm text-blue-600 font-medium">
+                                <p className="text-sm text-muted-foreground font-medium">
                                   Discord bot invite URL not configured. Please
                                   contact support.
                                 </p>
                               )}
-                              <div className="text-xs text-blue-600 space-y-1">
+                              <div className="text-xs text-muted-foreground space-y-1">
                                 <p>
                                   <strong>Required Permissions:</strong>
                                 </p>
@@ -1526,7 +1520,7 @@ export default function CreateCampaignPage() {
                                   (with @) used for verification
                                 </FormDescription>
                                 <details className="mt-2">
-                                  <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                                     How to get your Telegram Channel/Group ID
                                   </summary>
                                   <div className="mt-2 text-xs space-y-1 text-muted-foreground">
@@ -1575,14 +1569,14 @@ export default function CreateCampaignPage() {
                           />
 
                           {/* Telegram Bot Setup Instructions */}
-                          <div className="p-4 bg-sky-50 border border-sky-200 rounded-lg space-y-3">
-                            <div className="flex items-center gap-2 text-sky-800">
+                          <div className="p-4 bg-secondary/40 border border-border rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-foreground">
                               <Bot className="h-5 w-5" />
                               <h4 className="font-semibold">
                                 Required: Add DappDrop Bot to Your Channel/Group
                               </h4>
                             </div>
-                            <p className="text-sm text-sky-700">
+                            <p className="text-sm text-muted-foreground">
                               To enable automatic verification of Telegram join
                               tasks, you must add our bot to your Telegram
                               channel/group.
@@ -1593,7 +1587,7 @@ export default function CreateCampaignPage() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="w-fit bg-white border-sky-300 text-sky-700 hover:bg-sky-50"
+                                  className="w-fit bg-background border-border text-foreground hover:bg-secondary"
                                   onClick={() =>
                                     window.open(
                                       `https://t.me/${config.telegramBotUsername}`,
@@ -1606,12 +1600,12 @@ export default function CreateCampaignPage() {
                                   Channel/Group
                                 </Button>
                               ) : (
-                                <p className="text-sm text-sky-600 font-medium">
+                                <p className="text-sm text-muted-foreground font-medium">
                                   Telegram bot username not configured. Please
                                   contact support.
                                 </p>
                               )}
-                              <div className="text-xs text-sky-600 space-y-1">
+                              <div className="text-xs text-muted-foreground space-y-1">
                                 <p>
                                   <strong>Required Permissions:</strong>
                                 </p>
@@ -1633,11 +1627,11 @@ export default function CreateCampaignPage() {
                       {tasks[index].type === 'ONCHAIN_TX' && (
                         <div className="space-y-4">
                           {/* Beta Notice */}
-                          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-400 text-amber-900">
+                          <div className="flex items-center gap-2 p-3 bg-secondary/40 border border-border rounded-lg">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-foreground text-background">
                               BETA
                             </span>
-                            <p className="text-sm text-amber-800">
+                            <p className="text-sm text-muted-foreground">
                               On-chain actions (x402 Payment Protocol) are
                               currently in beta. Features may change.
                             </p>
@@ -1666,16 +1660,16 @@ export default function CreateCampaignPage() {
 
                           {tasks[index].paymentRequired && (
                             <TooltipProvider>
-                              <div className="space-y-3 p-5 bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200/60 rounded-xl shadow-sm">
+                              <div className="space-y-3 p-5 bg-secondary/40 border border-border rounded-xl shadow-sm">
                                 <div className="flex items-center justify-between mb-1">
-                                  <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                                  <h4 className="font-semibold text-foreground flex items-center gap-2">
                                     💰 Payment Configuration
                                   </h4>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <button
                                         type="button"
-                                        className="text-purple-600 hover:text-purple-800 transition-colors"
+                                        className="text-muted-foreground hover:text-foreground transition-colors"
                                       >
                                         <Info className="h-4 w-4" />
                                       </button>
@@ -1696,7 +1690,7 @@ export default function CreateCampaignPage() {
                                   name={`tasks.${index}.paymentRecipient`}
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-sm font-medium text-gray-900">
+                                      <FormLabel className="text-sm font-medium text-foreground">
                                         Recipient Wallet
                                       </FormLabel>
                                       <FormControl>
@@ -1718,7 +1712,7 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.network`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-gray-900">
+                                        <FormLabel className="text-sm font-medium text-foreground">
                                           Network
                                         </FormLabel>
                                         <Select
@@ -1772,7 +1766,7 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.tokenSymbol`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-gray-900">
+                                        <FormLabel className="text-sm font-medium text-foreground">
                                           Token
                                         </FormLabel>
                                         <FormControl>
@@ -1794,11 +1788,11 @@ export default function CreateCampaignPage() {
                                   name={`tasks.${index}.tokenAddress`}
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                      <FormLabel className="text-sm font-medium text-foreground flex items-center gap-2">
                                         Token Contract
                                         <Tooltip>
                                           <TooltipTrigger asChild>
-                                            <span className="text-xs text-purple-600 cursor-help">
+                                            <span className="text-xs text-muted-foreground cursor-help">
                                               (optional)
                                             </span>
                                           </TooltipTrigger>
@@ -1830,11 +1824,11 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.amount`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                        <FormLabel className="text-sm font-medium text-foreground flex items-center gap-1">
                                           Amount (ETH)
                                           <Tooltip>
                                             <TooltipTrigger asChild>
-                                              <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                                              <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                                             </TooltipTrigger>
                                             <TooltipContent>
                                               <p className="text-sm">
@@ -1879,11 +1873,11 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.amountDisplay`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                        <FormLabel className="text-sm font-medium text-foreground flex items-center gap-1">
                                           Display Format
                                           <Tooltip>
                                             <TooltipTrigger asChild>
-                                              <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                                              <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                                             </TooltipTrigger>
                                             <TooltipContent>
                                               <p className="text-sm">
@@ -1906,7 +1900,7 @@ export default function CreateCampaignPage() {
                                   />
                                 </div>
 
-                                <div className="flex items-center gap-2 pt-1 text-xs text-purple-700 bg-purple-100/50 px-3 py-2 rounded-md border border-purple-200/50">
+                                <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground bg-secondary px-3 py-2 rounded-md border border-border">
                                   <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
                                   <span>
                                     Payments verified automatically via
@@ -1921,14 +1915,14 @@ export default function CreateCampaignPage() {
 
                       {tasks[index].type === 'HUMANITY_VERIFICATION' && (
                         <div className="space-y-4">
-                          <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3">
-                            <div className="flex items-center gap-2 text-purple-800">
+                          <div className="p-4 bg-secondary/50 border border-border rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-foreground">
                               <ShieldCheck className="h-5 w-5" />
                               <h4 className="font-semibold">
                                 Verification Presets
                               </h4>
                             </div>
-                            <p className="text-sm text-purple-700">
+                            <p className="text-sm text-muted-foreground">
                               Select one or more Humanity Protocol checks users
                               must pass to complete this task.
                             </p>
@@ -1976,7 +1970,7 @@ export default function CreateCampaignPage() {
                                           key={cat.key}
                                           className="space-y-1.5"
                                         >
-                                          <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide">
+                                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                                             {cat.label}
                                           </p>
                                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1987,8 +1981,8 @@ export default function CreateCampaignPage() {
                                                 <label
                                                   key={p.preset}
                                                   className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isChecked
-                                                    ? 'border-purple-500 bg-purple-50 ring-1 ring-purple-500/30'
-                                                    : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/50'
+                                                    ? 'border-foreground/40 bg-secondary/50 ring-1 ring-foreground/20'
+                                                    : 'border-border hover:border-foreground/20 hover:bg-secondary/50'
                                                     }`}
                                                 >
                                                   <Checkbox
@@ -2363,14 +2357,14 @@ function GoLiveChecklist({
         </p>
         <ul className="space-y-2 text-sm">
           <li className="flex items-center gap-2">
-            <Check className="h-4 w-4 text-green-500" /> Tasks added
+            <Check className="h-4 w-4 text-status-claimable-fg" /> Tasks added
           </li>
           <li className="flex items-center gap-2">
-            <Check className="h-4 w-4 text-green-500" /> Reward configured and
+            <Check className="h-4 w-4 text-status-claimable-fg" /> Reward configured and
             funded
           </li>
           <li className="flex items-center gap-2">
-            <Check className="h-4 w-4 text-green-500" /> Start/end times valid
+            <Check className="h-4 w-4 text-status-claimable-fg" /> Start/end times valid
           </li>
         </ul>
         <div className="flex gap-3 pt-2">

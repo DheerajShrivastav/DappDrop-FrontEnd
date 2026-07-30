@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { Loader2, Search } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { Search, LayoutGrid } from 'lucide-react'
 import { CampaignCard } from '@/components/campaign-card'
+import { CampaignGridSkeleton } from '@/components/campaign-card-skeleton'
 import { getAllCampaigns, hasParticipated } from '@/lib/web3-service'
 import type { Campaign, SettlementMode } from '@/lib/types'
 import { getLifecycleState } from '@/lib/campaign-lifecycle'
@@ -15,6 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+
+const fadeInUp = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0 },
+}
 
 // FR-D2 discovery controls. Filtering/sorting runs client-side over indexer data so no page
 // blocks on a live RPC call (NFR-4).
@@ -99,26 +106,40 @@ export default function CampaignsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-12">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight mb-2">Explore Campaigns</h1>
+      <div className="container mx-auto px-4 py-16">
+        <motion.div
+          className="mb-12"
+          initial={fadeInUp.initial}
+          animate={fadeInUp.animate}
+          transition={{ duration: 0.4 }}
+        >
+          <h1 className="font-headline text-4xl font-bold tracking-tight mb-3">
+            Explore Campaigns
+          </h1>
           <p className="text-muted-foreground text-lg">
             Discover active campaigns and start earning rewards
           </p>
-        </div>
+        </motion.div>
 
         {/* Participant's joined campaigns */}
         {role === 'participant' && participantCampaigns.length > 0 && (
           <section className="mb-16">
-            <h2 className="text-2xl font-bold tracking-tight mb-6">Your Joined Campaigns</h2>
+            <h2 className="font-headline text-2xl font-semibold tracking-tight mb-6">
+              Your Joined Campaigns
+            </h2>
             {isLoadingParticipant ? (
-              <div className="flex justify-center items-center h-32">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
+              <CampaignGridSkeleton count={3} />
             ) : (
               <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-                {participantCampaigns.map((campaign) => (
-                  <CampaignCard key={campaign.id} campaign={campaign} />
+                {participantCampaigns.map((campaign, i) => (
+                  <motion.div
+                    key={campaign.id}
+                    initial={fadeInUp.initial}
+                    animate={fadeInUp.animate}
+                    transition={{ duration: 0.3, delay: Math.min(i, 6) * 0.04 }}
+                  >
+                    <CampaignCard campaign={campaign} />
+                  </motion.div>
                 ))}
               </div>
             )}
@@ -175,19 +196,27 @@ export default function CampaignsPage() {
 
         <section>
           {isLoading ? (
-            <div className="flex justify-center items-center h-64">
-              <Loader2 className="h-16 w-16 animate-spin text-primary" />
-            </div>
+            <CampaignGridSkeleton />
           ) : visibleCampaigns.length > 0 ? (
             <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-              {visibleCampaigns.map((campaign) => (
-                <CampaignCard key={campaign.id} campaign={campaign} />
+              {visibleCampaigns.map((campaign, i) => (
+                <motion.div
+                  key={campaign.id}
+                  initial={fadeInUp.initial}
+                  animate={fadeInUp.animate}
+                  transition={{ duration: 0.3, delay: Math.min(i, 6) * 0.04 }}
+                >
+                  <CampaignCard campaign={campaign} />
+                </motion.div>
               ))}
             </div>
           ) : (
-            <div className="text-center py-16 bg-card rounded-lg border-2 border-dashed">
-              <h3 className="text-xl font-semibold">No campaigns match your filters</h3>
-              <p className="text-muted-foreground mt-2">
+            <div className="text-center py-20 bg-card rounded-xl border border-dashed">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
+                <LayoutGrid className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold">No campaigns match your filters</h3>
+              <p className="text-muted-foreground mt-1.5 text-sm">
                 Try clearing the search or filters to see more.
               </p>
             </div>

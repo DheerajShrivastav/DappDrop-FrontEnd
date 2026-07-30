@@ -33,7 +33,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Loader2 } from 'lucide-react'
+import { Loader2, SearchX } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -890,10 +891,18 @@ export default function CampaignDetailsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading campaign...</p>
+      <div className="min-h-screen">
+        <Skeleton className="h-[400px] w-full rounded-none" />
+        <div className="container mx-auto px-4 py-12">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <Skeleton className="h-32 w-full rounded-xl" />
+              <Skeleton className="h-64 w-full rounded-xl" />
+            </div>
+            <div className="space-y-6">
+              <Skeleton className="h-96 w-full rounded-xl" />
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -902,9 +911,12 @@ export default function CampaignDetailsPage() {
   if (!campaign) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-md">
+        <Card className="max-w-md shadow-elevated">
           <CardHeader>
-            <CardTitle>Campaign Not Found</CardTitle>
+            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-secondary">
+              <SearchX className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <CardTitle>Campaign not found</CardTitle>
             <CardDescription>
               This campaign doesn't exist or has been removed.
             </CardDescription>
