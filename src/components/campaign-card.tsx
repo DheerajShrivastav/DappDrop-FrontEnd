@@ -19,11 +19,8 @@ import { useWallet } from '@/context/wallet-provider'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from './ui/button'
 import { openCampaign, endCampaign, isPaused } from '@/lib/web3-service'
-import {
-    getLifecycleState,
-    settlementModeLabel,
-    type LifecycleState,
-} from '@/lib/campaign-lifecycle'
+import { getLifecycleState, settlementModeLabel } from '@/lib/campaign-lifecycle'
+import { getStatusStyle } from '@/lib/status-styles'
 import {
     AlertDialog,
     AlertDialogAction,
@@ -107,33 +104,11 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
     const lifecycle = getLifecycleState(campaign)
     const maxParticipants = campaign.settlement?.maxParticipants ?? 0
     const settlementLabel = settlementModeLabel(campaign.settlement?.mode)
-
-    const lifecycleBadgeStyles = (state: LifecycleState): string => {
-        switch (state) {
-            case 'open':
-                return 'bg-green-500 hover:bg-green-600 text-white shadow-lg shadow-green-500/20 border-green-400/50'
-            case 'claims_open':
-            case 'closed_claimable':
-                return 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-400/50'
-            case 'allocations_published':
-                return 'bg-amber-500 hover:bg-amber-600 text-white border-amber-400/50'
-            case 'ended_finalizing':
-                return 'bg-blue-500 hover:bg-blue-600 text-white border-blue-400/50'
-            case 'overdue_fallback':
-                return 'bg-orange-600 hover:bg-orange-700 text-white border-orange-400/50'
-            case 'draft':
-                return 'bg-slate-500 hover:bg-slate-600 text-white border-slate-400/50'
-            case 'swept':
-            case 'cancelled':
-                return 'bg-slate-400 hover:bg-slate-500 text-white border-slate-300/50'
-            default:
-                return 'bg-slate-100 text-slate-800'
-        }
-    }
+    const statusStyle = getStatusStyle(lifecycle.state)
 
     return (
         <>
-            <Card className="h-full flex flex-col overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/5 bg-card border-border/50 hover:border-primary/30 group">
+            <Card className="h-full flex flex-col overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover shadow-card bg-card border-border/70 hover:border-foreground/20 group">
                 <Link
                     href={`/campaign/${campaign.id}`}
                     className="flex flex-col flex-grow relative"
@@ -152,13 +127,13 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
 
                             <Badge
                                 className={cn(
-                                    "absolute top-4 right-4 px-3 py-1 text-xs font-semibold backdrop-blur-md border",
-                                    lifecycleBadgeStyles(lifecycle.state)
+                                    "absolute top-4 right-4 px-3 py-1 text-xs font-semibold backdrop-blur-md border shadow-soft",
+                                    statusStyle.badge
                                 )}
                             >
-                                {lifecycle.state === 'open' && <span className="mr-1.5 relative flex h-2 w-2">
+                                {lifecycle.state === 'open' && <span className="mr-1.5 relative flex h-1.5 w-1.5">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
                                 </span>}
                                 {lifecycle.label}
                             </Badge>

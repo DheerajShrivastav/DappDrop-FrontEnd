@@ -129,7 +129,7 @@ export function ClaimPanel({ campaign }: { campaign: Campaign }) {
       </CardHeader>
       <CardContent>
         {proof.status === 'claimed' ? (
-          <div className="flex items-center gap-2 text-sm text-emerald-600">
+          <div className="flex items-center gap-2 text-sm text-status-claimable-fg">
             <CheckCircle2 className="h-4 w-4" /> Already claimed.
           </div>
         ) : proof.status === 'swept' ? (

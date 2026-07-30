@@ -176,8 +176,8 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
         ) : (
           <>
             {allocation && allocation.status === 'PUBLISHED' && (
-              <div className="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm">
-                <Gavel className="h-4 w-4 mt-0.5 text-emerald-500 shrink-0" />
+              <div className="flex items-start gap-2 rounded-md border border-status-claimable-border bg-status-claimable-bg text-status-claimable-fg p-3 text-sm">
+                <Gavel className="h-4 w-4 mt-0.5 shrink-0" />
                 <span>
                   Version {allocation.version} is published. Claims open{' '}
                   {allocation.publishedAt
@@ -192,8 +192,8 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
             )}
 
             {allocation && allocation.status === 'PROPOSED' && (
-              <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-                <AlertTriangle className="h-4 w-4 mt-0.5 text-amber-500 shrink-0" />
+              <div className="flex items-start gap-2 rounded-md border border-status-pending-border bg-status-pending-bg text-status-pending-fg p-3 text-sm">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                 <span>
                   Version {allocation.version} is proposed but not yet published.
                   Nothing is claimable until you publish it.
