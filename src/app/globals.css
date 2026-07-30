@@ -4,14 +4,17 @@
 
 @layer base {
     :root {
-        /* Light Theme - Clean White Base with Black Accents */
-        --background: 0 0% 100%;
-        /* Pure White */
-        --foreground: 0 0% 9%;
-        /* Deep Black */
+        /* Strictly monochrome: black (#171717) on white/near-white. Premium comes from
+           weight/size/spacing/contrast, not color — see the status palette below for the
+           one deliberate exception (functional lifecycle/money states only). */
 
-        --card: 0 0% 98%;
-        /* Soft Gray */
+        /* Page background: faint gray so white cards have something to sit on. */
+        --background: 0 0% 98%;
+        --foreground: 0 0% 9%;
+        /* Deep Black #171717 */
+
+        /* Cards are pure white — the one consistent rule everywhere in the app. */
+        --card: 0 0% 100%;
         --card-foreground: 0 0% 9%;
 
         --popover: 0 0% 100%;
@@ -27,8 +30,8 @@
         --secondary-foreground: 0 0% 9%;
 
         --muted: 0 0% 96%;
-        --muted-foreground: 0 0% 45%;
-        /* Medium Gray */
+        --muted-foreground: 0 0% 40%;
+        /* Darkened from 45% for AA contrast on white/near-white (~4.6:1) */
 
         --accent: 0 0% 9%;
         --accent-foreground: 0 0% 100%;
@@ -49,6 +52,38 @@
         --chart-3: 197 37% 24%;
         --chart-4: 43 74% 66%;
         --chart-5: 27 87% 67%;
+
+        /* --------------------------------------------------------------------------
+           Status palette — the ONLY color anywhere in the app. Desaturated/muted so it
+           reads calm against the monochrome base, used purely to make campaign lifecycle
+           and money states scannable (functional, never decorative). Each has a
+           background/border pair (for banners, badges) and a solid/foreground pair (for
+           filled badges, icons). Mapped to lifecycle states in src/lib/status-styles.ts.
+           -------------------------------------------------------------------------- */
+        --status-open-bg: 142 25% 94%;
+        --status-open-border: 142 20% 80%;
+        --status-open-fg: 142 40% 28%;
+        --status-open-solid: 142 30% 34%;
+
+        --status-claimable-bg: 168 25% 94%;
+        --status-claimable-border: 168 20% 78%;
+        --status-claimable-fg: 168 45% 24%;
+        --status-claimable-solid: 168 35% 30%;
+
+        --status-pending-bg: 38 35% 95%;
+        --status-pending-border: 38 30% 82%;
+        --status-pending-fg: 30 40% 32%;
+        --status-pending-solid: 32 45% 40%;
+
+        --status-closed-bg: 0 0% 95%;
+        --status-closed-border: 0 0% 85%;
+        --status-closed-fg: 0 0% 35%;
+        --status-closed-solid: 0 0% 45%;
+
+        --status-cancelled-bg: 350 30% 95%;
+        --status-cancelled-border: 350 25% 84%;
+        --status-cancelled-fg: 350 35% 34%;
+        --status-cancelled-solid: 350 30% 42%;
     }
 }
 
@@ -65,37 +100,36 @@
 /* Modern Light Theme Utilities */
 @layer utilities {
 
-    /* Clean Shadow System */
+    /* Soft, diffuse elevation — low opacity throughout (0.04–0.08). Premium restraint:
+       shadows should read as depth, not as a glow/halo. */
     .shadow-soft {
-        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
     }
 
     .shadow-card {
-        box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 1px -1px rgb(0 0 0 / 0.03);
     }
 
     .shadow-card-hover {
-        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.05);
     }
 
-    .shadow-black-glow {
-        box-shadow: 0 0 0 1px rgb(23 23 23 / 0.1),
-            0 8px 16px rgb(23 23 23 / 0.12),
-            0 4px 8px rgb(23 23 23 / 0.08);
+    .shadow-elevated {
+        box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -12px rgb(0 0 0 / 0.08);
     }
 
-    /* Clean Card Style */
+    /* Clean Card Style — white card on the faint-gray page background. */
     .card-modern {
-        background: white;
+        background: hsl(var(--card));
         border: 1px solid hsl(var(--border));
         border-radius: 1rem;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
     }
 
     .card-modern:hover {
-        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.05);
         transform: translateY(-2px);
-        border-color: hsl(var(--primary) / 0.3);
+        border-color: hsl(var(--foreground) / 0.15);
     }
 
     /* Gradient Backgrounds */
@@ -105,21 +139,15 @@
                 hsl(0 0% 98%) 100%);
     }
 
-    .bg-gradient-black {
-        background: linear-gradient(135deg,
-                rgb(23 23 23 / 0.05) 0%,
-                rgb(64 64 64 / 0.05) 100%);
-    }
-
-    /* Grid Pattern */
+    /* Grid Pattern (marketing use) */
     .bg-grid-pattern {
         background-image: radial-gradient(circle at 1px 1px, rgb(148 163 184 / 0.15) 1px, transparent 0);
         background-size: 40px 40px;
     }
 
-    /* Interactive Elements */
+    /* Interactive Elements — the one hover affordance kept everywhere: a gentle lift. */
     .interactive-lift {
-        transition: all 0.2s ease;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
     .interactive-lift:hover {
@@ -130,68 +158,30 @@
         transform: translateY(0);
     }
 
-    /* Black Accent Gradient */
-    .text-gradient-black {
-        background: linear-gradient(135deg, #171717 0%, #404040 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-    }
-
-    /* Micro-interaction: Pulse */
-    .pulse-subtle {
-        animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-    }
-
-    @keyframes pulse-subtle {
-
-        0%,
-        100% {
-            opacity: 1;
-        }
-
-        50% {
-            opacity: 0.8;
-        }
-    }
-
-    /* Micro-interaction: Bounce */
-    .bounce-subtle {
-        animation: bounce-subtle 1s ease-in-out infinite;
-    }
-
-    @keyframes bounce-subtle {
-
-        0%,
-        100% {
-            transform: translateY(0);
-        }
-
-        50% {
-            transform: translateY(-5px);
-        }
-    }
-
-    /* Micro-interaction: Shimmer */
-    .shimmer {
+    /* Loading skeleton shimmer — the one motion utility kept for loading states. */
+    .skeleton-shimmer {
         position: relative;
         overflow: hidden;
+        background-color: hsl(var(--muted));
     }
 
-    .shimmer::after {
+    .skeleton-shimmer::after {
         content: '';
         position: absolute;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        left: 0;
+        inset: 0;
         transform: translateX(-100%);
         background: linear-gradient(90deg,
-                rgba(255, 255, 255, 0) 0,
-                rgba(255, 255, 255, 0.2) 20%,
-                rgba(255, 255, 255, 0.5) 60%,
-                rgba(255, 255, 255, 0));
+                transparent 0,
+                hsl(var(--foreground) / 0.04) 20%,
+                hsl(var(--foreground) / 0.08) 60%,
+                transparent);
         animation: shimmer 2s infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .skeleton-shimmer::after {
+            animation: none;
+        }
     }
 
     @keyframes shimmer {

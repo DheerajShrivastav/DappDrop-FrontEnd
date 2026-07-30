@@ -1,7 +1,9 @@
 import type { Config } from 'tailwindcss'
 
 export default {
-    darkMode: ['class'],
+    // Strictly light-mode, deliberately: no .dark token block exists (see globals.css),
+    // so dark mode is not configured at all rather than left half-wired. If dark mode is
+    // ever wanted, add a real `.dark { ... }` block first, then re-enable `['class']` here.
     content: [
         './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
         './src/components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -62,6 +64,41 @@ export default {
                     '4': 'hsl(var(--chart-4))',
                     '5': 'hsl(var(--chart-5))',
                 },
+                // The one deliberate color exception: muted/desaturated lifecycle + money
+                // states (src/lib/status-styles.ts is the single mapping from a lifecycle
+                // state to one of these). Never used decoratively.
+                status: {
+                    open: {
+                        bg: 'hsl(var(--status-open-bg))',
+                        border: 'hsl(var(--status-open-border))',
+                        fg: 'hsl(var(--status-open-fg))',
+                        solid: 'hsl(var(--status-open-solid))',
+                    },
+                    claimable: {
+                        bg: 'hsl(var(--status-claimable-bg))',
+                        border: 'hsl(var(--status-claimable-border))',
+                        fg: 'hsl(var(--status-claimable-fg))',
+                        solid: 'hsl(var(--status-claimable-solid))',
+                    },
+                    pending: {
+                        bg: 'hsl(var(--status-pending-bg))',
+                        border: 'hsl(var(--status-pending-border))',
+                        fg: 'hsl(var(--status-pending-fg))',
+                        solid: 'hsl(var(--status-pending-solid))',
+                    },
+                    closed: {
+                        bg: 'hsl(var(--status-closed-bg))',
+                        border: 'hsl(var(--status-closed-border))',
+                        fg: 'hsl(var(--status-closed-fg))',
+                        solid: 'hsl(var(--status-closed-solid))',
+                    },
+                    cancelled: {
+                        bg: 'hsl(var(--status-cancelled-bg))',
+                        border: 'hsl(var(--status-cancelled-border))',
+                        fg: 'hsl(var(--status-cancelled-fg))',
+                        solid: 'hsl(var(--status-cancelled-solid))',
+                    },
+                },
             },
             borderRadius: {
                 lg: 'var(--radius)',
@@ -69,10 +106,10 @@ export default {
                 sm: 'calc(var(--radius) - 4px)',
             },
             boxShadow: {
-                'soft': '0 1px 2px 0 rgb(0 0 0 / 0.05)',
-                'card': '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
-                'card-hover': '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
-                'black-glow': '0 0 0 1px rgb(23 23 23 / 0.1), 0 8px 16px rgb(23 23 23 / 0.12), 0 4px 8px rgb(23 23 23 / 0.08)',
+                'soft': '0 1px 2px 0 rgb(0 0 0 / 0.04)',
+                'card': '0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 1px -1px rgb(0 0 0 / 0.03)',
+                'card-hover': '0 8px 24px -8px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.05)',
+                'elevated': '0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -12px rgb(0 0 0 / 0.08)',
             },
             keyframes: {
                 'accordion-down': {
@@ -91,16 +128,6 @@ export default {
                         height: '0',
                     },
                 },
-                'gradient-x': {
-                    '0%, 100%': {
-                        'background-size': '200% 200%',
-                        'background-position': 'left center',
-                    },
-                    '50%': {
-                        'background-size': '200% 200%',
-                        'background-position': 'right center',
-                    },
-                },
                 shimmer: {
                     '0%': {
                         transform: 'translateX(-100%)',
@@ -113,7 +140,6 @@ export default {
             animation: {
                 'accordion-down': 'accordion-down 0.2s ease-out',
                 'accordion-up': 'accordion-up 0.2s ease-out',
-                'gradient-x': 'gradient-x 3s ease infinite',
                 shimmer: 'shimmer 2s ease-in-out infinite',
             },
         },

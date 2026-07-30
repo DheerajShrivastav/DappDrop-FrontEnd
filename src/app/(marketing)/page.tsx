@@ -88,7 +88,7 @@ export default function Home() {
             <Button
               size="lg"
               asChild
-              className="bg-primary hover:bg-primary/90 text-white shadow-black-glow h-14 px-10 text-lg font-semibold rounded-xl interactive-lift shimmer"
+              className="bg-primary hover:bg-primary/90 text-white shadow-elevated h-14 px-10 text-lg font-semibold rounded-xl interactive-lift"
             >
               <Link href="/campaigns">Explore Campaigns</Link>
             </Button>

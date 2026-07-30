@@ -1921,14 +1921,14 @@ export default function CreateCampaignPage() {
 
                       {tasks[index].type === 'HUMANITY_VERIFICATION' && (
                         <div className="space-y-4">
-                          <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3 dark:bg-purple-950/20 dark:border-purple-800/40">
-                            <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
+                          <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-purple-800">
                               <ShieldCheck className="h-5 w-5" />
                               <h4 className="font-semibold">
                                 Verification Presets
                               </h4>
                             </div>
-                            <p className="text-sm text-purple-700 dark:text-purple-400">
+                            <p className="text-sm text-purple-700">
                               Select one or more Humanity Protocol checks users
                               must pass to complete this task.
                             </p>
@@ -1976,7 +1976,7 @@ export default function CreateCampaignPage() {
                                           key={cat.key}
                                           className="space-y-1.5"
                                         >
-                                          <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
+                                          <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide">
                                             {cat.label}
                                           </p>
                                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1987,8 +1987,8 @@ export default function CreateCampaignPage() {
                                                 <label
                                                   key={p.preset}
                                                   className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isChecked
-                                                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 ring-1 ring-purple-500/30'
-                                                    : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/10'
+                                                    ? 'border-purple-500 bg-purple-50 ring-1 ring-purple-500/30'
+                                                    : 'border-gray-200 hover:border-purple-300 hover:bg-purple-50/50'
                                                     }`}
                                                 >
                                                   <Checkbox
