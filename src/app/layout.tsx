@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
 import { Inter, Space_Grotesk } from 'next/font/google'
+import { MotionConfig } from 'framer-motion'
 
 const inter = Inter({
     subsets: ['latin'],
@@ -33,7 +34,12 @@ export default function RootLayout({
     return (
         <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`} style={{ scrollBehavior: 'smooth' }} suppressHydrationWarning>
             <body className="font-body antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
-                {children}
+                {/* Global reduced-motion gate: every framer-motion animation in the app
+                    automatically collapses to instant when the user prefers reduced motion,
+                    without needing to thread useReducedMotion() through each component. */}
+                <MotionConfig reducedMotion="user">
+                    {children}
+                </MotionConfig>
                 <Toaster />
             </body>
         </html>
