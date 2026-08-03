@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "keeper": "tsx worker/keeper.ts",
     "keeper:dry-run": "tsx worker/keeper.ts --dry-run",
-    "keeper:loop": "tsx worker/keeper.ts --loop"
+    "keeper:loop": "tsx worker/keeper.ts --loop",
+    "relayer": "tsx worker/relayer.ts",
+    "relayer:dry-run": "tsx worker/relayer.ts --dry-run",
+    "relayer:loop": "tsx worker/relayer.ts --loop"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.58",

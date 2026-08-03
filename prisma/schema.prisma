@@ -35,6 +35,12 @@ model User {
   humanityVerified  Boolean   @default(false)
   lastHumanityCheck DateTime?
 
+  // Moderation gate for sponsored (gasless) claims (PRD BR-R*, see worker/relayer.ts).
+  // Self-claim is NEVER affected by this — it only blocks the platform from paying gas on
+  // this wallet's behalf. Flagged manually (no automated flagging pipeline in this phase).
+  moderationFlagged Boolean @default(false)
+  moderationReason  String?
+
   // NextAuth relations
   accounts Account[]
   sessions Session[]
@@ -257,4 +263,95 @@ model PaymentVerification {
 
   @@unique([campaignId, taskIndex, userAddress])
   @@index([userAddress])
+}
+
+// ---------------------------------------------------------------------------
+// Sponsored (gasless) claim relayer — P2, PRD BR-R*. See worker/relayer.ts.
+//
+// The relayer NEVER redirects funds (claimERC20For always pays `account`, verified against
+// the deployed contract — see docs/REWARD_SYSTEM.md); it only decides whether the PLATFORM
+// pays gas for a claim that the wallet could always submit itself. Self-claim is independent
+// of every model below and is never gated by them.
+// ---------------------------------------------------------------------------
+
+// One request per (campaignId, account), ever — the row IS the dedupe/idempotency key. A
+// repeat POST to the enqueue endpoint for the same wallet+campaign returns the existing row's
+// status rather than creating a second request. Retries after a transient failure reuse the
+// same row (status reset to PENDING, attempts incremented), never a new one.
+model SponsoredClaim {
+  id         String @id @default(cuid())
+  campaignId Int
+  account    String // lowercased wallet the claim is FOR (never the relayer's own address)
+
+  // Snapshot of the allocation at enqueue time (from AllocationEntry) — the worker re-verifies
+  // this is still the CURRENTLY PUBLISHED root's data immediately before submitting (never
+  // trusts a stale snapshot for the actual send), but keeps it here so a request is
+  // self-contained and auditable even if the underlying tree is later superseded.
+  amount String // base units
+  proof  Json // string[] Merkle proof
+  token  String // reward token address, for display/budget accounting
+
+  // PENDING: enqueued, not yet picked up. PROCESSING: claimed by a worker (atomic
+  // PENDING->PROCESSING transition is the cross-instance concurrency guard — see
+  // worker/relayer.ts). SUBMITTED: tx sent, awaiting confirmation. CONFIRMED: mined + verified
+  // successful on-chain. FAILED: exhausted retries or hit an unexpected error. DECLINED: a
+  // gating check failed BEFORE any tx was sent (declineReason is UI-showable, routes the user
+  // to self-claim).
+  status        String  @default("PENDING")
+  declineReason String?
+
+  attempts  Int     @default(0)
+  lastError String?
+
+  // Set once a tx is actually sent, so a stuck tx can be replaced (same nonce, bumped gas)
+  // rather than accidentally double-spent with a second independent send.
+  nonce         Int?
+  txHash        String?
+  gasUsed       String? // wei
+  effGasPrice   String? // wei, effective gas price paid
+  gasCostWei    String? // gasUsed * effGasPrice — what gets attributed to the budget rows below
+
+  requestedAt DateTime  @default(now())
+  processedAt DateTime? // set when status reaches a terminal state (CONFIRMED/FAILED/DECLINED)
+
+  @@unique([campaignId, account])
+  @@index([status])
+  @@index([campaignId])
+}
+
+// Per-campaign sponsorship ceiling (native gas token, wei) — headroom check (b) in the
+// relayer's gating list. Lazily created with a config-driven default on a campaign's first
+// sponsorship request (see worker/relayer.ts); hosts do not yet have a UI to set this
+// per-campaign in CP1 — flagged as a follow-up, the default applies uniformly for now.
+model CampaignSponsorshipBudget {
+  id         String   @id @default(cuid())
+  campaignId Int      @unique
+  budgetWei  String // ceiling
+  spentWei   String   @default("0") // running total, updated only on CONFIRMED
+  updatedAt  DateTime @updatedAt
+  createdAt  DateTime @default(now())
+}
+
+// Global daily sponsorship ceiling (native gas token, wei) — headroom check (c). One row per
+// UTC day, created lazily. Querying "today's" row and comparing spentWei against the
+// RELAYER_DAILY_BUDGET_WEI env ceiling is check (c); the ceiling itself is a config value; the
+// row only tracks the running spend so it survives worker restarts.
+model RelayerDailySpend {
+  id       String @id @default(cuid())
+  date     String @unique // YYYY-MM-DD, UTC
+  spentWei String @default("0")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Singleton row (id always 1) — the kill switch. Halts ALL sponsorship immediately without a
+// redeploy: the worker checks this at the top of every queue tick, and the enqueue endpoint
+// checks it too (so new requests are declined immediately rather than queued and stuck).
+// Self-claim reads nothing from this table and is completely unaffected.
+model RelayerControl {
+  id                Int      @id @default(1)
+  killSwitchEnabled Boolean  @default(false)
+  killSwitchReason  String?
+  updatedAt         DateTime @updatedAt
 }

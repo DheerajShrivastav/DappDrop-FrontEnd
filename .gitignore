@@ -51,3 +51,6 @@ subgraph/node_modules/
 # generated/compiled artifacts (regenerable via codegen/build)
 subgraph/build/
 subgraph/generated/
+
+# Scratch design-demo folder (unrelated to app code)
+.lavish/
