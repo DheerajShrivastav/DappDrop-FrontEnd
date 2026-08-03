@@ -38,6 +38,9 @@ type AllocationSummary = {
   createdAt: string
   publishedAt: string | null
   entries: AllocationEntry[]
+  // Wallets that completed every task but were excluded from the allocation because they are
+  // not Humanity-verified (humanity-gated campaigns only; empty otherwise).
+  excludedForHumanity?: string[]
 }
 
 // Display-only formatting — every on-chain call and reconciliation stays in base units
@@ -235,6 +238,37 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
                     </TableBody>
                   </Table>
                 </div>
+
+                {allocation.excludedForHumanity &&
+                  allocation.excludedForHumanity.length > 0 && (
+                    <div className="space-y-2 rounded-md border border-status-pending-border bg-status-pending-bg p-3">
+                      <div className="flex items-start gap-2 text-sm text-status-pending-fg">
+                        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                        <span>
+                          {allocation.excludedForHumanity.length} wallet(s) excluded — not
+                          Humanity-verified. These wallets completed every task but are not
+                          Humanity-verified, so they are excluded from this gated campaign&apos;s
+                          allocation. Confirm this is intended before publishing.
+                        </span>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto rounded border bg-background">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Excluded wallet</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {allocation.excludedForHumanity.map((w) => (
+                              <TableRow key={w}>
+                                <TableCell className="font-mono text-xs">{w}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
               </>
             ) : (
               <p className="text-sm text-muted-foreground">

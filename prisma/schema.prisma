@@ -31,9 +31,19 @@ model User {
   image         String?
   discordId     String?   @unique // Store Discord user ID
 
-  // Humanity Protocol verification
+  // Humanity Protocol verification.
+  // humanityVerified is the DURABLE status (docs/HUMANITY_GATING.md: "one OAuth, once per
+  // wallet, ever") — the authoritative input to Merkle tree-build gating (src/lib/allocation.ts).
+  // lastHumanityCheck is a freshness timestamp used ONLY by the TTL-bounded courtesy read
+  // (isUserVerified, used by the verify-task path + the sponsored-claim relayer); it must NOT
+  // gate tree-build enforcement, or a genuinely-verified human whose check merely aged past the
+  // TTL would lose their leaf and be permanently locked out of earned rewards.
+  // humanityRevokedAt: set when Humanity Protocol reports a previously-verified wallet revoked;
+  // revocation flips humanityVerified=false so FUTURE tree builds exclude it (already-published
+  // roots are immutable — accepted limitation, docs/HUMANITY_GATING.md).
   humanityVerified  Boolean   @default(false)
   lastHumanityCheck DateTime?
+  humanityRevokedAt DateTime?
 
   // Moderation gate for sponsored (gasless) claims (PRD BR-R*, see worker/relayer.ts).
   // Self-claim is NEVER affected by this — it only blocks the platform from paying gas on
@@ -221,6 +231,14 @@ model MerkleTree {
   // chain state before being trusted for anything value-bearing (BR-I4). SUPERSEDED: a later
   // version was proposed/published for this campaign.
   status      String @default("PROPOSED")
+
+  // Wallets that qualified by tasks but were EXCLUDED from the leaf set by humanity gating
+  // (docs/HUMANITY_GATING.md point 1). Persisted (not just returned from the propose call) so
+  // the host-review panel can show who was filtered out on any later page load before the host
+  // signs setERC20MerkleRoot — otherwise a wrong exclusion (a real human who forgot to verify,
+  // or a fail-closed transient DB error at tree-build) would be published invisibly. Empty for
+  // non-gated campaigns.
+  excludedForHumanity String[]
 
   createdAt   DateTime  @default(now())
   publishedAt DateTime? // best-effort, client-reported at the moment setERC20MerkleRoot succeeded

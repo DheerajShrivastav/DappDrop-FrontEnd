@@ -9,7 +9,7 @@ import {
   getERC20SettlementOnChain,
   getERC20TokenInfo,
 } from './web3-service'
-import { isUserVerified } from './humanity-service'
+import { isHumanityVerifiedDurable } from './humanity-service'
 
 /**
  * Allocation & Merkle pipeline (PRD BR-M1/BR-M2). Triggered on-demand (poll-for-now, per the
@@ -78,12 +78,21 @@ export async function proposeAllocation(campaignId: number): Promise<ProposedAll
   const participants = await getCampaignParticipants(campaign)
   let qualifying = participants.filter((p) => p.tasksCompleted >= totalTasks)
 
+  // PRIMARY humanity-gating enforcement (docs/HUMANITY_GATING.md point 1): for a gated
+  // campaign, exclude every wallet not durably Humanity-verified from the leaf set. A wallet
+  // with no leaf is mathematically unable to claim — no gas, no signature, no new trust; the
+  // on-chain root commitment does all the work. This is the strongest enforcement point, which
+  // is exactly why it must use the DURABLE status read (isHumanityVerifiedDurable), NOT the
+  // TTL-bounded courtesy read (isUserVerified) the relayer uses: excluding a wallet here is
+  // permanent for this allocation, so a merely-aged cache must never masquerade as "unverified"
+  // and strip a genuinely-verified human of rewards they earned. Revoked wallets (their
+  // humanityVerified flipped false) are naturally excluded from this and every future build.
   const excludedForHumanity: string[] = []
   if (humanityGated) {
     const checked = await Promise.all(
       qualifying.map(async (p) => ({
         p,
-        verified: await isUserVerified(p.address),
+        verified: await isHumanityVerifiedDurable(p.address),
       })),
     )
     qualifying = checked
@@ -158,6 +167,9 @@ export async function proposeAllocation(campaignId: number): Promise<ProposedAll
       policy,
       treeJson: treeJson as object,
       status: 'PROPOSED',
+      // Persisted so the host-review panel shows who was filtered out on any later load, not
+      // just in the immediate propose response (BR-M3 host review of humanity exclusions).
+      excludedForHumanity,
       entries: {
         create: entries.map((e, i) => ({
           campaignId,

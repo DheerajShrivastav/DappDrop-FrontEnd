@@ -52,6 +52,9 @@ export async function GET(
       status: tree.status,
       createdAt: tree.createdAt,
       publishedAt: tree.publishedAt,
+      // Wallets excluded by humanity gating — surfaced so the host can review the exclusions
+      // before signing the publish tx (docs/HUMANITY_GATING.md). Empty for non-gated campaigns.
+      excludedForHumanity: tree.excludedForHumanity,
       entries: tree.entries.map((e) => ({
         wallet: e.wallet,
         amount: e.amount,

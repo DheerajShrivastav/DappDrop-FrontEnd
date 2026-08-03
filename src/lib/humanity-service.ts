@@ -282,6 +282,10 @@ async function updateUserVerificationStatus(
       update: {
         humanityVerified: isHuman,
         lastHumanityCheck: new Date(),
+        // A fresh successful verification un-revokes: a wallet that re-completes OAuth after a
+        // prior revocation is verified again, so the stale revocation marker must be cleared or
+        // it would misrepresent the wallet's current state (verified but "revoked").
+        ...(isHuman ? { humanityRevokedAt: null } : {}),
       },
       create: {
         walletAddress: walletAddress.toLowerCase(),
@@ -299,7 +303,14 @@ async function updateUserVerificationStatus(
 }
 
 /**
- * Check if a user is verified as human (using cache)
+ * TTL-BOUNDED courtesy read (verification is considered valid only if the last check is within
+ * CACHE_TTL_MS). Correct for the verify-task path and the sponsored-claim RELAYER gate, where
+ * erring toward "not verified" on a stale check is safe — it only withholds a convenience
+ * (self-claim / re-verify remain available), never earned funds.
+ *
+ * Do NOT use this for Merkle tree-build enforcement — use isHumanityVerifiedDurable instead.
+ * There, excluding a wallet is permanent (no leaf => mathematically cannot claim), so a stale
+ * cache must never be treated as "unverified" or a real human loses rewards they earned.
  */
 export async function isUserVerified(walletAddress: string): Promise<boolean> {
   try {
@@ -312,6 +323,63 @@ export async function isUserVerified(walletAddress: string): Promise<boolean> {
   } catch (error) {
     console.warn('Error checking user verification:', walletAddress, error)
     return false
+  }
+}
+
+/**
+ * DURABLE verification read for Merkle tree-build gating (PRIMARY humanity-gating enforcement,
+ * docs/HUMANITY_GATING.md point 1). Unlike isUserVerified, this applies NO freshness TTL:
+ * verification is a persistent property of a wallet ("one OAuth, once per wallet, ever"), and
+ * the ONLY thing that removes it is an explicit revocation (revokeHumanityVerification, which
+ * flips humanityVerified=false). Using the TTL-bounded read here would let a merely-aged cache
+ * silently exclude a genuinely-verified human from the allocation tree — locking them out of
+ * rewards with no recourse, since a missing leaf can never be claimed.
+ *
+ * Reads the same persisted column (User.humanityVerified) the OAuth callback writes and the
+ * relayer gate reads, so all three stay consistent on a single source of truth.
+ */
+export async function isHumanityVerifiedDurable(walletAddress: string): Promise<boolean> {
+  try {
+    if (!walletAddress || !isValidEthereumAddress(walletAddress)) {
+      return false
+    }
+    const user = await prisma.user.findUnique({
+      where: { walletAddress: walletAddress.toLowerCase() },
+      select: { humanityVerified: true },
+    })
+    return user?.humanityVerified ?? false
+  } catch (error) {
+    console.warn('Error reading durable humanity status:', walletAddress, error)
+    // Fail CLOSED: on a read error, treat as unverified. For tree-build gating that means the
+    // wallet is excluded from THIS proposal (re-runnable once the DB is reachable) rather than
+    // risking inclusion of an actually-unverified wallet in a humanity-gated allocation.
+    return false
+  }
+}
+
+/**
+ * Revocation handling (docs/HUMANITY_GATING.md): when Humanity Protocol reports a
+ * previously-verified wallet revoked, flip humanityVerified=false so FUTURE tree builds exclude
+ * it (isHumanityVerifiedDurable returns false). Already-published roots are immutable — a
+ * revocation after root publication does NOT claw back an allocation (accepted limitation, same
+ * trust window as any off-chain allocation input; the 24h ROOT_DISPUTE_WINDOW is the backstop).
+ *
+ * NOTE: no automated Humanity revocation feed is wired in this phase — this is the correct
+ * entry point, ready to be called from a Humanity webhook or periodic re-check when that trigger
+ * is built (flagged as a follow-up, same as the doc frames it).
+ */
+export async function revokeHumanityVerification(walletAddress: string): Promise<void> {
+  try {
+    if (!walletAddress || !isValidEthereumAddress(walletAddress)) return
+    await prisma.user.updateMany({
+      where: { walletAddress: walletAddress.toLowerCase() },
+      data: {
+        humanityVerified: false,
+        humanityRevokedAt: new Date(),
+      },
+    })
+  } catch (error) {
+    console.warn('Error revoking humanity verification:', walletAddress, error)
   }
 }
 
