@@ -13,7 +13,10 @@
     "keeper:loop": "tsx worker/keeper.ts --loop",
     "relayer": "tsx worker/relayer.ts",
     "relayer:dry-run": "tsx worker/relayer.ts --dry-run",
-    "relayer:loop": "tsx worker/relayer.ts --loop"
+    "relayer:loop": "tsx worker/relayer.ts --loop",
+    "webhooks": "tsx worker/webhook-dispatcher.ts",
+    "webhooks:dry-run": "tsx worker/webhook-dispatcher.ts --dry-run",
+    "webhooks:loop": "tsx worker/webhook-dispatcher.ts --loop"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.58",

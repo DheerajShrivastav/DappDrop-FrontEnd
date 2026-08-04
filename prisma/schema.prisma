@@ -373,3 +373,89 @@ model RelayerControl {
   killSwitchReason  String?
   updatedAt         DateTime @updatedAt
 }
+
+// ---------------------------------------------------------------------------
+// Notification / webhook system — P2.5, PRD BR-N*. See src/lib/notifications.ts +
+// worker/webhook-dispatcher.ts. No keys, no fund movement; contracts are READ-ONLY here.
+// ---------------------------------------------------------------------------
+
+// In-app notification center. One row per (recipient, event). The read path is the app
+// (GET /api/notifications) — no worker needed for in-app; only webhooks have a dispatcher.
+model Notification {
+  id        String @id @default(cuid())
+  recipient String // lowercased wallet the notification is FOR
+  type      String // event type key (see src/lib/notification-events.ts)
+  title     String
+  body      String
+  payload   Json // structured event data (campaignId, txHash, amounts, …) for the UI + deep links
+
+  read   Boolean   @default(false)
+  readAt DateTime?
+
+  // Stable per logical (recipient, event) so a re-emit of the same lifecycle event doesn't
+  // create a duplicate in-app row (idempotent emit, mirrors the webhook dedupe key).
+  eventId String
+
+  createdAt DateTime @default(now())
+
+  @@unique([recipient, eventId])
+  @@index([recipient, read])
+  @@index([recipient, createdAt])
+}
+
+// A host-configured outbound webhook endpoint. The `secret` is the per-host HMAC-SHA256 signing
+// key — SERVER-SIDE ONLY, never logged and never included in any payload. Signing happens once
+// at enqueue time (src/lib/notifications.ts); the dispatcher worker never reads the secret.
+model WebhookEndpoint {
+  id          String  @id @default(cuid())
+  hostAddress String // lowercased wallet of the host who owns this endpoint
+  url         String
+  secret      String // HMAC-SHA256 signing secret (server-side only, never logged/sent)
+  active      Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@index([hostAddress, active])
+}
+
+// One outbound delivery attempt-set for a single (endpoint, event). The signature is computed
+// ONCE at enqueue over the exact `body` bytes + `signedAt` timestamp and stored here; every
+// retry resends the byte-identical body with the SAME signature + timestamp headers (re-signing
+// with a fresh timestamp on retry would break the host's replay-window check). Retry policy:
+// 2xx => DELIVERED; 4xx except 408/429 => FAILED (terminal, a rejected payload is not retried
+// forever); 408/429/5xx/timeout/network => RETRYING with capped exponential backoff until
+// maxAttempts, then FAILED.
+model WebhookDelivery {
+  id         String          @id @default(cuid())
+  endpointId String
+  endpoint   WebhookEndpoint @relation(fields: [endpointId], references: [id])
+
+  eventId   String // stable event id, echoed in the payload + X-DappDrop-Event-Id header for host dedupe
+  eventType String
+  url       String // snapshot of endpoint.url at enqueue time (a later endpoint edit never rewrites in-flight deliveries)
+
+  body      String // the EXACT JSON string that was signed and is (re)sent verbatim on every attempt
+  signature String // hex HMAC-SHA256 over `${signedAt}.${body}` — computed once, resent unchanged
+  signedAt  BigInt // unix seconds included in the signing string + X-DappDrop-Timestamp header
+
+  status              String    @default("PENDING") // PENDING | DELIVERING | DELIVERED | RETRYING | FAILED
+  attempt             Int       @default(0)
+  maxAttempts         Int       @default(6)
+  lastStatusCode      Int?
+  lastResponseSnippet String? // first N chars of the response body, for the redelivery log (never the secret)
+  lastError           String?
+  nextRetryAt         DateTime? // when a RETRYING delivery becomes eligible again
+  deliveredAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Idempotency: at most one delivery per (endpoint, event) — a double-emit of the same logical
+  // event is a no-op, and retries reuse this same row (so the eventId + signature stay stable).
+  @@unique([endpointId, eventId])
+  @@index([status, nextRetryAt])
+  @@index([endpointId])
+}

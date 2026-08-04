@@ -10,6 +10,8 @@ import {
   getERC20TokenInfo,
 } from './web3-service'
 import { isHumanityVerifiedDurable } from './humanity-service'
+import { notifyAllocationsPublished, notifyAllocationProposalReady } from './notifications'
+import { ROOT_DISPUTE_WINDOW_MS } from './campaign-lifecycle'
 
 /**
  * Allocation & Merkle pipeline (PRD BR-M1/BR-M2). Triggered on-demand (poll-for-now, per the
@@ -182,6 +184,22 @@ export async function proposeAllocation(campaignId: number): Promise<ProposedAll
     },
   })
 
+  // Best-effort notification (BR-N*): the proposal is ready for the host to review. Never allowed
+  // to break the allocation pipeline — a notification failure must not fail a successful propose.
+  if (cache?.hostAddress) {
+    try {
+      await notifyAllocationProposalReady({
+        campaignId,
+        hostAddress: cache.hostAddress,
+        campaignName: cache.title,
+        walletCount: entries.length,
+        excludedCount: excludedForHumanity.length,
+      })
+    } catch (e) {
+      console.warn('[allocation] proposal-ready notification failed (non-fatal):', e)
+    }
+  }
+
   return {
     campaignId,
     version: created.version,
@@ -219,6 +237,7 @@ export async function markAllocationPublished(campaignId: number, version: numbe
   })
   if (!row) throw new AllocationError('Allocation version not found')
 
+  const publishedAt = new Date()
   await prisma.$transaction([
     prisma.merkleTree.updateMany({
       where: { campaignId, status: 'PUBLISHED', NOT: { version } },
@@ -226,9 +245,36 @@ export async function markAllocationPublished(campaignId: number, version: numbe
     }),
     prisma.merkleTree.update({
       where: { id: row.id },
-      data: { status: 'PUBLISHED', publishedAt: new Date() },
+      data: { status: 'PUBLISHED', publishedAt },
     }),
   ])
+
+  // Best-effort notifications (BR-N*): a REAL lifecycle transition — the root is now published,
+  // so the dispute window has started and claims open in 24h. Participants get "claims open
+  // soon"; the host gets "dispute window started" (in-app + webhooks). Wrapped so a notification
+  // failure never surfaces as a publish-bookkeeping error (the on-chain publish already
+  // succeeded before this function is even called).
+  try {
+    const [entries, cache] = await Promise.all([
+      prisma.allocationEntry.findMany({
+        where: { merkleTreeId: row.id },
+        select: { wallet: true },
+      }),
+      prisma.campaignCache.findFirst({ where: { campaignId } }),
+    ])
+    if (cache?.hostAddress) {
+      await notifyAllocationsPublished({
+        campaignId,
+        hostAddress: cache.hostAddress,
+        allocatedWallets: entries.map((e) => e.wallet),
+        campaignName: cache.title,
+        claimsOpenAt: new Date(publishedAt.getTime() + ROOT_DISPUTE_WINDOW_MS),
+        token: row.token,
+      })
+    }
+  } catch (e) {
+    console.warn('[allocation] allocations-published notification failed (non-fatal):', e)
+  }
 }
 
 export type AllocationClaimStatus =

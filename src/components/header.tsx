@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { Rocket } from 'lucide-react';
 import { useRole } from '@/hooks/use-role';
+import { NotificationBell } from '@/components/notification-bell';
 
 export default function Header() {
     const { role } = useRole();
@@ -37,6 +38,7 @@ export default function Header() {
                     )}
                 </nav>
                 <div className="flex items-center gap-4">
+                    <NotificationBell />
                     <ConnectButton
                         showBalance={false}
                         accountStatus={{

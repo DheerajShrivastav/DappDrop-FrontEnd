@@ -52,6 +52,7 @@ import { ethers } from 'ethers'
 import config from '@/app/config'
 import { getEntrypointContract, getEntrypointReadContract, mapContractRevertToMessage } from '@/lib/web3-service'
 import { evaluateSponsorshipGates, getKillSwitch, setKillSwitch, recordSponsorshipSpend } from '@/lib/relayer-gates'
+import { notifySponsoredClaimConfirmed } from '@/lib/notifications'
 import { prisma } from '@/lib/prisma'
 
 const MAX_ATTEMPTS = Number(process.env.RELAYER_MAX_ATTEMPTS || '5')
@@ -217,6 +218,27 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
           processedAt: new Date(),
         },
       })
+
+      // Best-effort notification (BR-N*): the participant gets an in-app confirmation, the host
+      // gets a webhook. Never allowed to fail the claim outcome — the tokens are already
+      // delivered on-chain; a notification error must not turn a confirmed claim into a failure.
+      try {
+        const cache = await prisma.campaignCache.findFirst({
+          where: { campaignId: row.campaignId },
+          select: { hostAddress: true },
+        })
+        await notifySponsoredClaimConfirmed({
+          campaignId: row.campaignId,
+          account: row.account,
+          txHash: receipt.hash,
+          hostAddress: cache?.hostAddress ?? undefined,
+          amount: row.amount,
+          token: row.token,
+        })
+      } catch (e) {
+        console.warn('[relayer] confirmed-claim notification failed (non-fatal):', e)
+      }
+
       return { outcome: 'confirmed', txHash: receipt.hash, gasCostWei }
     } catch (e: unknown) {
       lastError = e
