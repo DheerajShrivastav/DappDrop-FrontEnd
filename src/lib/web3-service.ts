@@ -11,6 +11,7 @@ import { fromOnChainTaskType, toOnChainTaskType, OnChainTaskType } from './task-
 import config from '@/app/config'
 import Web3Campaigns from './abi/Web3Campaigns.json'
 import OnChainRewardModule from './abi/OnChainRewardModule.json'
+import NFTSettlementModule from './abi/NFTSettlementModule.json'
 import { addDays, endOfDay, differenceInSeconds } from 'date-fns'
 import {
   getGraphCampaigns,
@@ -980,6 +981,157 @@ export const claimTieredReward = async (campaignId: string): Promise<string> => 
     return receipt?.hash
   } catch (error: any) {
     console.error('Error claiming tiered reward:', error)
+    throw error
+  }
+}
+
+// ---------------------------------------------------------------------------
+// P3 CP2 — NFT Merkle settlement (NFTSettlementModule, ERC721 + ERC1155)
+// ---------------------------------------------------------------------------
+
+export const NFTStandardValue = { ERC721: 0, ERC1155: 1 } as const
+export type NFTStandardLabel = keyof typeof NFTStandardValue
+
+/**
+ * Construct an NFTSettlementModule Contract at an EXPLICIT address — same discipline as
+ * getOnChainRewardModuleContract: never a baked-in default, every caller resolves the
+ * campaign's actual pin first (getPinnedNFTModule) except the one legitimate exception (a
+ * brand-new campaign's first deposit, which is what CREATES the pin).
+ */
+export const getNFTSettlementModuleContract = (
+  moduleAddress: string,
+  runner: ethers.ContractRunner,
+): Contract => new ethers.Contract(moduleAddress, NFTSettlementModule.abi, runner) as Contract
+
+/**
+ * Read the campaign's PINNED NFT module address (getCampaignNFTModule on the entrypoint) —
+ * undefined if the campaign never received an NFT deposit (no pin yet). Unlike the reward
+ * module (pinned at settlement-mode adoption), the NFT module pins at FIRST DEPOSIT
+ * (docs/ARCHITECTURE.md) — so this can be undefined even for a campaign that will end up NFT,
+ * right up until its first depositERC721Rewards/depositERC1155Rewards call.
+ */
+export const getPinnedNFTModule = async (campaignId: string): Promise<string | undefined> => {
+  const c = getEntrypointReadContract()
+  const addr: string = await c.getCampaignNFTModule(campaignId)
+  return addr && addr !== ethers.ZeroAddress ? addr : undefined
+}
+
+/**
+ * Draft/Open/Ended: escrow ERC721 tokenIds for a campaign, max 100/call (contract-enforced) —
+ * callers with more than 100 must batch across multiple calls (the wizard does this). Approval
+ * (setApprovalForAll) must already be granted to the entrypoint; checked/requested here.
+ */
+export const depositERC721Rewards = async (
+  campaignId: string,
+  tokenAddress: string,
+  tokenIds: string[],
+): Promise<string> => {
+  if (tokenIds.length === 0 || tokenIds.length > 100) {
+    throw new Error('depositERC721Rewards: batch must be 1-100 tokenIds.')
+  }
+  const signer = await getSigner()
+  const signerAddress = await signer.getAddress()
+  const nft = new ethers.Contract(
+    tokenAddress,
+    ['function isApprovedForAll(address,address) view returns (bool)', 'function setApprovalForAll(address,bool)'],
+    signer,
+  )
+  const approved: boolean = await nft.isApprovedForAll(signerAddress, config.addresses.entrypoint)
+  if (!approved) {
+    const approveTx = await nft.setApprovalForAll(config.addresses.entrypoint, true)
+    await approveTx.wait()
+  }
+  if (!contract) throw new Error('Contract not initialized')
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.depositERC721Rewards(campaignId, tokenAddress, tokenIds)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error depositing ERC721 rewards:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to deposit NFTs',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Same as depositERC721Rewards but for ERC1155 (ids + per-id amounts, max 100/call). */
+export const depositERC1155Rewards = async (
+  campaignId: string,
+  tokenAddress: string,
+  ids: string[],
+  amounts: string[],
+): Promise<string> => {
+  if (ids.length === 0 || ids.length > 100 || ids.length !== amounts.length) {
+    throw new Error('depositERC1155Rewards: 1-100 ids, matching amounts array.')
+  }
+  const signer = await getSigner()
+  const signerAddress = await signer.getAddress()
+  const nft = new ethers.Contract(
+    tokenAddress,
+    ['function isApprovedForAll(address,address) view returns (bool)', 'function setApprovalForAll(address,bool)'],
+    signer,
+  )
+  const approved: boolean = await nft.isApprovedForAll(signerAddress, config.addresses.entrypoint)
+  if (!approved) {
+    const approveTx = await nft.setApprovalForAll(config.addresses.entrypoint, true)
+    await approveTx.wait()
+  }
+  if (!contract) throw new Error('Contract not initialized')
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.depositERC1155Rewards(campaignId, tokenAddress, ids, amounts)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error depositing ERC1155 rewards:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to deposit NFTs',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Host-signed setNFTMerkleRoot on the campaign's PINNED module (mirrors submitERC20MerkleRoot). */
+export const submitNFTMerkleRoot = async (campaignId: string, root: string): Promise<string> => {
+  const moduleAddress = await getPinnedNFTModule(campaignId)
+  if (!moduleAddress) throw new Error('This campaign has no NFT module pinned (no deposit made yet).')
+  const signer = await getSigner()
+  const c = getNFTSettlementModuleContract(moduleAddress, signer)
+  try {
+    const tx = await c.setNFTMerkleRoot(campaignId, root)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error publishing NFT Merkle root:', error)
+    throw error
+  }
+}
+
+/** Self-claim: NFTSettlementModule.claimNFT on the campaign's PINNED module. */
+export const claimNFTReward = async (
+  campaignId: string,
+  standard: NFTStandardLabel,
+  tokenAddress: string,
+  tokenId: string,
+  amount: string,
+  proof: string[],
+): Promise<string> => {
+  const moduleAddress = await getPinnedNFTModule(campaignId)
+  if (!moduleAddress) throw new Error('This campaign has no NFT module pinned.')
+  const signer = await getSigner()
+  const c = getNFTSettlementModuleContract(moduleAddress, signer)
+  try {
+    const tx = await c.claimNFT(campaignId, NFTStandardValue[standard], tokenAddress, tokenId, amount, proof)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error claiming NFT reward:', error)
     throw error
   }
 }
@@ -2470,6 +2622,24 @@ export const mapContractRevertToMessage = (error: any): string => {
   if (has('OnChainRewardModule__CampaignAlreadyStarted')) {
     return 'Reward tiers can only be configured while the campaign is in Draft.'
   }
+  if (has('NFTSettlementModule__NotAuthoritativeModule')) {
+    return 'This campaign’s NFT module has changed — please refresh and try again.'
+  }
+  if (has('NFTSettlementModule__NotCampaignHost')) {
+    return 'Only the campaign host can perform this action.'
+  }
+  if (has('Web3Campaigns__NFTNotEscrowed')) {
+    return 'This NFT is not currently escrowed for this campaign (already claimed or withdrawn).'
+  }
+  if (has('Web3Campaigns__NFTModuleMismatch')) {
+    return 'This campaign’s NFT module has changed — please refresh and try again.'
+  }
+  if (has('Web3Campaigns__GracePeriodActive')) {
+    return 'Unclaimed NFTs cannot be withdrawn until the claim grace period ends.'
+  }
+  if (has('Web3Campaigns__BatchTooLarge')) {
+    return 'Too many items in one transaction — try a smaller batch.'
+  }
   if (has('EnforcedPause') || has('paused')) {
     return 'The platform is temporarily paused for maintenance. Please try again shortly.'
   }
@@ -2514,6 +2684,38 @@ export const getERC20SettlementOnChain = async (
     claimableAt: Number(claimableAt),
     hasClaimed,
   }
+}
+
+/**
+ * Direct-RPC NFT settlement read (BR-I4), mirroring getERC20SettlementOnChain — resolves the
+ * campaign's PINNED module first (never a default), then reads its root/claimable-at state.
+ * Returns undefined if the campaign never pinned an NFT module (no deposit yet). The
+ * leaf-claimed check is a separate call (isNFTLeafClaimedOnChain) since the leaf itself depends
+ * on which AllocationEntry the caller resolves AFTER seeing the root — a two-phase lookup, same
+ * shape as the ERC20 proof API's own root-then-entry sequence.
+ */
+export const getNFTSettlementOnChain = async (
+  campaignId: string,
+): Promise<{ moduleAddress: string; merkleRoot: string; claimableAt: number } | undefined> => {
+  const moduleAddress = await getPinnedNFTModule(campaignId)
+  if (!moduleAddress) return undefined
+  const c = getNFTSettlementModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  const [merkleRoot, claimableAt] = await Promise.all([
+    c.getNFTMerkleRoot(campaignId),
+    c.getNFTClaimableAt(campaignId),
+  ])
+  return { moduleAddress, merkleRoot, claimableAt: Number(claimableAt) }
+}
+
+/** Whether a specific NFT leaf has already been claimed, read directly against the given
+ * module address (the caller must have already resolved it, e.g. via getNFTSettlementOnChain). */
+export const isNFTLeafClaimedOnChain = async (
+  moduleAddress: string,
+  campaignId: string,
+  leaf: string,
+): Promise<boolean> => {
+  const c = getNFTSettlementModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  return c.isNFTLeafClaimed(campaignId, leaf)
 }
 
 export const completeTask = async (campaignId: string, taskIndex: number) => {

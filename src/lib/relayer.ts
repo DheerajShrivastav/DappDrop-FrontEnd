@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from './prisma'
 import { getAllocationProof } from './allocation'
+import { getNFTAllocationProof } from './nft-allocation'
 import { getCampaignSettlement, getTieredRewardStatus, getTieredTiers } from './web3-service'
 import { RelayerError, evaluateSponsorshipGates } from './relayer-gates'
 
@@ -13,8 +14,9 @@ import { RelayerError, evaluateSponsorshipGates } from './relayer-gates'
  * src/lib/relayer-gates.ts instead. This file is imported ONLY by
  * src/app/api/sponsored-claims/route.ts.
  *
- * P3 CP1: extended to a second claim KIND — TIERED (claimRewardFor on the campaign's pinned
- * OnChainRewardModule), alongside the original ERC20_MERKLE (claimERC20For on the entrypoint).
+ * P3 CP1 added a second claim KIND — TIERED (claimRewardFor on the campaign's pinned
+ * OnChainRewardModule) — and P3 CP2 a third — NFT (claimNFTFor on the campaign's pinned
+ * NFTSettlementModule) — alongside the original ERC20_MERKLE (claimERC20For on the entrypoint).
  * The kind is auto-detected from the campaign's on-chain settlement mode, never client-supplied
  * (a caller declaring the wrong kind could otherwise route a claim at the wrong contract).
  */
@@ -67,15 +69,44 @@ export async function enqueueSponsoredClaim(
   const settlement = await getCampaignSettlement(String(campaignId))
   const isTiered =
     settlement?.mode === 'RANK_TIERED' || settlement?.mode === 'SCORE_TIERED'
+  const isNFT = settlement?.mode === 'NFT'
 
   let createData: {
     kind: string
     amount: string
     proof: string[]
     token: string
+    nftStandard?: string | null
+    tokenId?: string | null
   }
 
-  if (isTiered) {
+  if (isNFT) {
+    const nftProof = await getNFTAllocationProof(campaignId, lower)
+    if (!nftProof || nftProof.status === 'not_allocated') {
+      throw new RelayerError('This wallet has no NFT allocation in this campaign.')
+    }
+    if (nftProof.status === 'claimed') {
+      throw new RelayerError('This wallet has already claimed its NFT for this campaign.')
+    }
+    if (nftProof.status === 'swept') {
+      throw new RelayerError(
+        'Unclaimed NFTs for this campaign have been swept back to the host — claiming is closed.',
+      )
+    }
+    if (!nftProof.standard || !nftProof.tokenId) {
+      throw new RelayerError('This wallet\'s NFT allocation is missing standard/tokenId data.')
+    }
+    // pending_publish / dispute_window / claimable are all acceptable to enqueue, same as
+    // ERC20_MERKLE — the worker re-verifies via staticCall immediately before every send.
+    createData = {
+      kind: 'NFT',
+      amount: nftProof.amount,
+      proof: nftProof.proof,
+      token: nftProof.tokenAddress,
+      nftStandard: nftProof.standard,
+      tokenId: nftProof.tokenId,
+    }
+  } else if (isTiered) {
     const status = await getTieredRewardStatus(String(campaignId), lower)
     if (!status) {
       throw new RelayerError('This campaign has no tiered reward module pinned.')

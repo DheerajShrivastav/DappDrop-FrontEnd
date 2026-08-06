@@ -220,9 +220,14 @@ model MerkleTree {
   campaignId  Int
   version     Int // increments per (re)proposal for this campaign, starting at 1
   root        String // 0x-prefixed bytes32, OZ StandardMerkleTree root
-  token       String // reward token address, for display/reconciliation
-  totalAmount String // sum of all entries, base units (string: exceeds safe JS integer range)
+  token       String // reward token (ERC20) OR NFT collection address (NFT), for display/reconciliation
+  totalAmount String // ERC20: sum of all entries. NFT: total item count. Base units (string: exceeds safe JS integer range)
   policy      String // allocation policy used to build this tree (see CampaignCache.allocationPolicy)
+  // ERC20 (default) or NFT — discriminates which leaf encoding this tree/its entries use
+  // (src/lib/allocation.ts vs src/lib/nft-allocation.ts) and which claim UI/proof shape
+  // applies. P3 CP2: NFT reuses this SAME model rather than a parallel one, per the standing
+  // "extend, don't duplicate" instruction — only entry-level fields differ (nftStandard/tokenId).
+  rewardKind  String @default("ERC20")
   // Full StandardMerkleTree.dump() output — the only way to regenerate a wallet's proof
   // later without recomputing the whole tree from scratch (BR-M2's "proofs servable for years").
   treeJson    Json
@@ -257,14 +262,49 @@ model AllocationEntry {
   merkleTree     MerkleTree @relation(fields: [merkleTreeId], references: [id])
   campaignId     Int // denormalized for a fast per-campaign+wallet lookup (proof API)
   wallet         String // lowercased
-  amount         String // base units, as string (exceeds safe JS integer range)
+  // ERC20: reward amount, base units. NFT/ERC1155: item quantity. NFT/ERC721: always "1"
+  // (the leaf commits an amount even though executeNFTTransferOut ignores it for ERC721 —
+  // verified against NFTSettlementModule.sol; the claim call's amount arg must match the
+  // leaf's exactly or the proof fails, so "1" is a fixed convention, not a free choice).
+  amount         String
   leafIndex      Int // index into the OZ tree — required to regenerate this wallet's proof
   tasksCompleted Int
+
+  // NFT-only (null for ERC20 entries): CampaignStorage.NFTStandard as a string, and the
+  // specific tokenId this wallet was allocated. One NFT collection per campaign for now (the
+  // MerkleTree.token field) — the default "smallest reasonable" policy; multi-collection
+  // campaigns are a follow-up.
+  nftStandard String?
+  tokenId     String?
 
   createdAt DateTime @default(now())
 
   @@unique([merkleTreeId, wallet])
   @@index([campaignId, wallet])
+}
+
+// Deposited NFT inventory for a campaign, tracked off-chain because the contract exposes no
+// enumerable view of "every tokenId ever deposited" — only per-tokenId escrow booleans/amounts
+// (isERC721Escrowed/getERC1155Escrowed) and a deposit COUNT event (NFTRewardsDeposited), never
+// the actual tokenIds. Written by the wizard at deposit time; read by the NFT allocation
+// pipeline (src/lib/nft-allocation.ts) as the pool of items to assign. One row per deposited
+// tokenId (an ERC1155 amount>1 is one indivisible item awarded to a single winner — splitting
+// one tokenId's balance across multiple winners is a follow-up, not this default policy).
+model NFTDeposit {
+  id           String  @id @default(cuid())
+  campaignId   Int
+  tokenAddress String
+  standard     String // 'ERC721' | 'ERC1155'
+  tokenId      String
+  amount       String // '1' for ERC721 (fixed convention), quantity for ERC1155
+  // Consumed by an allocation entry — round-robin bookkeeping so re-proposing doesn't hand the
+  // same item to two different wallets across proposal versions.
+  allocated Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([campaignId, tokenAddress, tokenId])
+  @@index([campaignId, allocated])
 }
 
 // x402 Payment Protocol - Minimal implementation (like Humanity Protocol)
@@ -304,18 +344,25 @@ model SponsoredClaim {
   // ERC20_MERKLE (default, P2 CP1): claimERC20For(campaignId, account, amount, proof) on the
   // entrypoint. TIERED (P3 CP1): claimRewardFor(campaignId, account) on the campaign's PINNED
   // OnChainRewardModule — no amount/proof needed, the module computes payout from on-chain
-  // rank/score state. A campaign is one settlement mode or the other (contract-enforced,
-  // mutually exclusive), so (campaignId, account) stays a valid dedupe key across both kinds.
+  // rank/score state. NFT (P3 CP2): claimNFTFor(campaignId, account, standard, token, tokenId,
+  // amount, proof) on the campaign's PINNED NFTSettlementModule. A campaign is exactly one
+  // settlement mode (contract-enforced, mutually exclusive), so (campaignId, account) stays a
+  // valid dedupe key across all three kinds.
   kind String @default("ERC20_MERKLE")
 
-  // ERC20_MERKLE snapshot at enqueue time (from AllocationEntry) — the worker re-verifies this
-  // is still the CURRENTLY PUBLISHED root's data immediately before submitting (never trusts a
-  // stale snapshot for the actual send), but keeps it here so a request is self-contained and
-  // auditable even if the underlying tree is later superseded. Unused (amount="0", proof=[])
-  // for kind=TIERED, whose payout is computed on-chain, not looked up here.
-  amount String // base units
-  proof  Json // string[] Merkle proof
-  token  String // reward token address, for display/budget accounting
+  // ERC20_MERKLE/NFT snapshot at enqueue time (from AllocationEntry) — the worker re-verifies
+  // this is still the CURRENTLY PUBLISHED root's data immediately before submitting (never
+  // trusts a stale snapshot for the actual send), but keeps it here so a request is
+  // self-contained and auditable even if the underlying tree is later superseded. Unused
+  // (amount="0", proof=[]) for kind=TIERED, whose payout is computed on-chain, not looked up here.
+  amount String // base units (ERC20_MERKLE) or NFT item quantity (NFT)
+  proof  Json // string[] Merkle proof (ERC20_MERKLE/NFT); [] for TIERED
+  token  String // reward token address (ERC20_MERKLE) or NFT collection address (NFT)
+
+  // NFT-only (null otherwise): CampaignStorage.NFTStandard as a string, and the specific
+  // tokenId this wallet was allocated.
+  nftStandard String?
+  tokenId     String?
 
   // PENDING: enqueued, not yet picked up. PROCESSING: claimed by a worker (atomic
   // PENDING->PROCESSING transition is the cross-instance concurrency guard — see

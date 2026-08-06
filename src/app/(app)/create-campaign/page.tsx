@@ -84,6 +84,8 @@ import {
   configureScoreTiers,
   configureTaskPoints,
   getERC20TokenInfo,
+  depositERC721Rewards,
+  depositERC1155Rewards,
   type DraftTaskInput,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
@@ -97,6 +99,14 @@ import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
+
+/** Comma- or newline-separated list of numeric IDs -> trimmed, non-empty strings. */
+function parseIdList(raw: string): string[] {
+  return raw
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
 
 import { isAddress } from 'viem'
 
@@ -277,6 +287,14 @@ const campaignSchema = z.object({
           'Please enter a valid Ethereum address.',
         ),
       name: z.string().optional(),
+      // P3 CP2 — NFT settlement (Merkle, same allocation/dispute-window pattern as ERC20).
+      // "ERC721" is kept as the discriminant literal for backwards form-state compatibility;
+      // nftStandard picks the ACTUAL on-chain standard being deposited.
+      nftStandard: z.enum(['ERC721', 'ERC1155']).default('ERC721'),
+      // Comma/newline-separated token IDs to deposit.
+      tokenIds: z.string().min(1, 'Enter at least one token ID.'),
+      // ERC1155 only: comma/newline-separated amounts, same order/count as tokenIds.
+      tokenAmounts: z.string().optional(),
     }),
     z.object({
       type: z.literal('None'),
@@ -284,6 +302,23 @@ const campaignSchema = z.object({
     }),
   ]),
 }).superRefine((data, ctx) => {
+  if (data.reward.type === 'ERC721') {
+    const ids = parseIdList(data.reward.tokenIds)
+    if (ids.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter at least one token ID.', path: ['reward', 'tokenIds'] })
+    }
+    if (data.reward.nftStandard === 'ERC1155') {
+      const amounts = parseIdList(data.reward.tokenAmounts || '')
+      if (amounts.length !== ids.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Provide exactly ${ids.length} amount(s), one per token ID, in the same order.`,
+          path: ['reward', 'tokenAmounts'],
+        })
+      }
+    }
+    return
+  }
   if (data.reward.type !== 'ERC20') return
   if (data.reward.settlementMode === 'RANK_TIERED') {
     if (!data.reward.rankTiers || data.reward.rankTiers.length === 0) {
@@ -354,6 +389,7 @@ export default function CreateCampaignPage() {
   const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null)
   const [pendingFunded, setPendingFunded] = useState(false)
   const [pendingTiersSet, setPendingTiersSet] = useState(false)
+  const [pendingDeposited, setPendingDeposited] = useState(false)
   const [pendingCapSet, setPendingCapSet] = useState(false)
   const [feeEnabled, setFeeEnabled] = useState(false)
   const [isOpening, setIsOpening] = useState(false)
@@ -447,12 +483,11 @@ export default function CreateCampaignPage() {
       })
       return
     }
-    if (data.reward.type !== 'ERC20') {
+    if (data.reward.type === 'None') {
       toast({
         variant: 'destructive',
         title: 'Not available yet',
-        description:
-          'NFT and off-chain rewards are coming in a later phase — choose ERC20 for now.',
+        description: 'Off-chain rewards are coming in a later phase — choose ERC20 or NFT for now.',
       })
       return
     }
@@ -512,7 +547,7 @@ export default function CreateCampaignPage() {
         setCampaignCreated(true)
       }
 
-      if (!pendingFunded) {
+      if (data.reward.type === 'ERC20' && !pendingFunded) {
         setCreationProgress('Configuring and funding the reward pool…')
         await configureAndFundERC20Reward(
           campaignId,
@@ -522,7 +557,7 @@ export default function CreateCampaignPage() {
         setPendingFunded(true)
       }
 
-      if (data.reward.settlementMode !== 'MERKLE' && !pendingTiersSet) {
+      if (data.reward.type === 'ERC20' && data.reward.settlementMode !== 'MERKLE' && !pendingTiersSet) {
         setCreationProgress(
           data.reward.settlementMode === 'RANK_TIERED'
             ? 'Configuring rank tiers…'
@@ -545,6 +580,42 @@ export default function CreateCampaignPage() {
           }
         }
         setPendingTiersSet(true)
+      }
+
+      if (data.reward.type === 'ERC721' && !pendingDeposited) {
+        setCreationProgress('Depositing NFTs…')
+        const ids = parseIdList(data.reward.tokenIds)
+        const amounts =
+          data.reward.nftStandard === 'ERC1155' ? parseIdList(data.reward.tokenAmounts || '') : ids.map(() => '1')
+        // Contract caps deposits at 100/call — batch larger sets transparently.
+        const BATCH = 100
+        for (let i = 0; i < ids.length; i += BATCH) {
+          const idBatch = ids.slice(i, i + BATCH)
+          const amountBatch = amounts.slice(i, i + BATCH)
+          setCreationProgress(`Depositing NFTs (${i + idBatch.length}/${ids.length})…`)
+          if (data.reward.nftStandard === 'ERC1155') {
+            await depositERC1155Rewards(campaignId, data.reward.tokenAddress, idBatch, amountBatch)
+          } else {
+            await depositERC721Rewards(campaignId, data.reward.tokenAddress, idBatch)
+          }
+        }
+        // Record what was deposited — the contract has no enumerable view of this, so the
+        // NFT allocation pipeline reads it from here (src/lib/nft-allocation.ts).
+        try {
+          await fetch(`/api/campaigns/${campaignId}/nft-deposits`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              tokenAddress: data.reward.tokenAddress,
+              standard: data.reward.nftStandard,
+              items: ids.map((tokenId, i) => ({ tokenId, amount: amounts[i] })),
+            }),
+          })
+        } catch (e) {
+          console.warn('Failed to record NFT deposits (non-fatal, tokens are already escrowed on-chain):', e)
+        }
+        setPendingDeposited(true)
       }
 
       if (data.maxParticipants && Number(data.maxParticipants) > 0 && !pendingCapSet) {
@@ -572,7 +643,12 @@ export default function CreateCampaignPage() {
             shortDescription: data.shortDescription || '',
             longDescription: data.description || '',
             rewardType: data.reward.type,
-            rewardName: `${data.reward.amount} token pool`,
+            // 'None' is rejected earlier in onSubmit (the type-guard toast + early return above),
+            // so only ERC20/ERC721 ever reach here.
+            rewardName:
+              data.reward.type === 'ERC20'
+                ? `${data.reward.amount} token pool`
+                : `${parseIdList(data.reward.tokenIds).length} ${data.reward.nftStandard} item(s)`,
             humanityGated: data.humanityGated,
             // Descriptive only — the chain is authoritative for which mode a campaign actually
             // committed to. Tiered campaigns never go through the Merkle allocation pipeline
@@ -2248,11 +2324,9 @@ export default function CreateCampaignPage() {
                             </FormItem>
                             <FormItem className="flex items-center space-x-3 space-y-0">
                               <FormControl>
-                                <RadioGroupItem value="ERC721" disabled />
+                                <RadioGroupItem value="ERC721" />
                               </FormControl>
-                              <FormLabel className="font-normal text-muted-foreground">
-                                ERC721 Token (NFT) — coming in a later phase
-                              </FormLabel>
+                              <FormLabel className="font-normal">NFT (ERC721 / ERC1155)</FormLabel>
                             </FormItem>
                             <FormItem className="flex items-center space-x-3 space-y-0">
                               <FormControl>
@@ -2568,6 +2642,88 @@ export default function CreateCampaignPage() {
                         </AlertDescription>
                       </Alert>
                     )}
+                  {rewardType === 'ERC721' && (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="reward.nftStandard"
+                        render={({ field }) => (
+                          <FormItem className="space-y-3">
+                            <FormLabel>NFT standard</FormLabel>
+                            <FormControl>
+                              <RadioGroup
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                className="flex flex-col space-y-1"
+                              >
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                  <FormControl>
+                                    <RadioGroupItem value="ERC721" />
+                                  </FormControl>
+                                  <FormLabel className="font-normal">
+                                    ERC721 — one unique item per token ID
+                                  </FormLabel>
+                                </FormItem>
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                  <FormControl>
+                                    <RadioGroupItem value="ERC1155" />
+                                  </FormControl>
+                                  <FormLabel className="font-normal">
+                                    ERC1155 — a quantity per token ID
+                                  </FormLabel>
+                                </FormItem>
+                              </RadioGroup>
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="reward.tokenIds"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Token IDs to deposit</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder={'1\n2\n3\n(comma or newline separated)'}
+                                rows={4}
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              One qualifying wallet gets one item, assigned in this order after
+                              the campaign ends — more than 100 IDs are deposited in automatic
+                              batches.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {form.watch('reward.nftStandard') === 'ERC1155' && (
+                        <FormField
+                          control={form.control}
+                          name="reward.tokenAmounts"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Amount per token ID</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder={'10\n5\n1\n(same order/count as Token IDs above)'}
+                                  rows={4}
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Each entry is one indivisible item awarded to a single winner —
+                                one token ID&apos;s balance is not split across multiple wallets.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+                    </>
+                  )}
                   {rewardType === 'None' && (
                     <FormField
                       control={form.control}
@@ -2622,27 +2778,46 @@ export default function CreateCampaignPage() {
                     <p className="text-sm text-muted-foreground">
                       {form.getValues('shortDescription')}
                     </p>
-                    <div className="text-sm">
-                      <strong>Reward pool:</strong>{' '}
-                      {form.getValues('reward.amount')} tokens from{' '}
-                      <code className="text-xs bg-muted p-1 rounded">
-                        {form.getValues('reward.tokenAddress')}
-                      </code>
-                    </div>
-                    <div className="text-sm">
-                      <strong>Settlement:</strong>{' '}
-                      {settlementMode === 'RANK_TIERED'
-                        ? `Rank-tiered — on-chain, no dispute window (${(rankTiersWatched || []).length} tier(s) configured)`
-                        : settlementMode === 'SCORE_TIERED'
-                          ? `Score-tiered — on-chain, no dispute window (${(scoreTiersWatched || []).length} tier(s) configured)`
-                          : 'Merkle allocation — equal split among wallets that complete every task'}
-                      {humanityGatedWatched
-                        ? settlementMode === 'MERKLE'
-                          ? ' — Humanity-verified wallets only'
-                          : ' — a required Humanity Verification task was added'
-                        : ''}
-                      .
-                    </div>
+                    {rewardType === 'ERC20' ? (
+                      <div className="text-sm">
+                        <strong>Reward pool:</strong>{' '}
+                        {form.getValues('reward.amount')} tokens from{' '}
+                        <code className="text-xs bg-muted p-1 rounded">
+                          {form.getValues('reward.tokenAddress')}
+                        </code>
+                      </div>
+                    ) : (
+                      <div className="text-sm">
+                        <strong>Reward:</strong>{' '}
+                        {parseIdList(form.getValues('reward.tokenIds') || '').length}{' '}
+                        {form.getValues('reward.nftStandard')} item(s) from{' '}
+                        <code className="text-xs bg-muted p-1 rounded">
+                          {form.getValues('reward.tokenAddress')}
+                        </code>
+                      </div>
+                    )}
+                    {rewardType === 'ERC20' && (
+                      <div className="text-sm">
+                        <strong>Settlement:</strong>{' '}
+                        {settlementMode === 'RANK_TIERED'
+                          ? `Rank-tiered — on-chain, no dispute window (${(rankTiersWatched || []).length} tier(s) configured)`
+                          : settlementMode === 'SCORE_TIERED'
+                            ? `Score-tiered — on-chain, no dispute window (${(scoreTiersWatched || []).length} tier(s) configured)`
+                            : 'Merkle allocation — equal split among wallets that complete every task'}
+                        {humanityGatedWatched
+                          ? settlementMode === 'MERKLE'
+                            ? ' — Humanity-verified wallets only'
+                            : ' — a required Humanity Verification task was added'
+                          : ''}
+                        .
+                      </div>
+                    )}
+                    {rewardType === 'ERC721' && (
+                      <div className="text-sm">
+                        <strong>Settlement:</strong> Merkle allocation — one item per qualifying
+                        wallet{humanityGatedWatched ? ' — Humanity-verified wallets only' : ''}.
+                      </div>
+                    )}
                     {form.getValues('maxParticipants') && (
                       <div className="text-sm">
                         <strong>Participant cap:</strong>{' '}
@@ -2668,29 +2843,39 @@ export default function CreateCampaignPage() {
                   </div>
 
                   {/* FR-H5: itemize the funding transaction before the host signs it. */}
-                  <div className="rounded-lg border p-4 space-y-2">
-                    <h3 className="font-medium">Funding breakdown</h3>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        Gross debit
-                      </span>
-                      <span>
-                        {form.getValues('reward.amount') || '0'} tokens
-                      </span>
+                  {rewardType === 'ERC20' ? (
+                    <div className="rounded-lg border p-4 space-y-2">
+                      <h3 className="font-medium">Funding breakdown</h3>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Gross debit
+                        </span>
+                        <span>
+                          {form.getValues('reward.amount') || '0'} tokens
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Protocol fee {feeEnabled ? '' : '(disabled on this deployment)'}
+                        </span>
+                        <span>0 tokens</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-medium border-t pt-2">
+                        <span>Net escrowed</span>
+                        <span>
+                          {form.getValues('reward.amount') || '0'} tokens
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        Protocol fee {feeEnabled ? '' : '(disabled on this deployment)'}
-                      </span>
-                      <span>0 tokens</span>
+                  ) : (
+                    <div className="rounded-lg border p-4 space-y-2">
+                      <h3 className="font-medium">NFTs to deposit</h3>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">{form.getValues('reward.nftStandard')} items</span>
+                        <span>{parseIdList(form.getValues('reward.tokenIds') || '').length}</span>
+                      </div>
                     </div>
-                    <div className="flex justify-between text-sm font-medium border-t pt-2">
-                      <span>Net escrowed</span>
-                      <span>
-                        {form.getValues('reward.amount') || '0'} tokens
-                      </span>
-                    </div>
-                  </div>
+                  )}
 
                   <Alert>
                     <Info className="h-4 w-4" />

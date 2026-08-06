@@ -55,6 +55,8 @@ import { MerkleSettlementPanel } from './_components/merkle-settlement-panel'
 import { ClaimPanel } from './_components/claim-panel'
 import { TieredClaimPanel } from './_components/tiered-claim-panel'
 import { TieredLeaderboard } from './_components/tiered-leaderboard'
+import { NFTClaimPanel } from './_components/nft-claim-panel'
+import { NFTSettlementPanel } from './_components/nft-settlement-panel'
 
 // Lazy-load heavy dialog components (only loaded when opened)
 const TaskVerificationForm = dynamic(
@@ -961,10 +963,12 @@ export default function CampaignDetailsPage() {
             <ClaimPanel campaign={campaign} />
             <TieredClaimPanel campaign={campaign} />
             <TieredLeaderboard campaign={campaign} />
+            <NFTClaimPanel campaign={campaign} />
 
-            {/* Host-only: review & publish the Merkle allocation (FR-M3). Renders only for
-                UNSET/MERKLE_ERC20 mode — never for a tiered campaign (see the panel's guard). */}
+            {/* Host-only: review & publish the allocation (FR-M3). Each panel is guarded to its
+                own settlement mode — never shown for a tiered or cross-mode campaign. */}
             {isHostOfCampaign && <MerkleSettlementPanel campaign={campaign} />}
+            {isHostOfCampaign && <NFTSettlementPanel campaign={campaign} />}
 
             {/* Participant Analytics - Only for Host */}
             {isHostOfCampaign && (

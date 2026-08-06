@@ -61,6 +61,8 @@ import {
   getEntrypointReadContract,
   getPinnedRewardModule,
   getOnChainRewardModuleContract,
+  getPinnedNFTModule,
+  getNFTSettlementModuleContract,
   mapContractRevertToMessage,
 } from '@/lib/web3-service'
 import { evaluateSponsorshipGates, getKillSwitch, setKillSwitch, recordSponsorshipSpend } from '@/lib/relayer-gates'
@@ -163,16 +165,17 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
     return { outcome: 'declined', reason: gate.reason }
   }
 
-  // P3 CP1: two claim kinds share this same simulate/send/retry body. ERC20_MERKLE targets the
+  // P3: three claim kinds share this same simulate/send/retry body. ERC20_MERKLE targets the
   // entrypoint's claimERC20For(campaignId, account, amount, proof); TIERED targets
-  // claimRewardFor(campaignId, account) on the campaign's PINNED OnChainRewardModule — resolved
-  // fresh here via getPinnedRewardModule, NEVER the global default (docs/ARCHITECTURE.md).
-  const isTiered = row.kind === 'TIERED'
+  // claimRewardFor(campaignId, account) on the campaign's PINNED OnChainRewardModule; NFT
+  // targets claimNFTFor(campaignId, account, standard, token, tokenId, amount, proof) on the
+  // campaign's PINNED NFTSettlementModule — both pins resolved fresh here (getPinnedRewardModule
+  // / getPinnedNFTModule), NEVER a global default (docs/ARCHITECTURE.md).
   let targetContract: ethers.Contract
   let claimArgs: unknown[]
-  const methodName = isTiered ? 'claimRewardFor' : 'claimERC20For'
+  let methodName: string
 
-  if (isTiered) {
+  if (row.kind === 'TIERED') {
     const moduleAddress = await getPinnedRewardModule(String(row.campaignId))
     if (!moduleAddress) {
       await prisma.sponsoredClaim.update({
@@ -187,9 +190,31 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
     }
     targetContract = getOnChainRewardModuleContract(moduleAddress, wallet)
     claimArgs = [row.campaignId, row.account]
+    methodName = 'claimRewardFor'
+  } else if (row.kind === 'NFT') {
+    const moduleAddress = await getPinnedNFTModule(String(row.campaignId))
+    if (!moduleAddress) {
+      await prisma.sponsoredClaim.update({
+        where: { id: claimId },
+        data: { status: 'FAILED', lastError: 'No NFT module pinned for this campaign', processedAt: new Date() },
+      })
+      return { outcome: 'failed', error: 'no pinned NFT module' }
+    }
+    targetContract = getNFTSettlementModuleContract(moduleAddress, wallet)
+    claimArgs = [
+      row.campaignId,
+      row.account,
+      row.nftStandard === 'ERC721' ? 0 : 1,
+      row.token,
+      row.tokenId,
+      row.amount,
+      row.proof as unknown as string[],
+    ]
+    methodName = 'claimNFTFor'
   } else {
     targetContract = getEntrypointContract(wallet)
     claimArgs = [row.campaignId, row.account, row.amount, row.proof as unknown as string[]]
+    methodName = 'claimERC20For'
   }
 
   try {
