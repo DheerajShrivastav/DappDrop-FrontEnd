@@ -10,6 +10,7 @@ import type {
 import { fromOnChainTaskType, toOnChainTaskType, OnChainTaskType } from './task-types'
 import config from '@/app/config'
 import Web3Campaigns from './abi/Web3Campaigns.json'
+import OnChainRewardModule from './abi/OnChainRewardModule.json'
 import { addDays, endOfDay, differenceInSeconds } from 'date-fns'
 import {
   getGraphCampaigns,
@@ -750,6 +751,240 @@ export const getEntrypointReadContract = (): Contract => {
 }
 
 /**
+ * Construct an OnChainRewardModule Contract bound to an arbitrary runner AND an explicit
+ * module address — deliberately no default/global fallback baked in here. Per
+ * docs/ARCHITECTURE.md, a campaign's authoritative module is whichever instance it PINNED at
+ * settlement-mode adoption, which can differ from the current global default
+ * (`config.addresses.onChainRewardModule`) if the default has since rotated. Every call site
+ * below resolves the address explicitly (via getPinnedRewardModule for an existing campaign,
+ * or the global default ONLY for a brand-new campaign's first setRankTiers/setScoreTiers call,
+ * before any pin exists) — never hardcode or assume one over the other.
+ */
+export const getOnChainRewardModuleContract = (
+  moduleAddress: string,
+  runner: ethers.ContractRunner,
+): Contract => new ethers.Contract(moduleAddress, OnChainRewardModule.abi, runner) as Contract
+
+/**
+ * Read the campaign's PINNED reward-module address directly from the entrypoint
+ * (getCampaignRewardModule) — undefined if the campaign never adopted a tiered mode (no pin).
+ * This is the ONLY correct way to find which module instance is authoritative for an existing
+ * campaign; never assume it's the current global default (docs/ARCHITECTURE.md pinning rules).
+ */
+export const getPinnedRewardModule = async (campaignId: string): Promise<string | undefined> => {
+  const c = getEntrypointReadContract()
+  const addr: string = await c.getCampaignRewardModule(campaignId)
+  return addr && addr !== ethers.ZeroAddress ? addr : undefined
+}
+
+export type TieredRewardStatus = {
+  mode: 'UNSET' | 'MERKLE' | 'RANK_TIERED' | 'SCORE_TIERED'
+  rank: number
+  score: number
+  qualified: boolean
+  claimed: boolean
+}
+
+const ONCHAIN_SETTLEMENT_MODE_LABELS: TieredRewardStatus['mode'][] = [
+  'UNSET',
+  'MERKLE',
+  'RANK_TIERED',
+  'SCORE_TIERED',
+]
+
+/**
+ * A single participant's rank/score/qualification/claimed status, read from the campaign's
+ * PINNED module (never the global default). Returns undefined if the campaign never pinned a
+ * reward module (not a tiered campaign).
+ */
+export const getTieredRewardStatus = async (
+  campaignId: string,
+  participant: string,
+): Promise<TieredRewardStatus | undefined> => {
+  const moduleAddress = await getPinnedRewardModule(campaignId)
+  if (!moduleAddress) return undefined
+  const c = getOnChainRewardModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  const [mode, rank, score, qualified, claimed] = await c.getOnChainRewardStatus(
+    campaignId,
+    participant,
+  )
+  return {
+    mode: ONCHAIN_SETTLEMENT_MODE_LABELS[Number(mode)] ?? 'UNSET',
+    rank: Number(rank),
+    score: Number(score),
+    qualified,
+    claimed,
+  }
+}
+
+export type TierView = { threshold: string; thresholdEnd: string; amount: string }
+
+/** Configured tiers for a campaign, read from its PINNED module. Empty if never pinned. */
+export const getTieredTiers = async (campaignId: string): Promise<TierView[]> => {
+  const moduleAddress = await getPinnedRewardModule(campaignId)
+  if (!moduleAddress) return []
+  const c = getOnChainRewardModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  const tiers = await c.getTiers(campaignId)
+  return tiers.map((t: any) => ({
+    threshold: t.threshold.toString(),
+    thresholdEnd: t.thresholdEnd.toString(),
+    amount: t.amount.toString(),
+  }))
+}
+
+export type LeaderboardEntry = {
+  address: string
+  rank: number
+  score: number
+  qualified: boolean
+  claimed: boolean
+}
+
+/**
+ * Leaderboard standings for a tiered campaign. There is no bulk on-chain getter for
+ * rank/score (OnChainRewardModule only exposes getOnChainRewardStatus per-participant), so
+ * this reads the participant list (already indexed/cached elsewhere in this file) and fans out
+ * with the SAME bounded concurrency (PARTICIPANT_QUERY_CONCURRENCY) used by
+ * getCampaignParticipants, against the campaign's PINNED module. Sorted by rank (RANK_TIERED,
+ * unranked last) or score descending (SCORE_TIERED).
+ */
+export const getTieredLeaderboard = async (campaign: Campaign): Promise<LeaderboardEntry[]> => {
+  const moduleAddress = await getPinnedRewardModule(campaign.id)
+  if (!moduleAddress) return []
+
+  const participants = await getCampaignParticipants(campaign)
+  if (participants.length === 0) return []
+
+  const c = getOnChainRewardModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  const isRank = campaign.settlement?.mode === 'RANK_TIERED'
+
+  const entries = await runWithConcurrency(
+    participants.map((p) => p.address),
+    PARTICIPANT_QUERY_CONCURRENCY,
+    async (address): Promise<LeaderboardEntry> => {
+      const [, rank, score, qualified, claimed] = await c.getOnChainRewardStatus(
+        campaign.id,
+        address,
+      )
+      return {
+        address,
+        rank: Number(rank),
+        score: Number(score),
+        qualified,
+        claimed,
+      }
+    },
+  )
+
+  return entries
+    .filter((e) => (isRank ? e.rank > 0 : e.score > 0))
+    .sort((a, b) => (isRank ? a.rank - b.rank : b.score - a.score))
+}
+
+/**
+ * Draft-only: commit a campaign to RANK_TIERED and configure its tiers, via the CURRENT GLOBAL
+ * DEFAULT module (config.addresses.onChainRewardModule) — the one legitimate call site that
+ * uses the default directly, because this is exactly the call that CREATES the pin (per
+ * docs/ARCHITECTURE.md: "the first RANK_TIERED/SCORE_TIERED commit records
+ * _campaignRewardModule[id] = _onChainRewardModule"). Never use this address for anything else.
+ */
+export const configureRankTiers = async (
+  campaignId: string,
+  tiers: { startRank: number; endRank: number; amount: string }[],
+  tokenDecimals: number,
+): Promise<void> => {
+  const signer = await getSigner()
+  const c = getOnChainRewardModuleContract(config.addresses.onChainRewardModule, signer)
+  try {
+    const tx = await c.setRankTiers(
+      campaignId,
+      tiers.map((t) => t.startRank),
+      tiers.map((t) => t.endRank),
+      tiers.map((t) => ethers.parseUnits(t.amount, tokenDecimals)),
+    )
+    await tx.wait()
+  } catch (error: any) {
+    console.error('Error configuring rank tiers:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to configure rank tiers',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Draft-only: commit a campaign to SCORE_TIERED and configure its tiers. Same global-default
+ * pinning call site as configureRankTiers — see its docstring. */
+export const configureScoreTiers = async (
+  campaignId: string,
+  tiers: { minScore: number; amount: string }[],
+  tokenDecimals: number,
+): Promise<void> => {
+  const signer = await getSigner()
+  const c = getOnChainRewardModuleContract(config.addresses.onChainRewardModule, signer)
+  try {
+    const tx = await c.setScoreTiers(
+      campaignId,
+      tiers.map((t) => t.minScore),
+      tiers.map((t) => ethers.parseUnits(t.amount, tokenDecimals)),
+    )
+    await tx.wait()
+  } catch (error: any) {
+    console.error('Error configuring score tiers:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to configure score tiers',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Draft-only: assign point values to specific tasks for SCORE_TIERED scoring. Same
+ * global-default call site (must run before/alongside setScoreTiers — either order is fine,
+ * per REWARD_SYSTEM.md, since points and tier-mode adoption are independent state). */
+export const configureTaskPoints = async (
+  campaignId: string,
+  points: { taskIndex: number; points: number }[],
+): Promise<void> => {
+  const signer = await getSigner()
+  const c = getOnChainRewardModuleContract(config.addresses.onChainRewardModule, signer)
+  try {
+    const tx = await c.setTaskPoints(
+      campaignId,
+      points.map((p) => p.taskIndex),
+      points.map((p) => p.points),
+    )
+    await tx.wait()
+  } catch (error: any) {
+    console.error('Error configuring task points:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to configure task points',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Self-claim: OnChainRewardModule.claimReward on the campaign's PINNED module. */
+export const claimTieredReward = async (campaignId: string): Promise<string> => {
+  const moduleAddress = await getPinnedRewardModule(campaignId)
+  if (!moduleAddress) throw new Error('This campaign has no tiered reward module pinned.')
+  const signer = await getSigner()
+  const c = getOnChainRewardModuleContract(moduleAddress, signer)
+  try {
+    const tx = await c.claimReward(campaignId)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error claiming tiered reward:', error)
+    throw error
+  }
+}
+
+/**
  * O(1) on-chain check for a single participant/task. Used where a caller must distinguish
  * "already completed on-chain" from "verified in our DB cache but never actually recorded
  * on-chain" (e.g. a verifier route deciding whether to skip re-attesting a cached PASS).
@@ -814,15 +1049,32 @@ export const getCampaignSettlement = async (
     const nftPinned = Boolean(nftModule && nftModule !== ethers.ZeroAddress)
     const rewardPinned = Boolean(rewardModule && rewardModule !== ethers.ZeroAddress)
 
-    // Mode derivation from cheap entrypoint reads. NOTE: rank-vs-score is not distinguishable
-    // here without a module read, so a tiered campaign resolves to a generic tiered mode on
-    // this RPC path — the subgraph reports the exact one. Lifecycle behavior is identical for
-    // both tiered variants (claims open at Ended, no dispute window), so this is display-only
-    // imprecision. TODO(P1): read the pinned module to label rank vs score precisely.
+    // Mode derivation. RANK_TIERED vs SCORE_TIERED is only distinguishable via a module read
+    // (CP1 fix — was a TODO): when a reward module is pinned, read the campaign's own
+    // committed mode straight off it (getOnChainRewardStatus's `mode` field is campaign-level,
+    // not participant-specific, so ZeroAddress is a valid probe address) rather than guessing.
     let mode: SettlementMode = 'UNSET'
-    if (hasErc20Root) mode = 'MERKLE_ERC20'
-    else if (nftPinned) mode = 'NFT'
-    else if (rewardPinned) mode = 'RANK_TIERED'
+    let tierCount: number | undefined
+    if (hasErc20Root) {
+      mode = 'MERKLE_ERC20'
+    } else if (nftPinned) {
+      mode = 'NFT'
+    } else if (rewardPinned) {
+      try {
+        const rewardModuleContract = getOnChainRewardModuleContract(rewardModule, c.runner!)
+        const [[onChainMode], tiers] = await Promise.all([
+          rewardModuleContract.getOnChainRewardStatus(id, ethers.ZeroAddress),
+          rewardModuleContract.getTiers(id),
+        ])
+        mode = ONCHAIN_SETTLEMENT_MODE_LABELS[Number(onChainMode)] === 'SCORE_TIERED'
+          ? 'SCORE_TIERED'
+          : 'RANK_TIERED'
+        tierCount = tiers.length
+      } catch (e) {
+        console.warn(`getCampaignSettlement: reward-module mode read failed for ${id}, defaulting to RANK_TIERED:`, e)
+        mode = 'RANK_TIERED'
+      }
+    }
 
     return {
       mode,
@@ -835,6 +1087,7 @@ export const getCampaignSettlement = async (
       erc20Swept: swept,
       nftModule: nftPinned ? nftModule : undefined,
       rewardModule: rewardPinned ? rewardModule : undefined,
+      tierCount,
     }
   } catch (e) {
     console.warn(`getCampaignSettlement failed for ${id}:`, e)
@@ -2204,6 +2457,18 @@ export const mapContractRevertToMessage = (error: any): string => {
   }
   if (has('Web3Campaigns__CallerIsNotHost')) {
     return 'Only the campaign host can perform this action.'
+  }
+  if (has('Web3Campaigns__NotFullyCompleted')) {
+    return 'You have not currently completed all required tasks for this campaign.'
+  }
+  if (has('Web3Campaigns__NoTierMatched')) {
+    return 'Your current rank/score does not fall into any configured reward tier.'
+  }
+  if (has('OnChainRewardModule__NotAuthoritativeModule')) {
+    return 'This campaign’s reward module has changed — please refresh and try again.'
+  }
+  if (has('OnChainRewardModule__CampaignAlreadyStarted')) {
+    return 'Reward tiers can only be configured while the campaign is in Draft.'
   }
   if (has('EnforcedPause') || has('paused')) {
     return 'The platform is temporarily paused for maintenance. Please try again shortly.'

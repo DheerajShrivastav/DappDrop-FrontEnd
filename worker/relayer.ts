@@ -1,17 +1,23 @@
 /**
- * Relayer — the standalone worker that sponsors (pays gas for) ERC20 Merkle claims on behalf
- * of allocated wallets (PRD BR-R*). A STANDALONE Node entrypoint, NOT a Next.js route handler
- * — per the standing architecture decision, this is a queue PROCESSOR; `POST
- * /api/sponsored-claims` only enqueues (src/lib/relayer-gates.ts + src/app/api/sponsored-claims).
- * Same `tsx` pattern as worker/keeper.ts (Node's native TS stripping does not resolve `@/*`).
+ * Relayer — the standalone worker that sponsors (pays gas for) claims on behalf of qualifying
+ * wallets (PRD BR-R*). Two claim KINDS as of P3 CP1: ERC20_MERKLE (claimERC20For on the
+ * entrypoint, P2) and TIERED (claimRewardFor on the campaign's PINNED OnChainRewardModule, P3
+ * — resolved fresh via getPinnedRewardModule every time, never the global default). A
+ * STANDALONE Node entrypoint, NOT a Next.js route handler — per the standing architecture
+ * decision, this is a queue PROCESSOR; `POST /api/sponsored-claims` only enqueues
+ * (src/lib/relayer.ts auto-detects the kind from the campaign's on-chain settlement mode +
+ * src/lib/relayer-gates.ts + src/app/api/sponsored-claims). Same `tsx` pattern as
+ * worker/keeper.ts (Node's native TS stripping does not resolve `@/*`).
  *
  * TRUST POSTURE — treat this key like the signer key (extra care, per the founder's framing):
- * - RELAYER_PRIVATE_KEY is a FUNDED hot wallet. It can only ever pay gas for a claimERC20For
- *   call whose `amount`/`proof` are bound to `account` by the Merkle leaf — verified against
- *   the deployed contract (docs/REWARD_SYSTEM.md: "tokens are always paid to `account`, never
- *   the caller") — so a compromised relayer key can waste this wallet's ETH but can NEVER
- *   redirect a reward. The worst case is a funded hot wallet drained of gas money, not a stolen
- *   payout. Still: separate, low-value key, never SIGNER_ROLE/SETTLER_ROLE/KEEPER_PRIVATE_KEY.
+ * - RELAYER_PRIVATE_KEY is a FUNDED hot wallet. It can only ever pay gas for a claim whose
+ *   recipient is bound to `account` — by the Merkle leaf for ERC20_MERKLE, or by the
+ *   participant's own on-chain rank/score state for TIERED — verified against the deployed
+ *   contract (docs/REWARD_SYSTEM.md: "tokens are always paid to `account`, never the caller";
+ *   `claimRewardFor`'s payout is "computed purely from `_participant`'s own on-chain rank/score
+ *   state") — so a compromised relayer key can waste this wallet's ETH but can NEVER redirect a
+ *   reward. The worst case is a funded hot wallet drained of gas money, not a stolen payout.
+ *   Still: separate, low-value key, never SIGNER_ROLE/SETTLER_ROLE/KEEPER_PRIVATE_KEY.
  * - Every sponsored send is PRE-SIMULATED (staticCall) — the relayer NEVER pays gas for a tx
  *   that would revert. This is the main defense against griefing the relayer's balance.
  * - GATING happens twice: once at enqueue (src/lib/relayer.ts, fast decline UX — it re-exports
@@ -42,15 +48,21 @@
  *   RELAYER_BATCH_SIZE               PENDING requests processed per tick (default 10).
  *   RELAYER_INTERVAL_MINUTES         polling interval for --loop (default 2).
  *
- * OUT OF SCOPE (deliberately, P3): NFT/tiered sponsored claims (claimNFTFor/claimRewardFor) —
- * the gating/queue/budget model here is written to slot them in later (a claim "kind" +
- * kind-specific staticCall/send would be the only new surface), but only ERC20 is wired now.
+ * OUT OF SCOPE (deliberately, P3 CP2): NFT sponsored claims (claimNFTFor on
+ * NFTSettlementModule) — the "kind" model this file already has (ERC20_MERKLE/TIERED) is
+ * written to slot NFT in the same way; not wired yet.
  */
 import 'dotenv/config'
 
 import { ethers } from 'ethers'
 import config from '@/app/config'
-import { getEntrypointContract, getEntrypointReadContract, mapContractRevertToMessage } from '@/lib/web3-service'
+import {
+  getEntrypointContract,
+  getEntrypointReadContract,
+  getPinnedRewardModule,
+  getOnChainRewardModuleContract,
+  mapContractRevertToMessage,
+} from '@/lib/web3-service'
 import { evaluateSponsorshipGates, getKillSwitch, setKillSwitch, recordSponsorshipSpend } from '@/lib/relayer-gates'
 import { notifySponsoredClaimConfirmed } from '@/lib/notifications'
 import { prisma } from '@/lib/prisma'
@@ -151,11 +163,37 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
     return { outcome: 'declined', reason: gate.reason }
   }
 
-  const writeContract = getEntrypointContract(wallet)
-  const proofArr = row.proof as unknown as string[]
+  // P3 CP1: two claim kinds share this same simulate/send/retry body. ERC20_MERKLE targets the
+  // entrypoint's claimERC20For(campaignId, account, amount, proof); TIERED targets
+  // claimRewardFor(campaignId, account) on the campaign's PINNED OnChainRewardModule — resolved
+  // fresh here via getPinnedRewardModule, NEVER the global default (docs/ARCHITECTURE.md).
+  const isTiered = row.kind === 'TIERED'
+  let targetContract: ethers.Contract
+  let claimArgs: unknown[]
+  const methodName = isTiered ? 'claimRewardFor' : 'claimERC20For'
+
+  if (isTiered) {
+    const moduleAddress = await getPinnedRewardModule(String(row.campaignId))
+    if (!moduleAddress) {
+      await prisma.sponsoredClaim.update({
+        where: { id: claimId },
+        data: {
+          status: 'FAILED',
+          lastError: 'No tiered reward module pinned for this campaign',
+          processedAt: new Date(),
+        },
+      })
+      return { outcome: 'failed', error: 'no pinned reward module' }
+    }
+    targetContract = getOnChainRewardModuleContract(moduleAddress, wallet)
+    claimArgs = [row.campaignId, row.account]
+  } else {
+    targetContract = getEntrypointContract(wallet)
+    claimArgs = [row.campaignId, row.account, row.amount, row.proof as unknown as string[]]
+  }
 
   try {
-    await writeContract.claimERC20For.staticCall(row.campaignId, row.account, row.amount, proofArr)
+    await targetContract[methodName].staticCall(...claimArgs)
   } catch (e: unknown) {
     const raw =
       (e as { reason?: string })?.reason ||
@@ -164,9 +202,12 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
       (e as Error)?.message ||
       ''
     const reason = mapContractRevertToMessage(e)
+    // RootDisputeWindowActive/MerkleRootNotSet only ever apply to ERC20_MERKLE (tiered has no
+    // root); CampaignNotYetEnded can apply to either kind if enqueued just before Ended.
     const isTransient =
       raw.includes('Web3Campaigns__RootDisputeWindowActive') ||
-      raw.includes('Web3Campaigns__MerkleRootNotSet')
+      raw.includes('Web3Campaigns__MerkleRootNotSet') ||
+      raw.includes('Web3Campaigns__CampaignNotYetEnded')
 
     if (isTransient && row.attempts < MAX_ATTEMPTS) {
       await prisma.sponsoredClaim.update({
@@ -191,13 +232,7 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       const overrides = await buildEscalatingGasOverrides(wallet, attempt)
-      const tx = await writeContract.claimERC20For(
-        row.campaignId,
-        row.account,
-        row.amount,
-        proofArr,
-        { ...overrides, nonce },
-      )
+      const tx = await targetContract[methodName](...claimArgs, { ...overrides, nonce })
       await prisma.sponsoredClaim.update({
         where: { id: claimId },
         data: { status: 'SUBMITTED', nonce, txHash: tx.hash },

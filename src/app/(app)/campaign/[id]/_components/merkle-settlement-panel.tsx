@@ -159,6 +159,14 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
   }
 
   if (campaign.status !== 'Ended' && campaign.status !== 'Closed') return null
+  // Tiered campaigns commit their mode in Draft (setRankTiers/setScoreTiers) — by the time a
+  // campaign reaches Ended, a tiered campaign's mode is already RANK_TIERED/SCORE_TIERED, never
+  // UNSET. A Merkle campaign's mode stays UNSET right up until its first setERC20MerkleRoot
+  // (which is what this panel exists to do), so UNSET must still render here — only an
+  // already-committed NON-Merkle mode (tiered/NFT) must hide this panel (CP1: this Merkle/
+  // dispute-window UI must never appear on the tiered path, which has no root to publish).
+  const mode = campaign.settlement?.mode
+  if (mode && mode !== 'UNSET' && mode !== 'MERKLE_ERC20') return null
 
   return (
     <Card>

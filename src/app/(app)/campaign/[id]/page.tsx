@@ -53,6 +53,8 @@ import { TaskList } from './_components/task-list'
 import { CampaignLifecycleBanner } from './_components/campaign-lifecycle-banner'
 import { MerkleSettlementPanel } from './_components/merkle-settlement-panel'
 import { ClaimPanel } from './_components/claim-panel'
+import { TieredClaimPanel } from './_components/tiered-claim-panel'
+import { TieredLeaderboard } from './_components/tiered-leaderboard'
 
 // Lazy-load heavy dialog components (only loaded when opened)
 const TaskVerificationForm = dynamic(
@@ -954,10 +956,14 @@ export default function CampaignDetailsPage() {
               onOpenVerifyDialog={handleOpenVerifyDialog}
             />
 
-            {/* Self-claim (FR-C1/C2) — any connected wallet with an allocation */}
+            {/* Self-claim (FR-C1/C2) — any connected wallet with an allocation (Merkle-only;
+                each panel early-returns null when campaign.settlement.mode doesn't match) */}
             <ClaimPanel campaign={campaign} />
+            <TieredClaimPanel campaign={campaign} />
+            <TieredLeaderboard campaign={campaign} />
 
-            {/* Host-only: review & publish the Merkle allocation (FR-M3) */}
+            {/* Host-only: review & publish the Merkle allocation (FR-M3). Renders only for
+                UNSET/MERKLE_ERC20 mode — never for a tiered campaign (see the panel's guard). */}
             {isHostOfCampaign && <MerkleSettlementPanel campaign={campaign} />}
 
             {/* Participant Analytics - Only for Host */}

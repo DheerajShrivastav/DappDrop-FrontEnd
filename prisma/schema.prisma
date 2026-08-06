@@ -301,10 +301,18 @@ model SponsoredClaim {
   campaignId Int
   account    String // lowercased wallet the claim is FOR (never the relayer's own address)
 
-  // Snapshot of the allocation at enqueue time (from AllocationEntry) — the worker re-verifies
-  // this is still the CURRENTLY PUBLISHED root's data immediately before submitting (never
-  // trusts a stale snapshot for the actual send), but keeps it here so a request is
-  // self-contained and auditable even if the underlying tree is later superseded.
+  // ERC20_MERKLE (default, P2 CP1): claimERC20For(campaignId, account, amount, proof) on the
+  // entrypoint. TIERED (P3 CP1): claimRewardFor(campaignId, account) on the campaign's PINNED
+  // OnChainRewardModule — no amount/proof needed, the module computes payout from on-chain
+  // rank/score state. A campaign is one settlement mode or the other (contract-enforced,
+  // mutually exclusive), so (campaignId, account) stays a valid dedupe key across both kinds.
+  kind String @default("ERC20_MERKLE")
+
+  // ERC20_MERKLE snapshot at enqueue time (from AllocationEntry) — the worker re-verifies this
+  // is still the CURRENTLY PUBLISHED root's data immediately before submitting (never trusts a
+  // stale snapshot for the actual send), but keeps it here so a request is self-contained and
+  // auditable even if the underlying tree is later superseded. Unused (amount="0", proof=[])
+  // for kind=TIERED, whose payout is computed on-chain, not looked up here.
   amount String // base units
   proof  Json // string[] Merkle proof
   token  String // reward token address, for display/budget accounting

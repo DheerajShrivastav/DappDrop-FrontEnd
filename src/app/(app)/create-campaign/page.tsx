@@ -80,6 +80,10 @@ import {
   setCampaignMaxParticipantsOnChain,
   getProtocolFeeEnabled,
   openCampaign,
+  configureRankTiers,
+  configureScoreTiers,
+  configureTaskPoints,
+  getERC20TokenInfo,
   type DraftTaskInput,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
@@ -238,6 +242,31 @@ const campaignSchema = z.object({
         ),
       amount: z.string().min(1, 'Amount is required for ERC20 tokens.'),
       name: z.string().optional(),
+      // On-chain tiered settlement (P3 CP1, docs/REWARD_SYSTEM.md "ERC20 on-chain tiered
+      // settlement"). MERKLE (default) is the existing P1 off-chain-computed flow, unchanged.
+      settlementMode: z
+        .enum(['MERKLE', 'RANK_TIERED', 'SCORE_TIERED'])
+        .default('MERKLE'),
+      rankTiers: z
+        .array(
+          z.object({
+            startRank: z.coerce.number().int().min(1),
+            endRank: z.coerce.number().int().min(1),
+            amount: z.string().min(1),
+          }),
+        )
+        .optional(),
+      scoreTiers: z
+        .array(
+          z.object({
+            minScore: z.coerce.number().int().min(0),
+            amount: z.string().min(1),
+          }),
+        )
+        .optional(),
+      // Points awarded per task INDEX (aligned with the `tasks` array) toward SCORE_TIERED
+      // scoring. Index i here corresponds to tasks[i]; a task not listed scores 0.
+      taskPoints: z.array(z.coerce.number().int().min(0)).optional(),
     }),
     z.object({
       type: z.literal('ERC721'),
@@ -254,6 +283,34 @@ const campaignSchema = z.object({
       name: z.string().min(1, 'A description of the reward is required.'),
     }),
   ]),
+}).superRefine((data, ctx) => {
+  if (data.reward.type !== 'ERC20') return
+  if (data.reward.settlementMode === 'RANK_TIERED') {
+    if (!data.reward.rankTiers || data.reward.rankTiers.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Add at least one rank tier.',
+        path: ['reward', 'rankTiers'],
+      })
+    }
+  }
+  if (data.reward.settlementMode === 'SCORE_TIERED') {
+    if (!data.reward.scoreTiers || data.reward.scoreTiers.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Add at least one score tier.',
+        path: ['reward', 'scoreTiers'],
+      })
+    }
+    const totalPoints = (data.reward.taskPoints || []).reduce((s, p) => s + (p || 0), 0)
+    if (totalPoints === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Assign at least one task a point value greater than 0 for score-tiered scoring.',
+        path: ['reward', 'taskPoints'],
+      })
+    }
+  }
 })
 
 type CampaignFormValues = z.infer<typeof campaignSchema>
@@ -296,6 +353,7 @@ export default function CreateCampaignPage() {
   // orphan the first, half-configured one).
   const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null)
   const [pendingFunded, setPendingFunded] = useState(false)
+  const [pendingTiersSet, setPendingTiersSet] = useState(false)
   const [pendingCapSet, setPendingCapSet] = useState(false)
   const [feeEnabled, setFeeEnabled] = useState(false)
   const [isOpening, setIsOpening] = useState(false)
@@ -327,7 +385,16 @@ export default function CreateCampaignPage() {
           telegramInviteLink: '',
         },
       ],
-      reward: { type: 'ERC20', tokenAddress: '0x' as `0x${string}`, amount: '', name: '' },
+      reward: {
+        type: 'ERC20',
+        tokenAddress: '0x' as `0x${string}`,
+        amount: '',
+        name: '',
+        settlementMode: 'MERKLE',
+        rankTiers: [],
+        scoreTiers: [],
+        taskPoints: [],
+      },
     },
     mode: 'onChange',
   })
@@ -336,10 +403,37 @@ export default function CreateCampaignPage() {
     control: form.control,
     name: 'tasks',
   })
+  const {
+    fields: rankTierFields,
+    append: appendRankTier,
+    remove: removeRankTier,
+  } = useFieldArray({ control: form.control, name: 'reward.rankTiers' })
+  const {
+    fields: scoreTierFields,
+    append: appendScoreTier,
+    remove: removeScoreTier,
+  } = useFieldArray({ control: form.control, name: 'reward.scoreTiers' })
 
   const rewardType = form.watch('reward.type')
+  const settlementMode = form.watch('reward.settlementMode')
+  const rankTiersWatched = form.watch('reward.rankTiers')
+  const scoreTiersWatched = form.watch('reward.scoreTiers')
+  const taskPointsWatched = form.watch('reward.taskPoints')
+  const humanityGatedWatched = form.watch('humanityGated')
   const dates = form.watch('dates')
   const tasks = form.watch('tasks')
+
+  // Keep reward.taskPoints aligned 1:1 with the tasks array (index i = tasks[i]'s points) as
+  // tasks are added/removed, only while SCORE_TIERED is actually selected (no-op otherwise).
+  useEffect(() => {
+    if (settlementMode !== 'SCORE_TIERED') return
+    const current = form.getValues('reward.taskPoints') || []
+    if (current.length !== tasks.length) {
+      const resized = tasks.map((_, i) => current[i] ?? 0)
+      form.setValue('reward.taskPoints', resized)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks.length, settlementMode])
 
   // v0.6.0 Draft flow (FR-H2..H6): createCampaign -> batchAddTasks -> configureERC20Reward
   // -> fundCampaignERC20 -> setMaxParticipants (optional). Always lands in Draft — opening is
@@ -364,6 +458,18 @@ export default function CreateCampaignPage() {
     }
 
     setIsLoading(true)
+    // Tiered settlement has no Merkle tree to filter, so humanity gating for it is enforced by
+    // a REQUIRED HUMANITY_VERIFICATION task instead (docs/HUMANITY_GATING.md point 3) —
+    // auto-add one if the host enabled gating + tiered mode and didn't already add a task of
+    // this type themselves. Every task the wizard creates is already required
+    // (isOptional: false below), so no separate "required" flag is needed. Computed OUTSIDE the
+    // "first attempt only" block below (data-only, doesn't depend on campaign state) since the
+    // per-task metadata step further down needs it on a RESUMED submit too, not just the first.
+    const needsAutoHumanityTask =
+      data.reward.type === 'ERC20' &&
+      data.humanityGated &&
+      data.reward.settlementMode !== 'MERKLE' &&
+      !data.tasks.some((t) => t.type === 'HUMANITY_VERIFICATION')
     // Resume from wherever a PRIOR attempt left off (FR-H7) — never re-run
     // createDraftCampaignWithTasks once a campaign already exists on-chain for this
     // wizard session, or a retry after e.g. a rejected funding tx would create a second,
@@ -384,6 +490,14 @@ export default function CreateCampaignPage() {
           verificationData: t.verificationData || '',
           isOptional: false,
         }))
+        if (needsAutoHumanityTask) {
+          draftTasks.push({
+            type: 'HUMANITY_VERIFICATION',
+            description: 'Verify you are human via Humanity Protocol',
+            verificationData: '',
+            isOptional: false,
+          })
+        }
 
         setCreationProgress('Creating campaign and adding tasks…')
         campaignId = await createDraftCampaignWithTasks({
@@ -406,6 +520,31 @@ export default function CreateCampaignPage() {
           data.reward.amount,
         )
         setPendingFunded(true)
+      }
+
+      if (data.reward.settlementMode !== 'MERKLE' && !pendingTiersSet) {
+        setCreationProgress(
+          data.reward.settlementMode === 'RANK_TIERED'
+            ? 'Configuring rank tiers…'
+            : 'Configuring score tiers and task points…',
+        )
+        const tokenInfo = await getERC20TokenInfo(data.reward.tokenAddress)
+        const decimals = tokenInfo?.decimals ?? 18
+        if (data.reward.settlementMode === 'RANK_TIERED') {
+          await configureRankTiers(campaignId, data.reward.rankTiers || [], decimals)
+        } else {
+          await configureScoreTiers(campaignId, data.reward.scoreTiers || [], decimals)
+          // Points align 1:1 with the ORIGINAL tasks array by index — the auto-injected
+          // HUMANITY_VERIFICATION task (if any) is appended after it and correctly gets no
+          // points entry (a gating check shouldn't contribute to score).
+          const pointsEntries = (data.reward.taskPoints || [])
+            .map((points, taskIndex) => ({ taskIndex, points }))
+            .filter((p) => p.points > 0)
+          if (pointsEntries.length > 0) {
+            await configureTaskPoints(campaignId, pointsEntries)
+          }
+        }
+        setPendingTiersSet(true)
       }
 
       if (data.maxParticipants && Number(data.maxParticipants) > 0 && !pendingCapSet) {
@@ -435,7 +574,14 @@ export default function CreateCampaignPage() {
             rewardType: data.reward.type,
             rewardName: `${data.reward.amount} token pool`,
             humanityGated: data.humanityGated,
-            allocationPolicy: 'EQUAL_SPLIT',
+            // Descriptive only — the chain is authoritative for which mode a campaign actually
+            // committed to. Tiered campaigns never go through the Merkle allocation pipeline
+            // (src/lib/allocation.ts), so this label is informational/analytics, not consumed
+            // by any settlement logic.
+            allocationPolicy:
+              data.reward.type === 'ERC20' && data.reward.settlementMode !== 'MERKLE'
+                ? `ON_CHAIN_${data.reward.settlementMode}`
+                : 'EQUAL_SPLIT',
           }),
         })
       } catch (metadataError) {
@@ -511,6 +657,26 @@ export default function CreateCampaignPage() {
           }
         } catch (e) {
           console.warn(`Failed to store metadata for task ${i}:`, e)
+        }
+      }
+
+      // Metadata for the auto-injected HUMANITY_VERIFICATION task (if any) — it's appended
+      // after every form-entered task, so its on-chain index is data.tasks.length. Defaults to
+      // the 'is_human' preset since the host never configured one for a task they didn't add.
+      if (needsAutoHumanityTask) {
+        try {
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              campaignId: Number(campaignId),
+              taskIndex: data.tasks.length,
+              taskType: 'HUMANITY_VERIFICATION',
+              metadata: { humanityPreset: ['is_human'] },
+            }),
+          })
+        } catch (e) {
+          console.warn('Failed to store metadata for auto-injected humanity task:', e)
         }
       }
 
@@ -2142,6 +2308,266 @@ export default function CreateCampaignPage() {
                       )}
                     />
                   )}
+                  {rewardType === 'ERC20' && (
+                    <FormField
+                      control={form.control}
+                      name="reward.settlementMode"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel>Settlement mode</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              className="flex flex-col space-y-1"
+                            >
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="MERKLE" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Merkle allocation — off-chain computed, 24h review window
+                                  before claims open (default)
+                                </FormLabel>
+                              </FormItem>
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="RANK_TIERED" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Rank-tiered — reward by completion order, computed entirely
+                                  on-chain, no dispute window
+                                </FormLabel>
+                              </FormItem>
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="SCORE_TIERED" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Score-tiered — reward by task-point score, computed entirely
+                                  on-chain, no dispute window
+                                </FormLabel>
+                              </FormItem>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormDescription>
+                            Tiered modes settle purely from on-chain completion state — no
+                            host-published root, no dispute window, and the campaign still
+                            settles completely even if you disappear after it ends.
+                          </FormDescription>
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {rewardType === 'ERC20' && settlementMode === 'RANK_TIERED' && (
+                    <div className="space-y-3 rounded-lg border p-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm">Rank tiers</h4>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            appendRankTier({ startRank: 1, endRank: 1, amount: '' })
+                          }
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" /> Add tier
+                        </Button>
+                      </div>
+                      {rankTierFields.map((f, i) => (
+                        <div
+                          key={f.id}
+                          className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end"
+                        >
+                          <FormField
+                            control={form.control}
+                            name={`reward.rankTiers.${i}.startRank`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">From rank</FormLabel>
+                                <FormControl>
+                                  <Input type="number" min={1} {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`reward.rankTiers.${i}.endRank`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">To rank</FormLabel>
+                                <FormControl>
+                                  <Input type="number" min={1} {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`reward.rankTiers.${i}.amount`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Amount / wallet</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="100" {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeRankTier(i)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      {(form.formState.errors.reward as any)?.rankTiers?.message && (
+                        <p className="text-sm font-medium text-destructive">
+                          {(form.formState.errors.reward as any).rankTiers.message}
+                        </p>
+                      )}
+                      {rankTiersWatched && rankTiersWatched.length > 0 && (
+                        <div className="mt-3 rounded-md bg-secondary/40 p-3 text-sm space-y-1">
+                          <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">
+                            Payout preview
+                          </p>
+                          {rankTiersWatched.map((t, i) => (
+                            <div key={i} className="flex justify-between">
+                              <span>
+                                Rank {t.startRank}–{t.endRank}
+                              </span>
+                              <span>{t.amount || '0'} tokens each</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {rewardType === 'ERC20' && settlementMode === 'SCORE_TIERED' && (
+                    <div className="space-y-4">
+                      <div className="space-y-3 rounded-lg border p-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-sm">Score tiers</h4>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => appendScoreTier({ minScore: 0, amount: '' })}
+                          >
+                            <Plus className="h-3.5 w-3.5 mr-1" /> Add tier
+                          </Button>
+                        </div>
+                        {scoreTierFields.map((f, i) => (
+                          <div
+                            key={f.id}
+                            className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end"
+                          >
+                            <FormField
+                              control={form.control}
+                              name={`reward.scoreTiers.${i}.minScore`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-xs">Minimum score</FormLabel>
+                                  <FormControl>
+                                    <Input type="number" min={0} {...field} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`reward.scoreTiers.${i}.amount`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-xs">Amount / wallet</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="100" {...field} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeScoreTier(i)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        {(form.formState.errors.reward as any)?.scoreTiers?.message && (
+                          <p className="text-sm font-medium text-destructive">
+                            {(form.formState.errors.reward as any).scoreTiers.message}
+                          </p>
+                        )}
+                        {scoreTiersWatched && scoreTiersWatched.length > 0 && (
+                          <div className="mt-3 rounded-md bg-secondary/40 p-3 text-sm space-y-1">
+                            <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">
+                              Payout preview
+                            </p>
+                            {scoreTiersWatched.map((t, i) => (
+                              <div key={i} className="flex justify-between">
+                                <span>Score ≥ {t.minScore}</span>
+                                <span>{t.amount || '0'} tokens</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-3 rounded-lg border p-4">
+                        <h4 className="font-medium text-sm">Points per task</h4>
+                        <FormDescription>
+                          Assign how many points each task contributes to a participant&apos;s
+                          score. A task not given any points doesn&apos;t affect scoring.
+                        </FormDescription>
+                        {tasks.map((t, i) => (
+                          <div key={i} className="flex items-center justify-between gap-3">
+                            <span className="text-sm text-muted-foreground truncate">
+                              [{TASK_TYPE_OPTIONS.find((o) => o.value === t.type)?.label}]{' '}
+                              {t.description || '(no description yet)'}
+                            </span>
+                            <FormField
+                              control={form.control}
+                              name={`reward.taskPoints.${i}`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormControl>
+                                    <Input type="number" min={0} className="w-24" {...field} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        ))}
+                        {(form.formState.errors.reward as any)?.taskPoints?.message && (
+                          <p className="text-sm font-medium text-destructive">
+                            {(form.formState.errors.reward as any).taskPoints.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {rewardType === 'ERC20' &&
+                    settlementMode !== 'MERKLE' &&
+                    humanityGatedWatched && (
+                      <Alert>
+                        <ShieldCheck className="h-4 w-4" />
+                        <AlertTitle>
+                          A required Humanity Verification task will be added
+                        </AlertTitle>
+                        <AlertDescription>
+                          Tiered settlement has no Merkle tree to filter — humanity gating for
+                          this campaign is enforced by a required &quot;Verify you&apos;re
+                          human&quot; task instead (docs/HUMANITY_GATING.md). It&apos;s added
+                          automatically; you don&apos;t need to add it yourself.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   {rewardType === 'None' && (
                     <FormField
                       control={form.control}
@@ -2204,10 +2630,16 @@ export default function CreateCampaignPage() {
                       </code>
                     </div>
                     <div className="text-sm">
-                      <strong>Allocation policy:</strong> Equal split among
-                      wallets that complete every task
-                      {form.getValues('humanityGated')
-                        ? ' — Humanity-verified wallets only'
+                      <strong>Settlement:</strong>{' '}
+                      {settlementMode === 'RANK_TIERED'
+                        ? `Rank-tiered — on-chain, no dispute window (${(rankTiersWatched || []).length} tier(s) configured)`
+                        : settlementMode === 'SCORE_TIERED'
+                          ? `Score-tiered — on-chain, no dispute window (${(scoreTiersWatched || []).length} tier(s) configured)`
+                          : 'Merkle allocation — equal split among wallets that complete every task'}
+                      {humanityGatedWatched
+                        ? settlementMode === 'MERKLE'
+                          ? ' — Humanity-verified wallets only'
+                          : ' — a required Humanity Verification task was added'
                         : ''}
                       .
                     </div>
