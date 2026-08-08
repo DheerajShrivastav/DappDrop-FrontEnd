@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/context/wallet-provider';
 import { useRouter } from 'next/navigation';
-import { Loader2, PlusCircle, BarChart3, Rocket, Users, LayoutDashboard } from 'lucide-react';
+import { Loader2, PlusCircle, BarChart3, Rocket, Users, LayoutDashboard, Zap, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 
@@ -21,6 +21,13 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [hostCampaigns, setHostCampaigns] = useState<Campaign[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  // P3 CP3 — cross-campaign analytics overview, extends this dashboard's existing stat cards
+  // (doesn't duplicate them: those are on-chain-derived, these are DB-native aggregates).
+  const [overviewStats, setOverviewStats] = useState<{
+    totalSponsoredClaims: number
+    totalHumanityExcluded: number
+    totalVerificationFailures: number
+  } | null>(null);
 
   const fetchHostCampaigns = useCallback(async () => {
     if (role === 'host' && address) {
@@ -28,6 +35,15 @@ export default function DashboardPage() {
       const fetchedCampaigns = await getCampaignsByHostAddress(address);
       setHostCampaigns(fetchedCampaigns);
       setIsLoading(false);
+
+      if (fetchedCampaigns.length > 0) {
+        fetch(`/api/campaigns/analytics-overview?campaignIds=${fetchedCampaigns.map((c) => c.id).join(',')}`, {
+          credentials: 'include',
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then(setOverviewStats)
+          .catch(() => setOverviewStats(null));
+      }
     }
   }, [role, address]);
 
@@ -146,6 +162,34 @@ export default function DashboardPage() {
               </div>
               <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
                 <Users className="h-6 w-6" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-100 shadow-sm hover:shadow-md transition-all duration-300 group">
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Sponsored Claims</p>
+                <h3 className="text-3xl font-bold text-amber-600">
+                  {overviewStats ? overviewStats.totalSponsoredClaims.toLocaleString() : '—'}
+                </h3>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
+                <Zap className="h-6 w-6" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-slate-50 to-white border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 group">
+            <CardContent className="p-6 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">Humanity-Excluded</p>
+                <h3 className="text-3xl font-bold text-slate-600">
+                  {overviewStats ? overviewStats.totalHumanityExcluded.toLocaleString() : '—'}
+                </h3>
+              </div>
+              <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 group-hover:scale-110 transition-transform">
+                <ShieldCheck className="h-6 w-6" />
               </div>
             </CardContent>
           </Card>

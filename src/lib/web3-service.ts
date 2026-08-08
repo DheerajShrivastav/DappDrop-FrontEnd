@@ -134,6 +134,15 @@ const getSigner = async () => {
   return signer
 }
 
+// Exported as runWithConcurrencyPublic for reuse by server-side analytics aggregation
+// (src/lib/campaign-funnel.ts) — same bounded-concurrency helper the participant-detail fetch
+// already uses internally, not a duplicate implementation.
+export const runWithConcurrencyPublic = async <T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> => runWithConcurrency(items, limit, worker)
+
 const runWithConcurrency = async <T, R>(
   items: T[],
   limit: number,
@@ -880,6 +889,155 @@ export const getTieredLeaderboard = async (campaign: Campaign): Promise<Leaderbo
   return entries
     .filter((e) => (isRank ? e.rank > 0 : e.score > 0))
     .sort((a, b) => (isRank ? a.rank - b.rank : b.score - a.score))
+}
+
+export type ClaimEvent = { account: string; blockNumber: number; timestamp: number }
+
+/**
+ * Claim events for a campaign, read directly from chain logs (BR-I4 — the subgraph is
+ * currently disabled per docs/DECISIONS_v0.6.0.md Decision 3, so this is the direct-RPC
+ * equivalent of "indexed data" for claim-rate-over-time analytics). Selects the event/contract
+ * matching the campaign's settlement mode: ERC20RewardClaimed (Merkle, on the entrypoint —
+ * covers both self- and sponsored claims, since claimERC20For shares the same emit path),
+ * ERC20RewardClaimedOnChain (tiered, entrypoint), or NFTRewardClaimed (NFT, on the campaign's
+ * PINNED module). `campaignId` is an indexed topic on all three, so the RPC filters server-side
+ * rather than scanning every campaign's events.
+ *
+ * Chunked with a single range-limit fallback (not the full adaptive retry loop
+ * getCampaignParticipantAddresses uses) — claim events are orders of magnitude rarer than
+ * per-participant task-completion events, so a simpler scan is an acceptable, documented
+ * tradeoff for a display-only analytics feature.
+ */
+export const getClaimEvents = async (campaign: Campaign): Promise<ClaimEvent[]> => {
+  const mode = campaign.settlement?.mode
+  let contractToUse: Contract | null = null
+  let filter: ReturnType<Contract['filters']['ERC20RewardClaimed']> | null = null
+
+  if (mode === 'RANK_TIERED' || mode === 'SCORE_TIERED') {
+    contractToUse = getEntrypointReadContract()
+    filter = contractToUse.filters.ERC20RewardClaimedOnChain(campaign.id)
+  } else if (mode === 'NFT') {
+    const moduleAddress = await getPinnedNFTModule(campaign.id)
+    if (!moduleAddress) return []
+    contractToUse = getNFTSettlementModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+    filter = contractToUse.filters.NFTRewardClaimed(campaign.id)
+  } else if (mode === 'MERKLE_ERC20') {
+    contractToUse = getEntrypointReadContract()
+    filter = contractToUse.filters.ERC20RewardClaimed(campaign.id)
+  } else {
+    return []
+  }
+
+  const provider = contractToUse.runner as ethers.Provider
+  const latestBlock = await provider.getBlockNumber()
+  // Scanning from the CONTRACT's deploy block (weeks/months of history for a long-lived
+  // deployment) rather than this CAMPAIGN's own window is wasteful and, on a rate/range-limited
+  // provider, can make the scan take many minutes for no reason. Estimate a start block from
+  // the campaign's own startDate via the deploy block's real timestamp (one cheap extra read)
+  // interpolated against the current block/time, with a safety margin for estimation error —
+  // a campaign's claim events can only exist after it started, so this can never miss real
+  // events, only avoid scanning blocks that could never contain any.
+  const deployBlock = config.addresses.deployBlock || 0
+  let fromBlockBase = deployBlock
+  try {
+    const [deployBlockInfo, latestBlockInfo] = await Promise.all([
+      provider.getBlock(deployBlock),
+      provider.getBlock(latestBlock),
+    ])
+    if (deployBlockInfo && latestBlockInfo && latestBlockInfo.timestamp > deployBlockInfo.timestamp) {
+      const avgSecondsPerBlock =
+        (latestBlockInfo.timestamp - deployBlockInfo.timestamp) / (latestBlock - deployBlock)
+      const campaignStartUnix = Math.floor(campaign.startDate.getTime() / 1000)
+      const SAFETY_MARGIN_SECONDS = 6 * 3600 // 6h — generous cushion against estimation drift
+      const estimatedBlocksSinceDeploy = Math.floor(
+        (campaignStartUnix - SAFETY_MARGIN_SECONDS - deployBlockInfo.timestamp) / avgSecondsPerBlock,
+      )
+      fromBlockBase = Math.max(deployBlock, deployBlock + estimatedBlocksSinceDeploy)
+    }
+  } catch (e) {
+    console.warn('getClaimEvents: block-time estimation failed, falling back to deployBlock:', e)
+  }
+
+  // Probe the provider's actual max eth_getLogs range with a single call before building the
+  // chunk plan — found live against this deployment's RPC (Alchemy free tier): it hard-caps at
+  // 10 blocks/request, nowhere near MAX_LOG_RANGE_FALLBACK (2000). Discovering this AFTER
+  // starting a sequential scan (the original approach) meant shrinking chunk size mid-scan and
+  // continuing sequentially — over a ~13k block window at 10 blocks/chunk that's ~1300
+  // sequential round-trips, effectively hanging. Discovering it up front lets the whole chunk
+  // plan be fetched CONCURRENTLY instead (bounded), which is what actually fixes the wall-clock
+  // time — smaller chunks alone would not have.
+  let chunkSize = MAX_LOG_RANGE_FALLBACK
+  try {
+    await contractToUse.queryFilter(filter, fromBlockBase, Math.min(fromBlockBase + chunkSize, latestBlock))
+  } catch (error: any) {
+    const msg: string = error?.error?.message || error?.shortMessage || error?.message || ''
+    const rangeMatch = msg.match(/up to a (\d+) block range/i)
+    if (rangeMatch?.[1]) {
+      chunkSize = Math.max(1, Number(rangeMatch[1]))
+    }
+  }
+
+  let ranges: { from: number; to: number }[] = []
+  for (let from = fromBlockBase; from <= latestBlock; from += chunkSize) {
+    ranges.push({ from, to: Math.min(from + chunkSize - 1, latestBlock) })
+  }
+
+  // Hard cap on total requests: on a heavily rate/range-limited free-tier RPC (10
+  // blocks/request observed live against this deployment's endpoint), a wide window can still
+  // mean hundreds of chunks even after scoping to the campaign's own dates. This is a
+  // display-only analytics feature (BR-I4: never a value-bearing read), so a bounded-time
+  // partial result is the right tradeoff over blocking the host's page load for minutes — if
+  // the cap is hit, the OLDEST part of the window is dropped first (claims right after Ended
+  // are the common case and most useful to show; a campaign's full historical curve is a
+  // nice-to-have, not required for the funnel counts elsewhere in this module, which come from
+  // getCampaignParticipants/DB, not from this scan).
+  const MAX_CHUNKS = 200
+  if (ranges.length > MAX_CHUNKS) {
+    console.warn(
+      `getClaimEvents: ${ranges.length} chunks needed for campaign ${campaign.id}, capping to the most recent ${MAX_CHUNKS} (partial result — claims-over-time chart may be missing older entries)`,
+    )
+    ranges = ranges.slice(-MAX_CHUNKS)
+  }
+
+  const CONCURRENCY = 4 // matches PARTICIPANT_QUERY_CONCURRENCY's convention — a higher value
+  // was tried live and made rate-limiting worse, not better, against this free-tier RPC.
+  const MAX_RATE_LIMIT_RETRIES = 3
+  const chunkResults = await runWithConcurrency(ranges, CONCURRENCY, async ({ from, to }) => {
+    let retries = 0
+    for (;;) {
+      try {
+        return await contractToUse!.queryFilter(filter!, from, to)
+      } catch (error: any) {
+        const msg: string = error?.error?.message || error?.shortMessage || error?.message || ''
+        const isRateLimit = /compute units per second|rate limit|429/i.test(msg)
+        if (isRateLimit && retries < MAX_RATE_LIMIT_RETRIES) {
+          retries++
+          await new Promise((resolve) => setTimeout(resolve, 400 * retries))
+          continue
+        }
+        console.warn(`getClaimEvents: chunk [${from},${to}] failed, skipping:`, msg)
+        return []
+      }
+    }
+  })
+  const events: ethers.Log[] = chunkResults.flat() as unknown as ethers.Log[]
+
+  // Resolve block timestamps with bounded concurrency — one RPC call per unique block.
+  const uniqueBlocks = Array.from(new Set(events.map((e) => e.blockNumber)))
+  const blockTimestamps = new Map<number, number>()
+  await runWithConcurrency(uniqueBlocks, PARTICIPANT_QUERY_CONCURRENCY, async (bn) => {
+    const block = await provider.getBlock(bn)
+    if (block) blockTimestamps.set(bn, block.timestamp)
+  })
+
+  return events.map((e) => {
+    const parsed = contractToUse!.interface.parseLog(e)
+    return {
+      account: (parsed?.args?.account as string) ?? '',
+      blockNumber: e.blockNumber,
+      timestamp: blockTimestamps.get(e.blockNumber) ?? 0,
+    }
+  })
 }
 
 /**

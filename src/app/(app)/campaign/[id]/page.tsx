@@ -83,6 +83,14 @@ const CampaignAnalytics = dynamic(
   { ssr: false },
 )
 
+const CampaignFunnelAnalytics = dynamic(
+  () =>
+    import('@/components/campaign-funnel-analytics').then((mod) => ({
+      default: mod.CampaignFunnelAnalytics,
+    })),
+  { ssr: false },
+)
+
 export default function CampaignDetailsPage() {
   const params = useParams()
   const { id } = params
@@ -969,6 +977,9 @@ export default function CampaignDetailsPage() {
                 own settlement mode — never shown for a tiered or cross-mode campaign. */}
             {isHostOfCampaign && <MerkleSettlementPanel campaign={campaign} />}
             {isHostOfCampaign && <NFTSettlementPanel campaign={campaign} />}
+
+            {/* Host-only: funnel/completion/claim-rate analytics + CSV export (P3 CP3) */}
+            {isHostOfCampaign && <CampaignFunnelAnalytics campaign={campaign} />}
 
             {/* Participant Analytics - Only for Host */}
             {isHostOfCampaign && (

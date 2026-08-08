@@ -11,6 +11,23 @@ import type { Campaign } from '@/lib/types'
 import { type AttestationEvidence } from '@/lib/signer'
 import { attestAndRespond } from '@/lib/attest-response'
 
+/** Best-effort, never throws — a logging failure must never break the verify-task response
+ * itself. No wallet/user identifier stored (P3 CP3 host analytics: aggregated only). */
+async function logVerificationFailure(
+  campaignId: number,
+  taskIndex: number,
+  taskType: string | undefined,
+  reason: string,
+): Promise<void> {
+  try {
+    await prisma.verificationFailure.create({
+      data: { campaignId, taskIndex, taskType: taskType ?? null, reason },
+    })
+  } catch (e) {
+    console.warn('[verify-task] failed to log verification failure (non-fatal):', e)
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -76,6 +93,7 @@ export async function POST(request: Request) {
       const discordServerId = taskMetadata?.discordServerId
 
       if (!discordServerId) {
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'discord_not_configured')
         return NextResponse.json({
           success: false,
           verified: false,
@@ -135,6 +153,7 @@ export async function POST(request: Request) {
           campaignId,
           taskIndex,
         })
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'telegram_not_configured')
         return NextResponse.json({
           success: false,
           verified: false,
@@ -226,6 +245,7 @@ export async function POST(request: Request) {
           // Fallback/Update logic: if they are hitting this to complete the Humanity task,
           // we can attempt a real-time check in case the OAuth callback hasn't processed yet.
           if (!isHuman) {
+            await logVerificationFailure(campaignId, taskIndex, effectiveTaskType, 'humanity_pending')
             return NextResponse.json(
               {
                 success: false,
@@ -237,7 +257,7 @@ export async function POST(request: Request) {
               },
               { status: 403 },
             )
-            
+
           }
 
           // Humanity check passed — fall through to the shared attestation step below.
@@ -265,6 +285,7 @@ export async function POST(request: Request) {
         !userAddress
       ) {
         // HUMANITY_VERIFICATION requires a wallet address - fail closed
+        await logVerificationFailure(campaignId, taskIndex, effectiveTaskType ?? undefined, 'missing_wallet_address')
         return NextResponse.json({
           success: false,
           verified: false,
@@ -282,6 +303,7 @@ export async function POST(request: Request) {
             metadataTaskType: taskMetadata?.taskType,
           },
         )
+        await logVerificationFailure(campaignId, taskIndex, undefined, 'humanity_task_misconfigured')
         return NextResponse.json({
           success: false,
           verified: false,
@@ -309,6 +331,7 @@ export async function POST(request: Request) {
             canonicalTaskType,
             metadataTaskType: taskMetadata?.taskType,
           })
+          await logVerificationFailure(campaignId, taskIndex, undefined, 'unknown_task_type')
           return NextResponse.json({
             success: false,
             verified: false,
@@ -320,6 +343,12 @@ export async function POST(request: Request) {
     }
 
     if (!isVerified) {
+      const reason = isDiscordTask
+        ? 'discord_not_joined'
+        : isTelegramTask
+          ? 'telegram_not_joined'
+          : 'verification_failed'
+      await logVerificationFailure(campaignId, taskIndex, taskType, reason)
       return NextResponse.json({
         success: true,
         verified: false,

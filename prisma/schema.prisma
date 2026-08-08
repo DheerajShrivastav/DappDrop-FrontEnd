@@ -179,6 +179,23 @@ model Analytics {
   timestamp DateTime @default(now())
 }
 
+// Failed task-verification attempts (P3 CP3 — host analytics). AttestationRecord already logs
+// every PASS (BR-V4 audit log); nothing previously recorded a FAIL — /api/verify-task's failure
+// paths only ever returned an HTTP response to the client, never persisted anything. Deliberately
+// carries NO wallet/user identifier — this is an aggregation-only log by construction (the P3
+// prompt's own "surface verifier-failure reasons aggregated, not per-user"), not a redacted view
+// of a richer table.
+model VerificationFailure {
+  id         String   @id @default(cuid())
+  campaignId Int
+  taskIndex  Int
+  taskType   String?
+  reason     String // short categorical reason (e.g. "discord_not_joined", "humanity_pending")
+  createdAt  DateTime @default(now())
+
+  @@index([campaignId, taskIndex])
+}
+
 // Append-only audit log of every EIP-712 attestation the SIGNER_ROLE service signs
 // (PRD BR-V4). Records who/what/when + the evidence that justified signing. Deliberately
 // does NOT store the raw signature or any key material — the signature is returned to the
