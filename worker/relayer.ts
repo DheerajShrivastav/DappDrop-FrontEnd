@@ -48,9 +48,8 @@
  *   RELAYER_BATCH_SIZE               PENDING requests processed per tick (default 10).
  *   RELAYER_INTERVAL_MINUTES         polling interval for --loop (default 2).
  *
- * OUT OF SCOPE (deliberately, P3 CP2): NFT sponsored claims (claimNFTFor on
- * NFTSettlementModule) — the "kind" model this file already has (ERC20_MERKLE/TIERED) is
- * written to slot NFT in the same way; not wired yet.
+ * All three settlement paths (ERC20_MERKLE, TIERED, NFT) are wired as of P3 CP2 — see the
+ * three-way branch in processClaim below.
  */
 import 'dotenv/config'
 
