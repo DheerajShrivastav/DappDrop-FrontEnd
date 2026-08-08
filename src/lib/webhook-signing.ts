@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 
 /**
  * Webhook HMAC signing — the documented, host-reproducible scheme (PRD BR-N*).
@@ -27,6 +27,11 @@ import { createHmac, timingSafeEqual } from 'crypto'
  *        ORIGINAL timestamp + signature unchanged, pick a tolerance >= your max retry horizon,
  *        or dedupe on the event id (recommended) rather than relying on the timestamp window.
  */
+
+/** Generates a new per-endpoint HMAC secret (P3 CP4 webhook admin console: create + rotate). */
+export function generateWebhookSecret(): string {
+  return `whsec_${randomBytes(32).toString('hex')}`
+}
 
 export const SIGNATURE_HEADER = 'X-DappDrop-Signature'
 export const TIMESTAMP_HEADER = 'X-DappDrop-Timestamp'

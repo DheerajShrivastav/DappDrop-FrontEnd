@@ -128,6 +128,14 @@ model CampaignCache {
   // migration once P3 needs them.
   allocationPolicy String  @default("EQUAL_SPLIT")
 
+  // P3 CP4 — admin moderation. Off-chain ONLY: hides the campaign from the public discovery
+  // listing (getAllCampaigns' public-facing callers). Deliberately does NOT touch escrow,
+  // tasks, or claims — a hidden campaign's participants can still complete tasks and claim by
+  // direct link; this only controls whether it's surfaced in the public list. The UI must say
+  // so explicitly wherever this toggle appears.
+  hiddenFromDiscovery Boolean @default(false)
+  hiddenReason        String?
+
   lastSyncedAt DateTime @default(now())
 }
 
@@ -194,6 +202,21 @@ model VerificationFailure {
   createdAt  DateTime @default(now())
 
   @@index([campaignId, taskIndex])
+}
+
+// One row per worker/keeper.ts sweep (P3 CP4 admin console — "keeper health: recent run log").
+// Nothing previously persisted keeper activity beyond console output, lost on restart/redeploy.
+model KeeperRun {
+  id            String   @id @default(cuid())
+  startedAt     DateTime @default(now())
+  finishedAt    DateTime?
+  endableCount  Int      @default(0)
+  endedCount    Int      @default(0)
+  failedCount   Int      @default(0)
+  alertCount    Int      @default(0) // BR-K2: campaigns overdue past KEEPER_OVERDUE_ALERT_MINUTES
+  error         String? // set if the sweep itself threw before completing
+
+  @@index([startedAt])
 }
 
 // Append-only audit log of every EIP-712 attestation the SIGNER_ROLE service signs

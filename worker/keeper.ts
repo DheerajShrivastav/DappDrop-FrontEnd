@@ -46,6 +46,7 @@ import 'dotenv/config'
 import { ethers } from 'ethers'
 import config from '@/app/config'
 import { getAllCampaigns, getEntrypointContract, getEntrypointReadContract } from '@/lib/web3-service'
+import { prisma } from '@/lib/prisma'
 import type { Campaign } from '@/lib/types'
 
 const MAX_ATTEMPTS = Number(process.env.KEEPER_MAX_ATTEMPTS || '3')
@@ -207,45 +208,85 @@ async function buildEscalatingGasOverrides(
   return {}
 }
 
-/** One sweep: discover endable campaigns, attempt to end each, log + alert as appropriate. */
+/** One sweep: discover endable campaigns, attempt to end each, log + alert as appropriate.
+ * Persists a summary row per sweep (P3 CP4 admin console "keeper health: recent run log") —
+ * best-effort, a logging failure must never fail the sweep itself, which is the actually
+ * important side effect. */
 export async function runSweep(): Promise<void> {
-  const provider = new ethers.JsonRpcProvider(config.rpcUrl)
-  const keeperWallet = loadKeeperWallet(provider)
+  const startedAt = new Date()
+  let endedCount = 0
+  let failedCount = 0
+  let alertCount = 0
+  let sweepError: string | undefined
 
-  const endable = await findEndableCampaigns()
-  console.log(`[keeper] sweep start — ${endable.length} campaign(s) appear endable`)
+  try {
+    const provider = new ethers.JsonRpcProvider(config.rpcUrl)
+    const keeperWallet = loadKeeperWallet(provider)
 
-  for (const c of endable) {
-    const overdueMs = Date.now() - c.endDate.getTime()
-    const result = await endCampaignSafely(c.id, keeperWallet)
+    const endable = await findEndableCampaigns()
+    console.log(`[keeper] sweep start — ${endable.length} campaign(s) appear endable`)
 
-    switch (result.outcome) {
-      case 'ended':
-        console.log(`[keeper] ✅ ended campaign ${c.id} ("${c.title}") — tx ${result.txHash}`)
-        break
-      case 'already-not-open':
-        console.log(
-          `[keeper] ℹ️  campaign ${c.id} is no longer Open (ended/cancelled by someone else, or already handled) — nothing to do`,
-        )
-        break
-      case 'not-yet-due':
-        console.log(
-          `[keeper] ⏳ campaign ${c.id} not yet due on-chain (clock skew) — will retry next sweep`,
-        )
-        break
-      case 'failed':
-        if (overdueMs > OVERDUE_ALERT_MS) {
-          console.error(
-            `[keeper] 🚨 ALERT: campaign ${c.id} ("${c.title}") is ${(overdueMs / 60000).toFixed(1)}min overdue and still failing to end after ${MAX_ATTEMPTS} attempts — reason: ${result.error}. This needs on-call attention in a real deployment (BR-K2); note anyone can still call endCampaign permissionlessly as a fallback.`,
+    for (const c of endable) {
+      const overdueMs = Date.now() - c.endDate.getTime()
+      const result = await endCampaignSafely(c.id, keeperWallet)
+
+      switch (result.outcome) {
+        case 'ended':
+          endedCount++
+          console.log(`[keeper] ✅ ended campaign ${c.id} ("${c.title}") — tx ${result.txHash}`)
+          break
+        case 'already-not-open':
+          console.log(
+            `[keeper] ℹ️  campaign ${c.id} is no longer Open (ended/cancelled by someone else, or already handled) — nothing to do`,
           )
-        } else {
-          console.warn(`[keeper] ⚠️  failed to end campaign ${c.id}: ${result.error}`)
-        }
-        break
+          break
+        case 'not-yet-due':
+          console.log(
+            `[keeper] ⏳ campaign ${c.id} not yet due on-chain (clock skew) — will retry next sweep`,
+          )
+          break
+        case 'failed':
+          failedCount++
+          if (overdueMs > OVERDUE_ALERT_MS) {
+            alertCount++
+            console.error(
+              `[keeper] 🚨 ALERT: campaign ${c.id} ("${c.title}") is ${(overdueMs / 60000).toFixed(1)}min overdue and still failing to end after ${MAX_ATTEMPTS} attempts — reason: ${result.error}. This needs on-call attention in a real deployment (BR-K2); note anyone can still call endCampaign permissionlessly as a fallback.`,
+            )
+          } else {
+            console.warn(`[keeper] ⚠️  failed to end campaign ${c.id}: ${result.error}`)
+          }
+          break
+      }
     }
-  }
 
-  console.log('[keeper] sweep complete')
+    console.log('[keeper] sweep complete')
+
+    try {
+      await prisma.keeperRun.create({
+        data: {
+          startedAt,
+          finishedAt: new Date(),
+          endableCount: endable.length,
+          endedCount,
+          failedCount,
+          alertCount,
+        },
+      })
+    } catch (e) {
+      console.warn('[keeper] failed to persist run log (non-fatal):', e)
+    }
+  } catch (e: any) {
+    sweepError = e?.message ?? String(e)
+    console.error('[keeper] sweep failed:', e)
+    try {
+      await prisma.keeperRun.create({
+        data: { startedAt, finishedAt: new Date(), error: sweepError },
+      })
+    } catch (logError) {
+      console.warn('[keeper] failed to persist error run log (non-fatal):', logError)
+    }
+    throw e
+  }
 }
 
 // ---------------------------------------------------------------------------

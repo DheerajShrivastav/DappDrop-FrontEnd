@@ -260,6 +260,7 @@ export async function GET(
         longDescription: true,
         rewardType: true,
         rewardName: true,
+        hiddenFromDiscovery: true,
       },
     })
 
@@ -274,6 +275,7 @@ export async function GET(
       longDescription: campaign.longDescription,
       rewardType: campaign.rewardType,
       rewardName: campaign.rewardName,
+      hiddenFromDiscovery: campaign.hiddenFromDiscovery,
     })
   } catch (error) {
     console.error('Error fetching campaign image:', error)

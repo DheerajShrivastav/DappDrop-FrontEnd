@@ -474,12 +474,14 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
                 rewardName?: string
               }
             | undefined
+          let hiddenFromDiscovery = false
           if (typeof window !== 'undefined') {
             try {
               const imageResponse = await fetch(`/api/campaigns/${i}/image`)
               if (imageResponse.ok) {
                 const imageData = await imageResponse.json()
                 imageUrl = imageData.imageUrl
+                hiddenFromDiscovery = Boolean(imageData.hiddenFromDiscovery)
                 if (
                   imageData.shortDescription ||
                   imageData.longDescription ||
@@ -497,15 +499,20 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
             }
           }
 
-          const campaign = mapContractDataToCampaign(
-            campaignData,
-            i,
-            undefined,
-            imageUrl,
-            campaignMeta,
-          )
+          // P3 CP4: public discovery excludes admin-hidden campaigns (off-chain only —
+          // getCampaignsByHostAddress's RPC fallback does NOT apply this filter, so a host
+          // still sees their own hidden campaign on their dashboard).
+          if (!hiddenFromDiscovery) {
+            const campaign = mapContractDataToCampaign(
+              campaignData,
+              i,
+              undefined,
+              imageUrl,
+              campaignMeta,
+            )
 
-          campaigns.push(campaign)
+            campaigns.push(campaign)
+          }
         }
       } catch (error: any) {
         if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
@@ -3797,4 +3804,187 @@ export const isPaused = async (): Promise<boolean> => {
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// P3 CP4 — Admin console: moderation + emergency-pause actions, all signed by the CONNECTED
+// wallet's own signer (never a backend key) — the admin console is a UI convenience over the
+// same "you sign your own privileged tx" pattern hosts already use, not a new trust model.
+// The actual authorization gate is on-chain (onlyRole(MODERATOR_ROLE)/onlyRole(EMERGENCY_ADMIN)
+// in the contract); the API-route-level checks in src/lib/admin-auth.ts are a UX nicety
+// (fail fast with a clear message) layered on top of that, not a substitute for it.
+// ---------------------------------------------------------------------------
+
+/** MODERATOR_ROLE: flag (score > 0) or clear (score = 0) an account's suspicious-activity
+ * score. MAX_SUSPICIOUS_SCORE (100) blocks the account from completing tasks entirely. */
+export const flagAccountOnChain = async (userAddress: string, score: number): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.flagAccount(userAddress, score)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error flagging account:', error)
+    throw error
+  }
+}
+
+/** EMERGENCY_ADMIN: pause all state-changing entrypoints platform-wide. */
+export const emergencyPauseOnChain = async (): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.emergencyPause()
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error pausing contract:', error)
+    throw error
+  }
+}
+
+/** EMERGENCY_ADMIN: lift a platform-wide pause. */
+export const emergencyUnpauseOnChain = async (): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.emergencyUnpause()
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error unpausing contract:', error)
+    throw error
+  }
+}
+
+export type FlagEvent = { user: string; score: number; moderator: string; blockNumber: number; timestamp: number }
+
+/** Recent AccountFlagged events (the only way to see moderation history — _suspiciousActivityScore
+ * has no getter, only the event trail). Bounded scan, same probe-then-concurrent-fetch shape as
+ * getClaimEvents (see its docstring for why: this deployment's RPC hard-caps eth_getLogs). */
+export const getRecentFlagEvents = async (lookbackBlocks = 50000): Promise<FlagEvent[]> => {
+  const c = getEntrypointReadContract()
+  const provider = c.runner as ethers.Provider
+  const latestBlock = await provider.getBlockNumber()
+  const fromBlockBase = Math.max(config.addresses.deployBlock || 0, latestBlock - lookbackBlocks)
+  const filter = c.filters.AccountFlagged()
+
+  let chunkSize = MAX_LOG_RANGE_FALLBACK
+  try {
+    await c.queryFilter(filter, fromBlockBase, Math.min(fromBlockBase + chunkSize, latestBlock))
+  } catch (error: any) {
+    const msg: string = error?.error?.message || error?.shortMessage || error?.message || ''
+    const rangeMatch = msg.match(/up to a (\d+) block range/i)
+    if (rangeMatch?.[1]) chunkSize = Math.max(1, Number(rangeMatch[1]))
+  }
+  let ranges: { from: number; to: number }[] = []
+  for (let from = fromBlockBase; from <= latestBlock; from += chunkSize) {
+    ranges.push({ from, to: Math.min(from + chunkSize - 1, latestBlock) })
+  }
+  const MAX_CHUNKS = 200
+  if (ranges.length > MAX_CHUNKS) ranges = ranges.slice(-MAX_CHUNKS)
+
+  const chunkResults = await runWithConcurrency(ranges, 4, async ({ from, to }) => {
+    try {
+      return await c.queryFilter(filter, from, to)
+    } catch {
+      return []
+    }
+  })
+  const logs = chunkResults.flat()
+
+  const uniqueBlocks = Array.from(new Set(logs.map((l) => l.blockNumber)))
+  const blockTimestamps = new Map<number, number>()
+  await runWithConcurrency(uniqueBlocks, PARTICIPANT_QUERY_CONCURRENCY, async (bn) => {
+    const block = await provider.getBlock(bn)
+    if (block) blockTimestamps.set(bn, block.timestamp)
+  })
+
+  return logs.map((log) => {
+    const parsed = c.interface.parseLog(log)
+    return {
+      user: (parsed?.args?.user as string) ?? '',
+      score: Number(parsed?.args?.score ?? 0),
+      moderator: (parsed?.args?.moderator as string) ?? '',
+      blockNumber: log.blockNumber,
+      timestamp: blockTimestamps.get(log.blockNumber) ?? 0,
+    }
+  })
+}
+
+export type SettlerActivityEvent = {
+  campaignId: number
+  settler: string
+  kind: 'root_published' | 'closed'
+  blockNumber: number
+  timestamp: number
+}
+
+/** Recent SETTLER_ROLE fallback activity (FallbackRootPublished / FallbackClosed) — the
+ * "last-fallback-action-at" health signal. Same bounded-scan shape as getRecentFlagEvents. */
+export const getRecentSettlerActivity = async (lookbackBlocks = 50000): Promise<SettlerActivityEvent[]> => {
+  const c = getEntrypointReadContract()
+  const provider = c.runner as ethers.Provider
+  const latestBlock = await provider.getBlockNumber()
+  const fromBlockBase = Math.max(config.addresses.deployBlock || 0, latestBlock - lookbackBlocks)
+
+  let chunkSize = MAX_LOG_RANGE_FALLBACK
+  try {
+    await c.queryFilter(c.filters.FallbackRootPublished(), fromBlockBase, Math.min(fromBlockBase + chunkSize, latestBlock))
+  } catch (error: any) {
+    const msg: string = error?.error?.message || error?.shortMessage || error?.message || ''
+    const rangeMatch = msg.match(/up to a (\d+) block range/i)
+    if (rangeMatch?.[1]) chunkSize = Math.max(1, Number(rangeMatch[1]))
+  }
+  let ranges: { from: number; to: number }[] = []
+  for (let from = fromBlockBase; from <= latestBlock; from += chunkSize) {
+    ranges.push({ from, to: Math.min(from + chunkSize - 1, latestBlock) })
+  }
+  const MAX_CHUNKS = 150
+  if (ranges.length > MAX_CHUNKS) ranges = ranges.slice(-MAX_CHUNKS)
+
+  const [publishedChunks, closedChunks] = await Promise.all([
+    runWithConcurrency(ranges, 4, async ({ from, to }) => {
+      try {
+        return await c.queryFilter(c.filters.FallbackRootPublished(), from, to)
+      } catch {
+        return []
+      }
+    }),
+    runWithConcurrency(ranges, 4, async ({ from, to }) => {
+      try {
+        return await c.queryFilter(c.filters.FallbackClosed(), from, to)
+      } catch {
+        return []
+      }
+    }),
+  ])
+  const logs = [
+    ...publishedChunks.flat().map((l) => ({ log: l, kind: 'root_published' as const })),
+    ...closedChunks.flat().map((l) => ({ log: l, kind: 'closed' as const })),
+  ]
+
+  const uniqueBlocks = Array.from(new Set(logs.map((l) => l.log.blockNumber)))
+  const blockTimestamps = new Map<number, number>()
+  await runWithConcurrency(uniqueBlocks, PARTICIPANT_QUERY_CONCURRENCY, async (bn) => {
+    const block = await provider.getBlock(bn)
+    if (block) blockTimestamps.set(bn, block.timestamp)
+  })
+
+  return logs
+    .map(({ log, kind }) => {
+      const parsed = c.interface.parseLog(log)
+      return {
+        campaignId: Number(parsed?.args?.campaignId ?? 0),
+        settler: (parsed?.args?.settler as string) ?? '',
+        kind,
+        blockNumber: log.blockNumber,
+        timestamp: blockTimestamps.get(log.blockNumber) ?? 0,
+      }
+    })
+    .sort((a, b) => b.blockNumber - a.blockNumber)
 }

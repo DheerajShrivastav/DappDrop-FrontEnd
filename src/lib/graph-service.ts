@@ -195,6 +195,7 @@ interface OffChainMeta {
   longDescription?: string
   rewardName?: string
   rewardType?: 'ERC20' | 'ERC721' | 'None'
+  hiddenFromDiscovery?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -323,7 +324,12 @@ export async function getGraphCampaigns(): Promise<Campaign[] | null> {
         .then((d) => d.campaigns),
     )
     const meta = await fetchOffChainMetadataBatch(campaigns.map((c) => c.id))
-    return campaigns.map((c) => mapGraphCampaign(c, meta[c.id] ?? {}))
+    // P3 CP4: public discovery excludes campaigns an admin has hidden (off-chain only — the
+    // host's own dashboard uses getGraphCampaignsByHost, which does NOT filter, so a host can
+    // still see and manage their own hidden campaign).
+    return campaigns
+      .filter((c) => !meta[c.id]?.hiddenFromDiscovery)
+      .map((c) => mapGraphCampaign(c, meta[c.id] ?? {}))
   } catch (err) {
     console.error('[graph-service] getGraphCampaigns failed:', err)
     return null
