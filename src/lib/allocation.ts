@@ -227,6 +227,22 @@ export async function getLatestAllocation(campaignId: number) {
 }
 
 /**
+ * P4 — the tree matching the CURRENTLY PUBLISHED on-chain root, or null if nothing is live yet.
+ * Same resolve-against-live-root pattern as getAllocationProof: "published" is determined from
+ * the chain, never from the DB status alone, so a stale/superseded DB row is never mistaken for
+ * the live root. This is the ONLY tree ever shown to an unauthenticated caller (BR-M4) — a
+ * PROPOSED draft (even one superseding an already-published root) must never leak here.
+ */
+export async function getPublishedAllocation(campaignId: number) {
+  const settlement = await getERC20SettlementOnChain(String(campaignId))
+  if (!settlement.merkleRoot || settlement.merkleRoot === ZERO_ROOT) return null
+  return prisma.merkleTree.findFirst({
+    where: { campaignId, root: settlement.merkleRoot },
+    include: { entries: true },
+  })
+}
+
+/**
  * Called by the client after `setERC20MerkleRoot` actually succeeds on-chain. Best-effort
  * bookkeeping only — the chain remains authoritative (BR-I4); the proof API cross-checks
  * against a live `getERC20Settlement` read rather than trusting `status` alone.

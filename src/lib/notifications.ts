@@ -319,3 +319,47 @@ export async function notifyAllocationProposalReady(params: {
     payload,
   })
 }
+
+/**
+ * ✅ Fired from src/lib/dispute-reports.ts::submitDisputeReport (P4) — a participant reported a
+ * concern about the published allocation during the review window. In-app + webhook to the
+ * host. No SLA, no automated action — this is a signal, nothing more (the host decides whether
+ * to publish a corrected allocation; reporting never pauses claims).
+ */
+export async function notifyDisputeReportFiled(params: {
+  campaignId: number
+  hostAddress: string
+  campaignName?: string
+  reporterWallet: string
+  category: string
+  openReportCount: number
+}): Promise<void> {
+  // Discriminated by wallet + count so a genuinely new report (new reporter, or the open count
+  // changing) notifies again, but re-fetching an unchanged state never spams a duplicate.
+  const eventId = makeEventId(
+    NotificationEventType.HOST_DISPUTE_REPORT_FILED,
+    params.campaignId,
+    `${params.reporterWallet.toLowerCase()}:${params.openReportCount}`,
+  )
+  const payload: EventPayloads[typeof NotificationEventType.HOST_DISPUTE_REPORT_FILED] = {
+    campaignId: params.campaignId,
+    campaignName: params.campaignName,
+    reporterWallet: params.reporterWallet.toLowerCase(),
+    category: params.category,
+    openReportCount: params.openReportCount,
+  }
+  await emitInApp({
+    recipients: [params.hostAddress],
+    type: NotificationEventType.HOST_DISPUTE_REPORT_FILED,
+    title: 'A concern was reported',
+    body: `A wallet reported a concern (${params.category}) about the published allocation for ${params.campaignName ?? `campaign #${params.campaignId}`}. ${params.openReportCount} open report(s) total.`,
+    payload,
+    eventId,
+  })
+  await dispatchWebhooksForHost({
+    hostAddress: params.hostAddress,
+    eventId,
+    eventType: NotificationEventType.HOST_DISPUTE_REPORT_FILED,
+    payload,
+  })
+}

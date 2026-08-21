@@ -29,6 +29,7 @@ export const NotificationEventType = {
   HOST_DISPUTE_WINDOW_ELAPSED: 'host.dispute_window.elapsed', // (follow-up: scheduled check)
   HOST_CLAIM_RATE_MILESTONE: 'host.claim_rate.milestone', // (follow-up: indexer claim aggregation)
   HOST_SWEEP_AVAILABLE: 'host.sweep.available', // (follow-up: scheduled check at closedAt+30d)
+  HOST_DISPUTE_REPORT_FILED: 'host.dispute_report.filed', // ✅ wired (submitDisputeReport, P4)
 } as const
 
 export type NotificationEventType =
@@ -75,5 +76,12 @@ export type EventPayloads = {
     campaignId: number
     campaignName?: string
     claimsOpenAt?: string // ISO
+  }
+  [NotificationEventType.HOST_DISPUTE_REPORT_FILED]: {
+    campaignId: number
+    campaignName?: string
+    reporterWallet: string
+    category: string
+    openReportCount: number
   }
 }

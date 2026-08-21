@@ -128,6 +128,7 @@ export default function AdminConsolePage() {
           {roles?.DEFAULT_ADMIN && <TabsTrigger value="relayer">Relayer</TabsTrigger>}
           {roles?.DEFAULT_ADMIN && <TabsTrigger value="keeper">Keeper</TabsTrigger>}
           {(roles?.MODERATOR || roles?.EMERGENCY_ADMIN) && <TabsTrigger value="moderation">Moderation</TabsTrigger>}
+          {roles?.MODERATOR && <TabsTrigger value="disputes">Disputes</TabsTrigger>}
           {roles?.DEFAULT_ADMIN && <TabsTrigger value="webhooks">Webhooks</TabsTrigger>}
           {roles?.DEFAULT_ADMIN && <TabsTrigger value="signer-settler">Signer/Settler</TabsTrigger>}
         </TabsList>
@@ -150,6 +151,11 @@ export default function AdminConsolePage() {
         {(roles?.MODERATOR || roles?.EMERGENCY_ADMIN) && (
           <TabsContent value="moderation" className="mt-6">
             <ModerationSection roles={roles} />
+          </TabsContent>
+        )}
+        {roles?.MODERATOR && (
+          <TabsContent value="disputes" className="mt-6">
+            <DisputesSection />
           </TabsContent>
         )}
         {roles?.DEFAULT_ADMIN && (
@@ -957,5 +963,83 @@ function SignerSettlerSection() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Dispute reports (P4) — cross-campaign visibility for "report a concern" filings during the
+// 24h dispute window. Alert-only escalation: plain AccessControl has no way to enumerate role
+// holders to push a notification to, so this is surfaced on load, not pushed. Never automated
+// action — the host decides whether to respond or republish a corrected allocation.
+// ---------------------------------------------------------------------------
+
+function DisputesSection() {
+  const { toast } = useToast()
+  const [data, setData] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    ;(async () => {
+      setIsLoading(true)
+      try {
+        setData(await fetchJson('/api/admin/moderation/reports'))
+      } catch (error) {
+        toast({ variant: 'destructive', title: 'Could not load dispute reports', description: errorMessage(error) })
+      } finally {
+        setIsLoading(false)
+      }
+    })()
+  }, [toast])
+
+  if (isLoading) return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Campaigns with open dispute reports</CardTitle>
+        <CardDescription>
+          One row per (campaign, published root) with at least one OPEN report. Escalated rows
+          crossed the configured open-count or allocated-wallet-share threshold — visibility
+          only, nothing here takes automated action.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Campaign</TableHead>
+              <TableHead>Host</TableHead>
+              <TableHead>Root</TableHead>
+              <TableHead>Open reports</TableHead>
+              <TableHead>Allocated wallets</TableHead>
+              <TableHead>Escalated</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {data?.campaigns?.map((c: any) => (
+              <TableRow key={`${c.campaignId}-${c.merkleRoot}`}>
+                <TableCell>
+                  {c.campaignTitle ?? `#${c.campaignId}`}
+                </TableCell>
+                <TableCell className="font-mono text-xs">{c.hostAddress}</TableCell>
+                <TableCell className="font-mono text-xs max-w-[10rem] truncate">{c.merkleRoot}</TableCell>
+                <TableCell>{c.openReportCount}</TableCell>
+                <TableCell>{c.allocatedWalletCount}</TableCell>
+                <TableCell>
+                  {c.escalation?.escalated ? <Badge variant="destructive">escalated</Badge> : '—'}
+                </TableCell>
+              </TableRow>
+            ))}
+            {(!data?.campaigns || data.campaigns.length === 0) && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
+                  No open dispute reports.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   )
 }

@@ -57,6 +57,8 @@ import { TieredClaimPanel } from './_components/tiered-claim-panel'
 import { TieredLeaderboard } from './_components/tiered-leaderboard'
 import { NFTClaimPanel } from './_components/nft-claim-panel'
 import { NFTSettlementPanel } from './_components/nft-settlement-panel'
+import { PublicAllocationView } from './_components/public-allocation-view'
+import { DisputeReportsPanel } from './_components/dispute-reports-panel'
 
 // Lazy-load heavy dialog components (only loaded when opened)
 const TaskVerificationForm = dynamic(
@@ -949,8 +951,11 @@ export default function CampaignDetailsPage() {
       <CampaignHero campaign={campaign} isTimeExpiredNotClosed={!!isTimeExpiredNotClosed} />
 
       {/* Lifecycle state ladder (NFR-9): honest, named state with claim/sweep timing. */}
-      <div className="container mx-auto px-4 pt-8">
+      <div className="container mx-auto px-4 pt-8 space-y-6">
         <CampaignLifecycleBanner campaign={campaign} />
+        {/* Public, unauthenticated once a root is published (P4 Part 1, BR-M4) — the banner's
+            "View all allocations" link anchors here. */}
+        <PublicAllocationView campaign={campaign} />
       </div>
 
       {/* Main Content */}
@@ -977,6 +982,9 @@ export default function CampaignDetailsPage() {
                 own settlement mode — never shown for a tiered or cross-mode campaign. */}
             {isHostOfCampaign && <MerkleSettlementPanel campaign={campaign} />}
             {isHostOfCampaign && <NFTSettlementPanel campaign={campaign} />}
+
+            {/* Host resolution flow for reported concerns + the close-campaign guard (P4 Part 4) */}
+            {isHostOfCampaign && <DisputeReportsPanel campaign={campaign} />}
 
             {/* Host-only: funnel/completion/claim-rate analytics + CSV export (P3 CP3) */}
             {isHostOfCampaign && <CampaignFunnelAnalytics campaign={campaign} />}

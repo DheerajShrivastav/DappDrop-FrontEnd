@@ -201,6 +201,18 @@ export async function getLatestNFTAllocation(campaignId: number) {
   })
 }
 
+/** P4 — NFT counterpart of getPublishedAllocation (allocation.ts): the tree matching the
+ * CURRENTLY PUBLISHED on-chain root, or null if nothing is live yet. See that function's
+ * docstring for why this is the only tree ever served to an unauthenticated caller. */
+export async function getPublishedNFTAllocation(campaignId: number) {
+  const onChain = await getNFTSettlementOnChain(String(campaignId))
+  if (!onChain || !onChain.merkleRoot || onChain.merkleRoot === ZERO_ROOT) return null
+  return prisma.merkleTree.findFirst({
+    where: { campaignId, root: onChain.merkleRoot, rewardKind: 'NFT' },
+    include: { entries: true },
+  })
+}
+
 export async function markNFTAllocationPublished(campaignId: number, version: number) {
   const row = await prisma.merkleTree.findUnique({ where: { campaignId_version: { campaignId, version } } })
   if (!row) throw new AllocationError('Allocation version not found')

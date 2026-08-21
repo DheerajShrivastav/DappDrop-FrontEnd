@@ -119,6 +119,13 @@ export const initializeProviderAndContract = (
 // Initial call for read-only access
 initializeReadOnlyProvider()
 
+/** The signer-backed BrowserProvider for the connected wallet, or null before
+ * initializeProviderAndContract has run. Exposed so callers that need a provider for
+ * NON-contract work (SIWE message signing in the wallet context) reuse this one instance
+ * instead of constructing `new BrowserProvider(...)` themselves — CLAUDE.md keeps ethers out
+ * of components, and a second provider over the same transport is pure duplication anyway. */
+export const getWalletBrowserProvider = (): BrowserProvider | null => provider
+
 // --- Helper Functions ---
 
 const getSigner = async () => {
@@ -2471,6 +2478,25 @@ export const endCampaign = async (campaignId: string) => {
       title: 'Transaction Failed',
       description: `Failed to end campaign. Reason: ${reason}`,
     })
+    throw error
+  }
+}
+
+/** P4 — closes a campaign (Ended -> Closed), freezing the allocation permanently. There was
+ * no frontend caller of this ABI function before P4; the UI trigger lives in the settlement
+ * panels alongside the dispute-report resolution flow, since that's where a host needs to see
+ * the "unresolved reports" warning before calling this. */
+export const closeCampaignOnChain = async (campaignId: string): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const campaignIdNumber = parseInt(campaignId, 10)
+    const tx = await contractWithSigner.closeCampaign(campaignIdNumber)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error(`Error closing campaign ${campaignId}:`, error)
     throw error
   }
 }
