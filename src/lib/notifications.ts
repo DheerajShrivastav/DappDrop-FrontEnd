@@ -363,3 +363,47 @@ export async function notifyDisputeReportFiled(params: {
     payload,
   })
 }
+
+/**
+ * ✅ Fired from src/lib/dispute-reports.ts::markReportReviewed (P4) — the host marked a report
+ * REVIEWED and (optionally) attached a written response. In-app ONLY, to the reporter: without
+ * this the host's response is write-only, visible only if the reporter happens to reopen the
+ * report dialog. No webhook — webhooks here are host-facing, and the host is the one who wrote
+ * the response.
+ */
+export async function notifyDisputeReportReviewed(params: {
+  campaignId: number
+  reporterWallet: string
+  reportId: string
+  reviewedAt: Date
+  campaignName?: string
+  hostResponse?: string | null
+}): Promise<void> {
+  // Discriminated by report + reviewedAt. markReportReviewed stamps a FRESH reviewedAt on every
+  // review, so a host who edits their reply and re-marks the report reviewed produces a new id
+  // and legitimately notifies the reporter again — while a retry of the SAME emit reuses the
+  // same reviewedAt and dedupes against the (recipient, eventId) unique constraint.
+  const eventId = makeEventId(
+    NotificationEventType.DISPUTE_REPORT_REVIEWED,
+    params.campaignId,
+    `${params.reportId}:${params.reviewedAt.getTime()}`,
+  )
+  const payload: EventPayloads[typeof NotificationEventType.DISPUTE_REPORT_REVIEWED] = {
+    campaignId: params.campaignId,
+    campaignName: params.campaignName,
+    reportId: params.reportId,
+    hostResponse: params.hostResponse,
+  }
+  const response = params.hostResponse?.trim()
+  const target = params.campaignName ?? `campaign #${params.campaignId}`
+  await emitInApp({
+    recipients: [params.reporterWallet],
+    type: NotificationEventType.DISPUTE_REPORT_REVIEWED,
+    title: 'The host reviewed your report',
+    body: response
+      ? `The host reviewed your report on ${target} and replied: “${response}”`
+      : `The host reviewed your report on ${target}. They did not leave a written response.`,
+    payload,
+    eventId,
+  })
+}

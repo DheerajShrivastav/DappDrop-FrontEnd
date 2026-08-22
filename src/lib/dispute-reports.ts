@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { prisma } from './prisma'
-import { notifyDisputeReportFiled } from './notifications'
+import { notifyDisputeReportFiled, notifyDisputeReportReviewed } from './notifications'
 import { getCampaignHostOnChain } from './require-host'
 
 /**
@@ -69,9 +69,13 @@ export async function submitDisputeReport(params: {
     update: {
       category: params.category,
       reason,
-      status: 'OPEN', // a repeat submit reopens it rather than silently updating a resolved report
-      hostResponse: null,
-      reviewedAt: null,
+      // A repeat submit reopens the report so the host looks again, rather than silently
+      // editing a resolved one underneath them. It deliberately does NOT clear hostResponse /
+      // reviewedAt: the host's reply is a historical fact addressed to this reporter, and the
+      // dialog pre-fills category+reason from the existing report — so a reporter who opens it
+      // just to re-read their own report and hits "Update" would otherwise destroy the reply
+      // they were coming back to read.
+      status: 'OPEN',
     },
   })
 
@@ -137,10 +141,31 @@ export async function getReportForWallet(campaignId: number, merkleRoot: string,
 }
 
 export async function markReportReviewed(reportId: string, hostResponse: string | null) {
-  return prisma.disputeReport.update({
+  const reviewedAt = new Date()
+  const report = await prisma.disputeReport.update({
     where: { id: reportId },
-    data: { status: 'REVIEWED', hostResponse, reviewedAt: new Date() },
+    data: { status: 'REVIEWED', hostResponse, reviewedAt },
   })
+
+  // Best-effort notification (BR-N*) — never allowed to fail the review itself. Without this the
+  // host's reply is write-only: it is addressed to the reporter, but nothing would ever tell
+  // them it exists. In-app to the reporter only; no webhook, since webhooks here are host-facing
+  // and the host is the one who just wrote the response.
+  try {
+    const cache = await prisma.campaignCache.findFirst({ where: { campaignId: report.campaignId } })
+    await notifyDisputeReportReviewed({
+      campaignId: report.campaignId,
+      reporterWallet: report.reporterWallet,
+      reportId: report.id,
+      reviewedAt,
+      campaignName: cache?.title,
+      hostResponse: report.hostResponse,
+    })
+  } catch (e) {
+    console.warn('[dispute-reports] reviewed notification failed (non-fatal):', e)
+  }
+
+  return report
 }
 
 /**

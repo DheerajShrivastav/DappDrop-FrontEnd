@@ -18,6 +18,7 @@ export const NotificationEventType = {
   CLAIMS_OPEN: 'claims.open', // (follow-up: fire when dispute window elapses — needs a scheduled check)
   SPONSORED_CLAIM_CONFIRMED: 'sponsored_claim.confirmed', // ✅ wired (worker/relayer confirmed)
   GRACE_EXPIRY_WARNING: 'grace.expiry_warning', // (follow-up: 7d/48h-before-sweep scheduled check)
+  DISPUTE_REPORT_REVIEWED: 'dispute_report.reviewed', // ✅ wired (markReportReviewed, P4) — host replied to your report
 
   // ── Host-facing ──
   HOST_CAMPAIGN_OPENED: 'host.campaign.opened', // (follow-up)
@@ -76,6 +77,15 @@ export type EventPayloads = {
     campaignId: number
     campaignName?: string
     claimsOpenAt?: string // ISO
+  }
+  [NotificationEventType.DISPUTE_REPORT_REVIEWED]: {
+    campaignId: number
+    campaignName?: string
+    reportId: string
+    // The host's written reply. Carried here so it reaches the reporter in the notification
+    // itself, not only when they reopen the report dialog. Null/absent when the host marked the
+    // report reviewed without writing anything.
+    hostResponse?: string | null
   }
   [NotificationEventType.HOST_DISPUTE_REPORT_FILED]: {
     campaignId: number

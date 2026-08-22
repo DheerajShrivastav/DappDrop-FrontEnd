@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, Flag } from 'lucide-react'
+import { Loader2, Flag, MessageSquare } from 'lucide-react'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -35,7 +36,13 @@ export function ReportConcernDialog({ campaignId }: { campaignId: string }) {
   const [category, setCategory] = useState('')
   const [reason, setReason] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [existingReport, setExistingReport] = useState<{ status: string; category: string; reason: string } | null>(null)
+  const [existingReport, setExistingReport] = useState<{
+    status: string
+    category: string
+    reason: string
+    hostResponse: string | null
+    reviewedAt: string | null
+  } | null>(null)
 
   useEffect(() => {
     if (!isOpen) return
@@ -90,6 +97,26 @@ export function ReportConcernDialog({ campaignId }: { campaignId: string }) {
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          {existingReport?.status === 'REVIEWED' && (
+            <Alert>
+              <MessageSquare className="h-4 w-4" />
+              <AlertTitle>
+                Host reviewed your report
+                {existingReport.reviewedAt
+                  ? ` on ${new Date(existingReport.reviewedAt).toLocaleDateString()}`
+                  : ''}
+              </AlertTitle>
+              <AlertDescription>
+                {existingReport.hostResponse?.trim() ? (
+                  <p className="whitespace-pre-wrap">{existingReport.hostResponse.trim()}</p>
+                ) : (
+                  <p className="text-muted-foreground">
+                    The host marked this report as reviewed without leaving a written reply.
+                  </p>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-2">
             <Label htmlFor="report-category">Category</Label>
             <Select value={category} onValueChange={setCategory}>
@@ -121,6 +148,12 @@ export function ReportConcernDialog({ campaignId }: { campaignId: string }) {
             Reporting does not pause claims — the host decides whether to publish a corrected
             allocation.
           </p>
+          {existingReport && (
+            <p className="text-xs text-muted-foreground">
+              Updating this report sets it back to open so the host looks again. Any reply the host
+              already left stays visible here.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <DialogClose asChild>
