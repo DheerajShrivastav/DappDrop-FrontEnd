@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatUnits } from 'ethers'
+import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
 import { Loader2, Gavel, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +19,16 @@ import {
   TableRow,
   TableCell,
 } from '@/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Campaign } from '@/lib/types'
@@ -43,20 +53,6 @@ type AllocationSummary = {
   excludedForHumanity?: string[]
 }
 
-// Display-only formatting — every on-chain call and reconciliation stays in base units
-// (allocation.amount/totalAmount are never parsed back out of this). Falls back to the raw
-// base-unit string (labeled) if the token's decimals couldn't be resolved, rather than
-// silently guessing a value that could misrepresent the actual allocation.
-function formatAmount(raw: string, decimals: number | null, symbol: string | null): string {
-  if (decimals == null) return `${raw} (raw units — token decimals unavailable)`
-  try {
-    const formatted = formatUnits(raw, decimals)
-    return symbol ? `${formatted} ${symbol}` : formatted
-  } catch {
-    return `${raw} (raw units)`
-  }
-}
-
 /**
  * Host-only allocation review & publish (PRD FR-M3, BR-M1..M3). The pipeline PROPOSES; the
  * host reviews the table and signs `setERC20MerkleRoot` themselves — the backend never
@@ -65,9 +61,11 @@ function formatAmount(raw: string, decimals: number | null, symbol: string | nul
 export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
   const { toast } = useToast()
   const [allocation, setAllocation] = useState<AllocationSummary | null>(null)
+  const [livePublishedVersion, setLivePublishedVersion] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isProposing, setIsProposing] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [isRepublishConfirmOpen, setIsRepublishConfirmOpen] = useState(false)
 
   const fetchLatest = async () => {
     setIsLoading(true)
@@ -77,12 +75,19 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
       })
       const data = await res.json()
       setAllocation(res.ok ? data.allocation : null)
+      setLivePublishedVersion(res.ok ? data.livePublishedVersion ?? null : null)
     } catch {
       setAllocation(null)
+      setLivePublishedVersion(null)
     } finally {
       setIsLoading(false)
     }
   }
+
+  // P4 Part 4: publishing a DIFFERENT root than whatever is currently live restarts the 24h
+  // dispute window for EVERYONE, including wallets whose allocation didn't change — a real cost
+  // hosts must see before signing, not bury as a toast after the fact.
+  const isRepublish = livePublishedVersion !== null && allocation !== null && livePublishedVersion !== allocation.version
 
   useEffect(() => {
     fetchLatest()
@@ -114,8 +119,18 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
     }
   }
 
-  const handlePublish = async () => {
+  const handlePublish = () => {
     if (!allocation) return
+    if (isRepublish) {
+      setIsRepublishConfirmOpen(true)
+      return
+    }
+    doPublish()
+  }
+
+  const doPublish = async () => {
+    if (!allocation) return
+    setIsRepublishConfirmOpen(false)
     setIsPublishing(true)
 
     // The on-chain publish is the actual, value-bearing action — its success/failure is
@@ -294,12 +309,30 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
                 {allocation ? 'Re-propose (recompute)' : 'Propose Allocation'}
               </Button>
               {allocation && allocation.status === 'PROPOSED' && (
-                <Button onClick={handlePublish} disabled={isPublishing}>
-                  {isPublishing && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Publish Root
-                </Button>
+                <AlertDialog open={isRepublishConfirmOpen} onOpenChange={setIsRepublishConfirmOpen}>
+                  <Button onClick={handlePublish} disabled={isPublishing}>
+                    {isPublishing && (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Publish Root
+                  </Button>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Publish a corrected allocation?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Publishing a different root restarts the 24-hour review window for
+                        everyone — all claims are delayed by another 24 hours, including wallets
+                        whose allocation is unchanged.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isPublishing}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction disabled={isPublishing} onClick={doPublish}>
+                        {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Publish anyway'}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </div>
           </>

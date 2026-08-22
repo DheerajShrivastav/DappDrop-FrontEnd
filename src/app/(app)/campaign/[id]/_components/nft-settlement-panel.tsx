@@ -5,6 +5,16 @@ import { Loader2, Gavel, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Table, TableHeader, TableBody, TableHead, TableRow, TableCell } from '@/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { Campaign } from '@/lib/types'
@@ -34,9 +44,11 @@ type NFTAllocationSummary = {
 export function NFTSettlementPanel({ campaign }: { campaign: Campaign }) {
   const { toast } = useToast()
   const [allocation, setAllocation] = useState<NFTAllocationSummary | null>(null)
+  const [livePublishedVersion, setLivePublishedVersion] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isProposing, setIsProposing] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [isRepublishConfirmOpen, setIsRepublishConfirmOpen] = useState(false)
 
   const fetchLatest = async () => {
     setIsLoading(true)
@@ -44,12 +56,16 @@ export function NFTSettlementPanel({ campaign }: { campaign: Campaign }) {
       const res = await fetch(`/api/campaigns/${campaign.id}/nft-allocations/latest`, { credentials: 'include' })
       const data = await res.json()
       setAllocation(res.ok ? data.allocation : null)
+      setLivePublishedVersion(res.ok ? data.livePublishedVersion ?? null : null)
     } catch {
       setAllocation(null)
+      setLivePublishedVersion(null)
     } finally {
       setIsLoading(false)
     }
   }
+
+  const isRepublish = livePublishedVersion !== null && allocation !== null && livePublishedVersion !== allocation.version
 
   useEffect(() => {
     fetchLatest()
@@ -81,8 +97,18 @@ export function NFTSettlementPanel({ campaign }: { campaign: Campaign }) {
     }
   }
 
-  const handlePublish = async () => {
+  const handlePublish = () => {
     if (!allocation) return
+    if (isRepublish) {
+      setIsRepublishConfirmOpen(true)
+      return
+    }
+    doPublish()
+  }
+
+  const doPublish = async () => {
+    if (!allocation) return
+    setIsRepublishConfirmOpen(false)
     setIsPublishing(true)
     try {
       await submitNFTMerkleRoot(campaign.id, allocation.root)
@@ -212,10 +238,28 @@ export function NFTSettlementPanel({ campaign }: { campaign: Campaign }) {
                 {allocation ? 'Re-propose (recompute)' : 'Propose NFT Allocation'}
               </Button>
               {allocation && allocation.status === 'PROPOSED' && (
-                <Button onClick={handlePublish} disabled={isPublishing}>
-                  {isPublishing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Publish Root
-                </Button>
+                <AlertDialog open={isRepublishConfirmOpen} onOpenChange={setIsRepublishConfirmOpen}>
+                  <Button onClick={handlePublish} disabled={isPublishing}>
+                    {isPublishing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Publish Root
+                  </Button>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Publish a corrected allocation?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Publishing a different root restarts the 24-hour review window for
+                        everyone — all claims are delayed by another 24 hours, including wallets
+                        whose allocation is unchanged.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel disabled={isPublishing}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction disabled={isPublishing} onClick={doPublish}>
+                        {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Publish anyway'}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </div>
           </>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatUnits } from 'ethers'
+import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
 import { Loader2, Trophy, CheckCircle2, Award } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -18,16 +18,6 @@ import {
   type TieredRewardStatus,
   type TierView,
 } from '@/lib/web3-service'
-
-function formatAmount(raw: string, decimals: number | null, symbol: string | null): string {
-  if (decimals == null) return `${raw} (raw units)`
-  try {
-    const formatted = formatUnits(raw, decimals)
-    return symbol ? `${formatted} ${symbol}` : formatted
-  } catch {
-    return `${raw} (raw units)`
-  }
-}
 
 /** Mirrors OnChainRewardLib.matchRankTier/matchScoreTier exactly — display-only preview of
  * what the contract will compute; the actual payout is always contract-computed at claim time. */

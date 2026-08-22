@@ -1,12 +1,36 @@
 import { NextResponse } from 'next/server'
 import { verifyWalletSession } from '@/app/lib/dal'
-import { requireCampaignHost } from '@/lib/require-host'
-import { getLatestNFTAllocation } from '@/lib/nft-allocation'
+import { checkCampaignHost, hostCheckUnavailableResponse } from '@/lib/require-host'
+import { getLatestNFTAllocation, getPublishedNFTAllocation } from '@/lib/nft-allocation'
+
+function serializeTree(tree: NonNullable<Awaited<ReturnType<typeof getLatestNFTAllocation>>>) {
+  return {
+    version: tree.version,
+    root: tree.root,
+    tokenAddress: tree.token,
+    totalItems: Number(tree.totalAmount),
+    policy: tree.policy,
+    status: tree.status,
+    createdAt: tree.createdAt,
+    publishedAt: tree.publishedAt,
+    excludedForHumanity: tree.excludedForHumanity,
+    entries: tree.entries.map((e) => ({
+      wallet: e.wallet,
+      standard: e.nftStandard,
+      tokenId: e.tokenId,
+      amount: e.amount,
+      tasksCompleted: e.tasksCompleted,
+    })),
+  }
+}
 
 /**
- * GET /api/campaigns/:campaignId/nft-allocations/latest — host-review screen data, NFT
- * counterpart of .../allocations/latest. All amounts stay in raw base units server-side; the
- * client formats for display only.
+ * GET /api/campaigns/:campaignId/nft-allocations/latest — NFT counterpart of
+ * .../allocations/latest. Same P4 visibility split: host sees their true latest tree (draft or
+ * published) plus livePublishedVersion; everyone else sees ONLY the currently-published-on-chain
+ * tree, resolved via getPublishedNFTAllocation (never DB status alone). An unpublished draft
+ * returns 403; no tree at all returns null. A failed on-chain host check is a retryable 503,
+ * never a silent downgrade to the public view.
  */
 export async function GET(
   request: Request,
@@ -18,42 +42,41 @@ export async function GET(
     return NextResponse.json({ error: 'Invalid campaignId' }, { status: 400 })
   }
 
-  let walletAddress: string
-  try {
-    ;({ walletAddress } = await verifyWalletSession())
-  } catch {
-    return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const hostCheck = await checkCampaignHost(campaignId, verifyWalletSession)
+  if (hostCheck.kind === 'unavailable') return hostCheckUnavailableResponse(hostCheck)
+
+  if (hostCheck.kind === 'host') {
+    const [tree, published] = await Promise.all([
+      getLatestNFTAllocation(campaignId),
+      getPublishedNFTAllocation(campaignId),
+    ])
+    if (!tree) {
+      return NextResponse.json({ allocation: null, public: false, livePublishedVersion: null })
+    }
+    return NextResponse.json(
+      {
+        allocation: serializeTree(tree),
+        public: false,
+        livePublishedVersion: published?.version ?? null,
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    )
   }
 
-  try {
-    await requireCampaignHost(campaignId, walletAddress)
-  } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 403 })
+  const published = await getPublishedNFTAllocation(campaignId)
+  if (published) {
+    return NextResponse.json(
+      { allocation: serializeTree(published), public: true },
+      { headers: { 'Cache-Control': 'no-store' } },
+    )
   }
 
-  const tree = await getLatestNFTAllocation(campaignId)
-  if (!tree) {
-    return NextResponse.json({ allocation: null })
+  const draft = await getLatestNFTAllocation(campaignId)
+  if (draft) {
+    return NextResponse.json(
+      { error: 'This allocation has not been published yet — only the campaign host can view it.' },
+      { status: 403 },
+    )
   }
-
-  return NextResponse.json({
-    allocation: {
-      version: tree.version,
-      root: tree.root,
-      tokenAddress: tree.token,
-      totalItems: Number(tree.totalAmount),
-      policy: tree.policy,
-      status: tree.status,
-      createdAt: tree.createdAt,
-      publishedAt: tree.publishedAt,
-      excludedForHumanity: tree.excludedForHumanity,
-      entries: tree.entries.map((e) => ({
-        wallet: e.wallet,
-        standard: e.nftStandard,
-        tokenId: e.tokenId,
-        amount: e.amount,
-        tasksCompleted: e.tasksCompleted,
-      })),
-    },
-  })
+  return NextResponse.json({ allocation: null, public: true })
 }

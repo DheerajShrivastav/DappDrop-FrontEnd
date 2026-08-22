@@ -319,3 +319,91 @@ export async function notifyAllocationProposalReady(params: {
     payload,
   })
 }
+
+/**
+ * ✅ Fired from src/lib/dispute-reports.ts::submitDisputeReport (P4) — a participant reported a
+ * concern about the published allocation during the review window. In-app + webhook to the
+ * host. No SLA, no automated action — this is a signal, nothing more (the host decides whether
+ * to publish a corrected allocation; reporting never pauses claims).
+ */
+export async function notifyDisputeReportFiled(params: {
+  campaignId: number
+  hostAddress: string
+  campaignName?: string
+  reporterWallet: string
+  category: string
+  openReportCount: number
+}): Promise<void> {
+  // Discriminated by wallet + count so a genuinely new report (new reporter, or the open count
+  // changing) notifies again, but re-fetching an unchanged state never spams a duplicate.
+  const eventId = makeEventId(
+    NotificationEventType.HOST_DISPUTE_REPORT_FILED,
+    params.campaignId,
+    `${params.reporterWallet.toLowerCase()}:${params.openReportCount}`,
+  )
+  const payload: EventPayloads[typeof NotificationEventType.HOST_DISPUTE_REPORT_FILED] = {
+    campaignId: params.campaignId,
+    campaignName: params.campaignName,
+    reporterWallet: params.reporterWallet.toLowerCase(),
+    category: params.category,
+    openReportCount: params.openReportCount,
+  }
+  await emitInApp({
+    recipients: [params.hostAddress],
+    type: NotificationEventType.HOST_DISPUTE_REPORT_FILED,
+    title: 'A concern was reported',
+    body: `A wallet reported a concern (${params.category}) about the published allocation for ${params.campaignName ?? `campaign #${params.campaignId}`}. ${params.openReportCount} open report(s) total.`,
+    payload,
+    eventId,
+  })
+  await dispatchWebhooksForHost({
+    hostAddress: params.hostAddress,
+    eventId,
+    eventType: NotificationEventType.HOST_DISPUTE_REPORT_FILED,
+    payload,
+  })
+}
+
+/**
+ * ✅ Fired from src/lib/dispute-reports.ts::markReportReviewed (P4) — the host marked a report
+ * REVIEWED and (optionally) attached a written response. In-app ONLY, to the reporter: without
+ * this the host's response is write-only, visible only if the reporter happens to reopen the
+ * report dialog. No webhook — webhooks here are host-facing, and the host is the one who wrote
+ * the response.
+ */
+export async function notifyDisputeReportReviewed(params: {
+  campaignId: number
+  reporterWallet: string
+  reportId: string
+  reviewedAt: Date
+  campaignName?: string
+  hostResponse?: string | null
+}): Promise<void> {
+  // Discriminated by report + reviewedAt. markReportReviewed stamps a FRESH reviewedAt on every
+  // review, so a host who edits their reply and re-marks the report reviewed produces a new id
+  // and legitimately notifies the reporter again — while a retry of the SAME emit reuses the
+  // same reviewedAt and dedupes against the (recipient, eventId) unique constraint.
+  const eventId = makeEventId(
+    NotificationEventType.DISPUTE_REPORT_REVIEWED,
+    params.campaignId,
+    `${params.reportId}:${params.reviewedAt.getTime()}`,
+  )
+  const payload: EventPayloads[typeof NotificationEventType.DISPUTE_REPORT_REVIEWED] = {
+    campaignId: params.campaignId,
+    campaignName: params.campaignName,
+    reportId: params.reportId,
+    hostResponse: params.hostResponse,
+  }
+  const response = params.hostResponse?.trim()
+  const target = params.campaignName ?? `campaign #${params.campaignId}`
+  await emitInApp({
+    recipients: [params.reporterWallet],
+    type: NotificationEventType.DISPUTE_REPORT_REVIEWED,
+    title: 'The host reviewed your report',
+    body: response
+      ? `The host reviewed your report on ${target} and replied: “${response}”`
+      : `The host reviewed your report on ${target}. They did not leave a written response.`,
+    payload,
+    eventId,
+  })
+}

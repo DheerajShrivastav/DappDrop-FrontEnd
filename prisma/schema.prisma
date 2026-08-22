@@ -554,3 +554,28 @@ model WebhookDelivery {
   @@index([status, nextRetryAt])
   @@index([endpointId])
 }
+
+// P4 — dispute-window concern reporting. `merkleRoot` PINS the report to the specific root being
+// disputed: a later republish (a genuinely different root) must never silently re-target an old
+// report at a root nobody complained about. `reporterWallet` always comes from the SIWE session,
+// never client-supplied. One OPEN report per (campaignId, merkleRoot, reporterWallet) — a repeat
+// submit updates the existing row instead of spamming duplicates.
+model DisputeReport {
+  id             String @id @default(cuid())
+  campaignId     Int
+  reporterWallet String // lowercased, from SIWE session
+  merkleRoot     String // the on-chain root this report is about (pinned at submit time)
+
+  category String // missing_allocation | wrong_amount | sybil_suspected | other
+  reason   String // free-text, length-capped at submit time
+
+  status       String    @default("OPEN") // OPEN | REVIEWED | RESOLVED
+  hostResponse String?
+  reviewedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([campaignId, merkleRoot, reporterWallet])
+  @@index([campaignId, merkleRoot, status])
+}

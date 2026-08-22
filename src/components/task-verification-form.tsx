@@ -358,7 +358,72 @@ export function TaskVerificationForm({
           </>
         )
 
-      // Add cases for other task types here
+      // Self-attested task types: the backend (api/verify-task) has no external proof to check
+      // for these — it marks them verified once the app confirms the participant said they did
+      // it (see the final `else` branch in verify-task/route.ts: any known, non-humanity task
+      // type is verified on request). So this is a confirm-only dialog, not a real check.
+      case 'SOCIAL_FOLLOW':
+      case 'SOCIAL_LIKE':
+      case 'SOCIAL_POST':
+      case 'RETWEET':
+      case 'WALLET_CONNECT': {
+        const copy: Record<string, { title: string; instruction: string }> = {
+          SOCIAL_FOLLOW: {
+            title: 'Verify Follow',
+            instruction: 'Follow the account described on the task, then confirm below.',
+          },
+          SOCIAL_LIKE: {
+            title: 'Verify Like',
+            instruction: 'Like the post described on the task, then confirm below.',
+          },
+          SOCIAL_POST: {
+            title: 'Verify Post',
+            instruction: 'Publish the post described on the task, then confirm below.',
+          },
+          RETWEET: {
+            title: 'Verify Repost',
+            instruction: 'Repost the content described on the task, then confirm below.',
+          },
+          WALLET_CONNECT: {
+            title: 'Verify Wallet Connection',
+            instruction: 'Confirm below to record this wallet as connected for this task.',
+          },
+        }
+        const { title, instruction } = copy[taskType]
+        return (
+          <>
+            <DialogHeader>
+              <DialogTitle>{title}</DialogTitle>
+              <DialogDescription>{instruction}</DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col items-center py-6 space-y-4">
+              {connectionError && (
+                <Alert variant="destructive" className="w-full mb-2">
+                  <AlertTitle>Verification Error</AlertTitle>
+                  <AlertDescription>{connectionError}</AlertDescription>
+                </Alert>
+              )}
+              <p className="text-sm text-muted-foreground text-center">
+                This task can&apos;t be automatically checked — only confirm once you&apos;ve
+                actually completed it.
+              </p>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline" disabled={isVerifying}>
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button onClick={handleVerification} disabled={isVerifying}>
+                {isVerifying ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                I&apos;ve completed this
+              </Button>
+            </DialogFooter>
+          </>
+        )
+      }
 
       default:
         return (

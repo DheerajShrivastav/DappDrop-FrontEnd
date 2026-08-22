@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatUnits } from 'ethers'
+import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
 import { Loader2, Trophy, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -26,19 +26,6 @@ type AllocationProof = {
     | 'swept'
   decimals: number | null
   symbol: string | null
-}
-
-// Display-only — claimERC20Reward always submits proof.amount (raw base units) unchanged;
-// this never feeds back into anything on-chain. Falls back to labeled raw units if the
-// token's decimals couldn't be resolved, rather than guessing a possibly-wrong value.
-function formatAmount(raw: string, decimals: number | null, symbol: string | null): string {
-  if (decimals == null) return `${raw} (raw units — token decimals unavailable)`
-  try {
-    const formatted = formatUnits(raw, decimals)
-    return symbol ? `${formatted} ${symbol}` : formatted
-  } catch {
-    return `${raw} (raw units)`
-  }
 }
 
 /**

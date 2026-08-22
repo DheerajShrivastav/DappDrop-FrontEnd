@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatUnits } from 'ethers'
+import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
 import { Trophy } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,16 +21,6 @@ import {
   type LeaderboardEntry,
   type TierView,
 } from '@/lib/web3-service'
-
-function formatAmount(raw: string, decimals: number | null, symbol: string | null): string {
-  if (decimals == null) return raw
-  try {
-    const formatted = formatUnits(raw, decimals)
-    return symbol ? `${formatted} ${symbol}` : formatted
-  } catch {
-    return raw
-  }
-}
 
 function matchTierAmount(
   isRank: boolean,
