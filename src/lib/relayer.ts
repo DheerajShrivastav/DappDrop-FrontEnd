@@ -119,25 +119,28 @@ export async function enqueueSponsoredClaim(
     }
     const isRank = status.mode === 'RANK_TIERED'
     const rankOrScore = isRank ? status.rank : status.score
-    // `qualified` gates BOTH tiered modes on-chain, so it's checked for both here. It used to be
-    // folded into the isRank branch only, which let an UNQUALIFIED wallet with a nonzero score
-    // enqueue a SCORE_TIERED claim — the contract would still reject it, and the worker
-    // staticCall-simulates before every send, so the realistic consequence was a FAILED queue row
-    // rather than burned gas. Still worth refusing here: the enqueue path should never accept a
-    // request the contract is certain to reject, and a doomed row costs a user-visible failure.
-    // This keeps SCORE_TIERED symmetric with RANK_TIERED, ERC20_MERKLE and NFT, all of which
-    // already require qualification/allocation before queueing.
-    if (!status.qualified) {
+    // The `qualified` check is deliberately RANK-ONLY, matching TieredClaimPanel's
+    // `canActuallyClaim` (tiered-claim-panel.tsx) and TieredLeaderboard's "Not qualified" label.
+    // Enqueue MUST agree with the panel about who may claim: if this path refused a wallet the
+    // panel offers a claim button to, the user would be pushed to self-claim for no stated
+    // reason — a divergence that surfaces in production, not review.
+    //
+    // A review round briefly applied `qualified` to BOTH modes on the theory that SCORE_TIERED
+    // was missing a gate. Measured against the deployed module before reverting: a real
+    // SCORE_TIERED wallet (campaign 3) returns `qualified: true`, so the flag is populated
+    // rather than stubbed — but that does NOT establish that the contract gates score-tiered
+    // claims on it, and two other places in this repo say it does not. Refusing on an unproven
+    // gate risks blocking legitimate gasless claims; allowing an unqualified score-tiered wallet
+    // through at worst produces a FAILED queue row, since the worker staticCall-simulates before
+    // every send and a revert costs no gas. The cheap failure is the right one to accept until
+    // someone confirms the rule against OnChainRewardLib.
+    if (isRank && (!status.qualified || rankOrScore === 0)) {
       throw new RelayerError(
         'This wallet is not currently qualified (a required task is incomplete).',
       )
     }
-    if (rankOrScore === 0) {
-      throw new RelayerError(
-        isRank
-          ? 'This wallet has no rank in this campaign.'
-          : 'This wallet has no score in this campaign.',
-      )
+    if (!isRank && rankOrScore === 0) {
+      throw new RelayerError('This wallet has no score in this campaign.')
     }
     const tiers = await getTieredTiers(String(campaignId))
     if (!tieredAmountMatches(isRank, tiers, rankOrScore)) {
