@@ -22,7 +22,27 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  */
 
 const POLL_INTERVAL_MS = 3000
-const POLL_TIMEOUT_MS = 90_000
+
+/**
+ * How long we wait for the relayer before routing the user to self-claim.
+ *
+ * COUPLED TO THE WORKER'S TIMING — do not lower this in isolation. worker/relayer.ts is a
+ * separate process, and the worst case before a claim can possibly be CONFIRMED is:
+ *   RELAYER_INTERVAL_MINUTES (default 2 => 120s)  — how long a PENDING row waits to be
+ *                                                    picked up by the next --loop cycle
+ * + RELAYER_TX_TIMEOUT_MS    (default 120000ms)   — how long tx.wait() may then take
+ *   ≈ 240s
+ *
+ * The old 90s bound sat below even the pickup interval, so the normal path timed out, told the
+ * user to self-claim, and then the relayer confirmed anyway a minute later — the user's own
+ * transaction reverted with "already claimed". 300s (5 min) clears the 240s worst case with room
+ * to spare. If RELAYER_INTERVAL_MINUTES is raised, raise this too.
+ *
+ * Waiting longer is cheap: the UI shows a spinner for the whole `processing` phase, so the user
+ * can see it is still working. This bound exists for a genuinely stalled or not-running worker,
+ * not for normal relayer latency.
+ */
+const POLL_TIMEOUT_MS = 300_000
 
 /** Server-side SponsoredClaim.status values that mean "still in flight". */
 const IN_FLIGHT = ['PENDING', 'PROCESSING', 'SUBMITTED']
@@ -37,13 +57,23 @@ export type SponsoredClaimState =
 
 export function useSponsoredClaim(campaignId: string, account: string | null | undefined) {
   const [state, setState] = useState<SponsoredClaimState>({ phase: 'idle' })
-  // Survives re-renders so an in-flight poll loop can be cancelled on unmount / wallet switch.
-  const cancelledRef = useRef(false)
+  /**
+   * Monotonic id of the newest poll run. `request()` captures the value it was started with and
+   * the loop bails as soon as `runIdRef.current` moves past it.
+   *
+   * A plain boolean `cancelledRef` does NOT work here: on a campaignId/account change React runs
+   * the effect cleanup (which would set it to `true`) and then immediately re-runs setup (setting
+   * it back to `false`), so the already-in-flight loop reads `false` and keeps polling — and
+   * keeps calling setState — for the *previous* wallet. Bumping an id instead can never be
+   * undone by a later run, so both supersession (wallet/campaign switch) and unmount stop the
+   * old loop for good.
+   */
+  const runIdRef = useRef(0)
 
   useEffect(() => {
-    cancelledRef.current = false
+    // Any loop started for the previous campaign/account is now stale; unmount supersedes too.
     return () => {
-      cancelledRef.current = true
+      runIdRef.current += 1
     }
   }, [campaignId, account])
 
@@ -54,6 +84,10 @@ export function useSponsoredClaim(campaignId: string, account: string | null | u
       setState({ phase: 'unavailable', reason: 'Connect your wallet to request a sponsored claim.' })
       return
     }
+    // Claim this run: any earlier in-flight loop is superseded and will stop at its next check.
+    const runId = ++runIdRef.current
+    const superseded = () => runIdRef.current !== runId
+
     setState({ phase: 'requesting' })
 
     let enqueued: { status?: string; reason?: string; error?: string }
@@ -65,6 +99,7 @@ export function useSponsoredClaim(campaignId: string, account: string | null | u
         body: JSON.stringify({ campaignId: Number(campaignId), account }),
       })
       enqueued = await res.json()
+      if (superseded()) return
       if (!res.ok && res.status !== 200 && res.status !== 202) {
         setState({
           phase: 'unavailable',
@@ -73,6 +108,7 @@ export function useSponsoredClaim(campaignId: string, account: string | null | u
         return
       }
     } catch {
+      if (superseded()) return
       setState({ phase: 'unavailable', reason: 'Could not reach the sponsorship service.' })
       return
     }
@@ -94,7 +130,7 @@ export function useSponsoredClaim(campaignId: string, account: string | null | u
     setState({ phase: 'processing', status: enqueued.status ?? 'PENDING' })
 
     const startedAt = Date.now()
-    while (!cancelledRef.current) {
+    while (!superseded()) {
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
         setState({
           phase: 'unavailable',
@@ -104,7 +140,7 @@ export function useSponsoredClaim(campaignId: string, account: string | null | u
         return
       }
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
-      if (cancelledRef.current) return
+      if (superseded()) return
 
       try {
         const res = await fetch(
@@ -113,6 +149,7 @@ export function useSponsoredClaim(campaignId: string, account: string | null | u
         )
         if (!res.ok) continue // 404 => the row isn't visible yet; keep waiting out the timeout
         const data = await res.json()
+        if (superseded()) return
 
         if (data.status === 'CONFIRMED') {
           setState({ phase: 'confirmed', txHash: data.txHash ?? null })

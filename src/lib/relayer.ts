@@ -45,7 +45,10 @@ function tieredAmountMatches(
  * Enqueue a sponsored-claim request. Idempotent: a repeat request for the same
  * (campaignId, account) returns the existing row's status rather than creating a duplicate,
  * UNLESS the prior attempt terminated (FAILED/DECLINED), in which case it's re-evaluated fresh
- * (e.g. the wallet completed Humanity verification since the last decline).
+ * (a decline is a point-in-time verdict, not a permanent one: the campaign's sponsorship budget
+ * may have been topped up, the global daily cap may have rolled over into a new UTC day, the
+ * kill switch may have been resumed, or the wallet's moderation flag may have been cleared since
+ * the last decline).
  *
  * @throws RelayerError for requests that can never be valid regardless of gating (no
  *   allocation, already claimed, swept, not currently qualified) — these are 4xx-mappable by
@@ -116,13 +119,25 @@ export async function enqueueSponsoredClaim(
     }
     const isRank = status.mode === 'RANK_TIERED'
     const rankOrScore = isRank ? status.rank : status.score
-    if (isRank && (!status.qualified || rankOrScore === 0)) {
+    // `qualified` gates BOTH tiered modes on-chain, so it's checked for both here. It used to be
+    // folded into the isRank branch only, which let an UNQUALIFIED wallet with a nonzero score
+    // enqueue a SCORE_TIERED claim — the contract would still reject it, and the worker
+    // staticCall-simulates before every send, so the realistic consequence was a FAILED queue row
+    // rather than burned gas. Still worth refusing here: the enqueue path should never accept a
+    // request the contract is certain to reject, and a doomed row costs a user-visible failure.
+    // This keeps SCORE_TIERED symmetric with RANK_TIERED, ERC20_MERKLE and NFT, all of which
+    // already require qualification/allocation before queueing.
+    if (!status.qualified) {
       throw new RelayerError(
         'This wallet is not currently qualified (a required task is incomplete).',
       )
     }
-    if (!isRank && rankOrScore === 0) {
-      throw new RelayerError('This wallet has no score in this campaign.')
+    if (rankOrScore === 0) {
+      throw new RelayerError(
+        isRank
+          ? 'This wallet has no rank in this campaign.'
+          : 'This wallet has no score in this campaign.',
+      )
     }
     const tiers = await getTieredTiers(String(campaignId))
     if (!tieredAmountMatches(isRank, tiers, rankOrScore)) {
