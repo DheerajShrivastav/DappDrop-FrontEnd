@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
-import { Loader2, Trophy, CheckCircle2, Award } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Trophy, CheckCircle2, Award } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -18,6 +17,7 @@ import {
   type TieredRewardStatus,
   type TierView,
 } from '@/lib/web3-service'
+import { SponsoredClaimActions } from './sponsored-claim-actions'
 
 /** Mirrors OnChainRewardLib.matchRankTier/matchScoreTier exactly — display-only preview of
  * what the contract will compute; the actual payout is always contract-computed at claim time. */
@@ -171,10 +171,14 @@ export function TieredClaimPanel({ campaign }: { campaign: Campaign }) {
             Your {isRank ? 'rank' : 'score'} does not fall into any configured reward tier.
           </p>
         ) : (
-          <Button onClick={handleClaim} disabled={isClaiming}>
-            {isClaiming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Claim {formatAmount(previewAmount, tokenInfo?.decimals ?? null, tokenInfo?.symbol ?? null)}
-          </Button>
+          <SponsoredClaimActions
+            campaignId={campaign.id}
+            account={address}
+            busy={isClaiming}
+            onSelfClaim={handleClaim}
+            onSponsoredConfirmed={() => setStatus({ ...status, claimed: true })}
+            selfClaimLabel={`Claim ${formatAmount(previewAmount, tokenInfo?.decimals ?? null, tokenInfo?.symbol ?? null)}`}
+          />
         )}
       </CardContent>
     </Card>

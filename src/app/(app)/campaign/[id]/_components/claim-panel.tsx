@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
-import { Loader2, Trophy, CheckCircle2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Trophy, CheckCircle2 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -11,6 +10,7 @@ import { useWallet } from '@/context/wallet-provider'
 import type { Campaign } from '@/lib/types'
 import { claimERC20Reward, mapContractRevertToMessage } from '@/lib/web3-service'
 import { getLifecycleState } from '@/lib/campaign-lifecycle'
+import { SponsoredClaimActions } from './sponsored-claim-actions'
 
 type AllocationProof = {
   wallet: string
@@ -130,10 +130,14 @@ export function ClaimPanel({ campaign }: { campaign: Campaign }) {
             Claiming is closed.
           </p>
         ) : proof.status === 'claimable' ? (
-          <Button onClick={handleClaim} disabled={isClaiming}>
-            {isClaiming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Claim {formatAmount(proof.amount, proof.decimals, proof.symbol)}
-          </Button>
+          <SponsoredClaimActions
+            campaignId={campaign.id}
+            account={address}
+            busy={isClaiming}
+            onSelfClaim={handleClaim}
+            onSponsoredConfirmed={() => setProof({ ...proof, status: 'claimed' })}
+            selfClaimLabel={`Claim ${formatAmount(proof.amount, proof.decimals, proof.symbol)}`}
+          />
         ) : (
           <p className="text-sm text-muted-foreground">
             Your allocation isn't claimable yet — see the status above.
