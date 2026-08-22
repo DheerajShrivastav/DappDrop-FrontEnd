@@ -1,5 +1,4 @@
 import { prisma } from './prisma'
-import { isUserVerified } from './humanity-service'
 
 /**
  * Sponsored-claim gating + budget bookkeeping (PRD BR-R*) — deliberately NOT 'server-only'.
@@ -105,18 +104,21 @@ export async function evaluateSponsorshipGates(params: {
     }
   }
 
-  // Courtesy re-check only (docs/HUMANITY_GATING.md point 2) — NOT enforcement. Enforcement
-  // is tree-build filtering (allocation.ts): an unverified wallet with no leaf can never claim
-  // at all, sponsored or not. This only stops the PLATFORM from paying gas for a wallet it
-  // considers ineligible; the wallet can still self-claim if it somehow holds a valid proof.
-  const verified = await isUserVerified(params.account)
-  if (!verified) {
-    return {
-      ok: false,
-      reason:
-        'Sponsored claims require Humanity verification for this wallet. You can still claim your reward yourself.',
-    }
-  }
+  // NO Humanity gate here, deliberately. This used to require isUserVerified() unconditionally,
+  // which made sponsorship contradict the campaign's own policy: no campaign on this platform
+  // sets humanityGated, yet every sponsored claim demanded Humanity verification — so gasless
+  // claims declined for essentially every real participant and the feature was dead in practice.
+  //
+  // Sybil defence does not depend on it. A sponsored claim can only ever be requested for a
+  // wallet that ALREADY holds a valid allocation in the published Merkle tree (enqueueSponsoredClaim
+  // resolves a real proof and refuses anything else), so an attacker cannot mint wallets to farm
+  // gas — the host's allocation decides who is eligible at all. Spend is separately bounded by
+  // the per-campaign budget and the global daily cap below, the one-row-per-(campaign, wallet)
+  // constraint prevents repeat claims, and moderationFlagged above still excludes abusers.
+  //
+  // Humanity gating remains fully enforced where it actually matters: for a humanityGated
+  // campaign, tree-build filtering (allocation.ts) leaves an unverified wallet with no leaf, so
+  // it cannot claim at all — sponsored or self-claimed. That is enforcement; this was never it.
 
   const campaignBudget = await getCampaignBudget(params.campaignId)
   const campaignRemaining = BigInt(campaignBudget.budgetWei) - BigInt(campaignBudget.spentWei)
