@@ -147,6 +147,17 @@ export function useSponsoredClaim(campaignId: string, account: string | null | u
           `/api/sponsored-claims?campaignId=${encodeURIComponent(campaignId)}&account=${encodeURIComponent(account)}`,
           { credentials: 'include' },
         )
+        // 401/403 can never resolve by waiting (session expired, or a wallet switch left this
+        // loop asking about someone else's claim) — bail immediately rather than spinning out
+        // the full timeout and then blaming a slow relayer for an auth problem.
+        if (res.status === 401 || res.status === 403) {
+          const body = await res.json().catch(() => ({}))
+          setState({
+            phase: 'unavailable',
+            reason: body?.error || 'Your session expired. You can claim it yourself instead.',
+          })
+          return
+        }
         if (!res.ok) continue // 404 => the row isn't visible yet; keep waiting out the timeout
         const data = await res.json()
         if (superseded()) return
