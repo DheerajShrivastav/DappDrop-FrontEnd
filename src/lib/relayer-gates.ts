@@ -1,5 +1,4 @@
 import { prisma } from './prisma'
-import { isUserVerified } from './humanity-service'
 
 /**
  * Sponsored-claim gating + budget bookkeeping (PRD BR-R*) — deliberately NOT 'server-only'.
@@ -105,18 +104,30 @@ export async function evaluateSponsorshipGates(params: {
     }
   }
 
-  // Courtesy re-check only (docs/HUMANITY_GATING.md point 2) — NOT enforcement. Enforcement
-  // is tree-build filtering (allocation.ts): an unverified wallet with no leaf can never claim
-  // at all, sponsored or not. This only stops the PLATFORM from paying gas for a wallet it
-  // considers ineligible; the wallet can still self-claim if it somehow holds a valid proof.
-  const verified = await isUserVerified(params.account)
-  if (!verified) {
-    return {
-      ok: false,
-      reason:
-        'Sponsored claims require Humanity verification for this wallet. You can still claim your reward yourself.',
-    }
-  }
+  // NO Humanity gate here, deliberately. This used to require isUserVerified() unconditionally,
+  // which made sponsorship contradict the campaign's own policy: no campaign on this platform
+  // sets humanityGated, yet every sponsored claim demanded Humanity verification — so gasless
+  // claims declined for essentially every real participant and the feature was dead in practice.
+  //
+  // Sybil defence does not depend on it. enqueueSponsoredClaim refuses any wallet that isn't
+  // already entitled to this campaign's reward, so an attacker cannot mint wallets to farm gas:
+  // ERC20_MERKLE and NFT require a real leaf + proof in the published tree, and RANK_TIERED
+  // requires on-chain `qualified`. Spend is separately bounded by the per-campaign budget and the
+  // global daily cap below, the one-row-per-(campaign, wallet) constraint prevents repeat claims,
+  // and moderationFlagged above still excludes abusers.
+  //
+  // SCORE_TIERED is the weakest of the four: it has no Merkle tree, and enqueue accepts any
+  // nonzero score that matches a configured tier (see the note in relayer.ts on why the
+  // `qualified` check stays rank-only there). Entitlement is still on-chain — a score is earned
+  // by verified task completion, not self-asserted — but if sponsorship abuse ever shows up in
+  // practice, this is the path to tighten first.
+  //
+  // Humanity gating remains enforced where it actually matters, on the MERKLE paths: for a
+  // humanityGated campaign, tree-build filtering (allocation.ts / nft-allocation.ts) leaves an
+  // unverified wallet with no leaf, so it cannot claim at all — sponsored or self-claimed. That
+  // is enforcement; this gate never was. Note the tiered modes have no tree and therefore no
+  // equivalent build-time filter, so humanityGated + tiered is not a combination this codebase
+  // currently enforces anywhere — worth resolving before a tiered campaign relies on it.
 
   const campaignBudget = await getCampaignBudget(params.campaignId)
   const campaignRemaining = BigInt(campaignBudget.budgetWei) - BigInt(campaignBudget.spentWei)

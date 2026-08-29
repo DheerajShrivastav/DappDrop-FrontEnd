@@ -45,7 +45,10 @@ function tieredAmountMatches(
  * Enqueue a sponsored-claim request. Idempotent: a repeat request for the same
  * (campaignId, account) returns the existing row's status rather than creating a duplicate,
  * UNLESS the prior attempt terminated (FAILED/DECLINED), in which case it's re-evaluated fresh
- * (e.g. the wallet completed Humanity verification since the last decline).
+ * (a decline is a point-in-time verdict, not a permanent one: the campaign's sponsorship budget
+ * may have been topped up, the global daily cap may have rolled over into a new UTC day, the
+ * kill switch may have been resumed, or the wallet's moderation flag may have been cleared since
+ * the last decline).
  *
  * @throws RelayerError for requests that can never be valid regardless of gating (no
  *   allocation, already claimed, swept, not currently qualified) — these are 4xx-mappable by
@@ -116,6 +119,21 @@ export async function enqueueSponsoredClaim(
     }
     const isRank = status.mode === 'RANK_TIERED'
     const rankOrScore = isRank ? status.rank : status.score
+    // The `qualified` check is deliberately RANK-ONLY, matching TieredClaimPanel's
+    // `canActuallyClaim` (tiered-claim-panel.tsx) and TieredLeaderboard's "Not qualified" label.
+    // Enqueue MUST agree with the panel about who may claim: if this path refused a wallet the
+    // panel offers a claim button to, the user would be pushed to self-claim for no stated
+    // reason — a divergence that surfaces in production, not review.
+    //
+    // A review round briefly applied `qualified` to BOTH modes on the theory that SCORE_TIERED
+    // was missing a gate. Measured against the deployed module before reverting: a real
+    // SCORE_TIERED wallet (campaign 3) returns `qualified: true`, so the flag is populated
+    // rather than stubbed — but that does NOT establish that the contract gates score-tiered
+    // claims on it, and two other places in this repo say it does not. Refusing on an unproven
+    // gate risks blocking legitimate gasless claims; allowing an unqualified score-tiered wallet
+    // through at worst produces a FAILED queue row, since the worker staticCall-simulates before
+    // every send and a revert costs no gas. The cheap failure is the right one to accept until
+    // someone confirms the rule against OnChainRewardLib.
     if (isRank && (!status.qualified || rankOrScore === 0)) {
       throw new RelayerError(
         'This wallet is not currently qualified (a required task is incomplete).',

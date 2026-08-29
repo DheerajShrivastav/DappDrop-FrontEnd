@@ -1,14 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, Trophy, CheckCircle2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Trophy, CheckCircle2 } from 'lucide-react'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useWallet } from '@/context/wallet-provider'
 import type { Campaign } from '@/lib/types'
 import { claimNFTReward, mapContractRevertToMessage, type NFTStandardLabel } from '@/lib/web3-service'
+import { SponsoredClaimActions } from './sponsored-claim-actions'
 
 type NFTAllocationProof = {
   wallet: string
@@ -120,10 +120,14 @@ export function NFTClaimPanel({ campaign }: { campaign: Campaign }) {
             Unclaimed NFTs for this campaign have been swept back to the host. Claiming is closed.
           </p>
         ) : proof.status === 'claimable' ? (
-          <Button onClick={handleClaim} disabled={isClaiming}>
-            {isClaiming && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Claim {proof.standard} #{proof.tokenId}
-          </Button>
+          <SponsoredClaimActions
+            campaignId={campaign.id}
+            account={address}
+            busy={isClaiming}
+            onSelfClaim={handleClaim}
+            onSponsoredConfirmed={() => setProof({ ...proof, status: 'claimed' })}
+            selfClaimLabel={`Claim ${proof.standard} #${proof.tokenId}`}
+          />
         ) : (
           <p className="text-sm text-muted-foreground">
             Your allocation isn&apos;t claimable yet — see the status above.
