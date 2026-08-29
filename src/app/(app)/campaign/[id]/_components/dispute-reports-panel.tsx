@@ -1,5 +1,6 @@
 'use client'
 
+import { formatAllocationAmount, formatNFTAllocation } from '@/lib/allocation-format'
 import { useEffect, useState, useCallback } from 'react'
 import { Loader2, MessageSquareWarning, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -30,7 +31,15 @@ type Report = {
   hostResponse: string | null
   createdAt: string
   reviewedAt: string | null
-  allocation: { amount: string; tasksCompleted: number } | null
+  allocation: {
+    amount: string
+    tasksCompleted: number
+    rewardKind: 'ERC20' | 'NFT'
+    decimals: number | null
+    symbol: string | null
+    standard: string | null
+    tokenId: string | null
+  } | null
 }
 
 /**
@@ -137,7 +146,13 @@ export function DisputeReportsPanel({ campaign }: { campaign: Campaign }) {
                 <p className="text-sm">{r.reason}</p>
                 <p className="text-xs text-muted-foreground">
                   Their allocation:{' '}
-                  {r.allocation ? `${r.allocation.amount} (raw units) · ${r.allocation.tasksCompleted} task(s) completed` : 'none found in the current allocation'}
+                  {r.allocation
+                    ? `${
+                        r.allocation.rewardKind === 'NFT'
+                          ? formatNFTAllocation(r.allocation.standard, r.allocation.tokenId, r.allocation.amount)
+                          : formatAllocationAmount(r.allocation.amount, r.allocation.decimals, r.allocation.symbol)
+                      } · ${r.allocation.tasksCompleted} task(s) completed`
+                    : 'none found in the current allocation'}
                 </p>
                 {r.status === 'OPEN' ? (
                   <div className="flex gap-2">

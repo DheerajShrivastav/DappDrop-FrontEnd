@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { verifyWalletSession } from '@/app/lib/dal'
 import { checkCampaignHost, hostCheckUnavailableResponse } from '@/lib/require-host'
-import { getPublishedAllocation } from '@/lib/allocation'
+import { getPublishedAllocation, getCachedTokenInfo } from '@/lib/allocation'
 import { getPublishedNFTAllocation } from '@/lib/nft-allocation'
 import {
   submitDisputeReport,
@@ -60,6 +60,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ camp
       : { escalated: false, openCount: 0, share: 0 }
     const entryByWallet = new Map((tree?.entries ?? []).map((e) => [e.wallet, e]))
 
+    // Display-only. The panel exists so a host can sanity-check a complaint at a glance, and the
+    // reporter's amount is the single number that has to be readable — an unformatted base-unit
+    // integer next to "my amount looks wrong" is the one rendering that defeats the purpose.
+    // Amounts stay in base units on the wire as everywhere else; the client formats.
+    const isNFTTree = tree?.rewardKind === 'NFT'
+    const tokenInfo = tree && !isNFTTree ? await getCachedTokenInfo(tree.token) : null
+
     const serialize = (r: (typeof allReports)[number]) => ({
       id: r.id,
       reporterWallet: r.reporterWallet,
@@ -77,6 +84,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ camp
         ? {
             amount: entryByWallet.get(r.reporterWallet)!.amount,
             tasksCompleted: entryByWallet.get(r.reporterWallet)!.tasksCompleted,
+            rewardKind: isNFTTree ? 'NFT' : 'ERC20',
+            decimals: tokenInfo?.decimals ?? null,
+            symbol: tokenInfo?.symbol ?? null,
+            standard: entryByWallet.get(r.reporterWallet)!.nftStandard,
+            tokenId: entryByWallet.get(r.reporterWallet)!.tokenId,
           }
         : null,
     })
