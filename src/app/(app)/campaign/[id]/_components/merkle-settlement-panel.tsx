@@ -174,6 +174,11 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
   }
 
   if (campaign.status !== 'Ended' && campaign.status !== 'Closed') return null
+  // Closing freezes the allocation: setERC20MerkleRoot/the NFT equivalent revert on a Closed
+  // campaign (Web3Campaigns__CampaignNotYetEnded), so propose/publish can never succeed here.
+  // The panel still renders — the host should keep seeing WHAT was allocated — but offering
+  // actions the chain will reject is worse than offering none.
+  const isClosed = campaign.status === 'Closed'
   // Tiered campaigns commit their mode in Draft (setRankTiers/setScoreTiers) — by the time a
   // campaign reaches Ended, a tiered campaign's mode is already RANK_TIERED/SCORE_TIERED, never
   // UNSET. A Merkle campaign's mode stays UNSET right up until its first setERC20MerkleRoot
@@ -299,6 +304,12 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
               </p>
             )}
 
+            {isClosed ? (
+              <p className="text-sm text-muted-foreground">
+                This campaign is closed — the allocation is frozen and can no longer be changed.
+                Participants can still claim until the grace period ends.
+              </p>
+            ) : (
             <div className="flex gap-3">
               <Button
                 variant="outline"
@@ -335,6 +346,7 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
                 </AlertDialog>
               )}
             </div>
+            )}
           </>
         )}
       </CardContent>

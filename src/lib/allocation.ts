@@ -51,9 +51,16 @@ export type ProposedAllocation = {
 export async function proposeAllocation(campaignId: number): Promise<ProposedAllocation> {
   const campaign = await getCampaignByIdWithMetadata(String(campaignId))
   if (!campaign) throw new AllocationError('Campaign not found')
-  if (campaign.status !== 'Ended' && campaign.status !== 'Closed') {
+  if (campaign.status !== 'Ended') {
+    // Closed is deliberately NOT accepted. Closing freezes the allocation: verified against the
+    // deployed contract, setERC20MerkleRoot on a Closed campaign reverts with
+    // Web3Campaigns__CampaignNotYetEnded(), so any tree proposed here could never be published.
+    // Accepting it produced a PROPOSED row the host could not act on and an error that fired
+    // later, from an unrelated budget check, with a misleading message.
     throw new AllocationError(
-      'Allocations can only be proposed once the campaign has Ended.',
+      campaign.status === 'Closed'
+        ? 'This campaign is closed — its allocation is frozen and can no longer be changed.'
+        : 'Allocations can only be proposed once the campaign has Ended.',
     )
   }
 
@@ -121,8 +128,13 @@ export async function proposeAllocation(campaignId: number): Promise<ProposedAll
   const budget = settlement.escrowed - settlement.distributed
   const perWallet = budget / BigInt(qualifying.length)
   if (perWallet <= BigInt(0)) {
+    // Two very different situations reached the same message. Fully-distributed escrow is the
+    // normal end state of a successful campaign, not a sizing problem, and saying "too small to
+    // split" about it sends the host looking for a funding bug that isn't there.
     throw new AllocationError(
-      'The escrowed amount is too small to split among the qualifying wallets.',
+      budget <= BigInt(0)
+        ? 'Every escrowed token has already been allocated and claimed — there is nothing left to allocate.'
+        : 'The escrowed amount is too small to split among the qualifying wallets.',
     )
   }
 
