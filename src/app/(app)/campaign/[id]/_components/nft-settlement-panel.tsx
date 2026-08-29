@@ -142,6 +142,11 @@ export function NFTSettlementPanel({ campaign }: { campaign: Campaign }) {
   }
 
   if (campaign.status !== 'Ended' && campaign.status !== 'Closed') return null
+  // Closing freezes the allocation: setERC20MerkleRoot/the NFT equivalent revert on a Closed
+  // campaign (Web3Campaigns__CampaignNotYetEnded), so propose/publish can never succeed here.
+  // The panel still renders — the host should keep seeing WHAT was allocated — but offering
+  // actions the chain will reject is worse than offering none.
+  const isClosed = campaign.status === 'Closed'
   const mode = campaign.settlement?.mode
   if (mode && mode !== 'UNSET' && mode !== 'NFT') return null
 
@@ -232,6 +237,12 @@ export function NFTSettlementPanel({ campaign }: { campaign: Campaign }) {
               <p className="text-sm text-muted-foreground">No NFT allocation has been proposed yet.</p>
             )}
 
+            {isClosed ? (
+              <p className="text-sm text-muted-foreground">
+                This campaign is closed — the allocation is frozen and can no longer be changed.
+                Participants can still claim until the grace period ends.
+              </p>
+            ) : (
             <div className="flex gap-3">
               <Button variant="outline" onClick={handlePropose} disabled={isProposing}>
                 {isProposing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -262,6 +273,7 @@ export function NFTSettlementPanel({ campaign }: { campaign: Campaign }) {
                 </AlertDialog>
               )}
             </div>
+            )}
           </>
         )}
       </CardContent>
