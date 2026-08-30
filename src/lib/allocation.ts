@@ -11,6 +11,7 @@ import {
 } from './web3-service'
 import { isHumanityVerifiedDurable } from './humanity-service'
 import { notifyAllocationsPublished, notifyAllocationProposalReady } from './notifications'
+import { getCampaignHostOnChain } from './require-host'
 import { ROOT_DISPUTE_WINDOW_MS } from './campaign-lifecycle'
 
 /**
@@ -198,18 +199,21 @@ export async function proposeAllocation(campaignId: number): Promise<ProposedAll
 
   // Best-effort notification (BR-N*): the proposal is ready for the host to review. Never allowed
   // to break the allocation pipeline — a notification failure must not fail a successful propose.
-  if (cache?.hostAddress) {
-    try {
-      await notifyAllocationProposalReady({
-        campaignId,
-        hostAddress: cache.hostAddress,
-        campaignName: cache.title,
-        walletCount: entries.length,
-        excludedCount: excludedForHumanity.length,
-      })
-    } catch (e) {
-      console.warn('[allocation] proposal-ready notification failed (non-fatal):', e)
-    }
+  // The recipient is the ON-CHAIN host (BR-I4), not CampaignCache.hostAddress — that field is a
+  // display-only sync copy that can drift stale, and a notification misrouted to a stale host is
+  // worse than one that's merely late. Resolving on-chain also removes the old dependency on a
+  // CampaignCache row existing at all: a missing row used to skip the notification silently.
+  try {
+    const hostAddress = await getCampaignHostOnChain(campaignId)
+    await notifyAllocationProposalReady({
+      campaignId,
+      hostAddress,
+      campaignName: cache?.title,
+      walletCount: entries.length,
+      excludedCount: excludedForHumanity.length,
+    })
+  } catch (e) {
+    console.warn('[allocation] proposal-ready notification failed (non-fatal):', e)
   }
 
   return {
@@ -282,24 +286,33 @@ export async function markAllocationPublished(campaignId: number, version: numbe
   // soon"; the host gets "dispute window started" (in-app + webhooks). Wrapped so a notification
   // failure never surfaces as a publish-bookkeeping error (the on-chain publish already
   // succeeded before this function is even called).
+  // The host recipient is read from chain (BR-I4) for the same reason as the propose path above:
+  // this is the message telling the host their 24h dispute window has started, and the host is
+  // the only party who can publish a corrected root inside it. Misrouting it to a stale cached
+  // address means the real host can sleep through the entire window.
   try {
-    const [entries, cache] = await Promise.all([
+    const [entries, cache, hostAddress] = await Promise.all([
       prisma.allocationEntry.findMany({
         where: { merkleTreeId: row.id },
         select: { wallet: true },
       }),
       prisma.campaignCache.findFirst({ where: { campaignId } }),
+      // Deliberately fail-soft, unlike the propose path: participants are notified from this same
+      // call, and an RPC hiccup must not cost them their "claims open soon" notice. Undefined here
+      // skips only the host half.
+      getCampaignHostOnChain(campaignId).catch((e) => {
+        console.warn('[allocation] on-chain host lookup failed; skipping host notification:', e)
+        return undefined
+      }),
     ])
-    if (cache?.hostAddress) {
-      await notifyAllocationsPublished({
-        campaignId,
-        hostAddress: cache.hostAddress,
-        allocatedWallets: entries.map((e) => e.wallet),
-        campaignName: cache.title,
-        claimsOpenAt: new Date(publishedAt.getTime() + ROOT_DISPUTE_WINDOW_MS),
-        token: row.token,
-      })
-    }
+    await notifyAllocationsPublished({
+      campaignId,
+      hostAddress,
+      allocatedWallets: entries.map((e) => e.wallet),
+      campaignName: cache?.title,
+      claimsOpenAt: new Date(publishedAt.getTime() + ROOT_DISPUTE_WINDOW_MS),
+      token: row.token,
+    })
   } catch (e) {
     console.warn('[allocation] allocations-published notification failed (non-fatal):', e)
   }

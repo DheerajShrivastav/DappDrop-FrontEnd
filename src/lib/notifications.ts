@@ -179,7 +179,10 @@ export async function markNotificationsRead(
  */
 export async function notifyAllocationsPublished(params: {
   campaignId: number
-  hostAddress: string
+  /** On-chain host (BR-I4). Optional because it is read from chain at the call site: if that read
+   * fails we still owe participants their "claims open soon" notice, so the host half is skipped
+   * rather than dropping the participant half with it. */
+  hostAddress?: string
   allocatedWallets: string[]
   campaignName?: string
   claimsOpenAt?: Date
@@ -215,7 +218,10 @@ export async function notifyAllocationsPublished(params: {
     body: `Allocations were published for campaign #${params.campaignId}.`,
   })
 
-  // Host side — in-app + webhooks: the dispute window has started.
+  // Host side — in-app + webhooks: the dispute window has started. Skipped entirely when the
+  // on-chain host could not be resolved; a misrouted host notification is worse than a missing one.
+  if (!params.hostAddress) return
+
   const hostEventId = makeEventId(
     NotificationEventType.HOST_DISPUTE_WINDOW_STARTED,
     params.campaignId,
