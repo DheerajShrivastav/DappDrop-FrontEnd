@@ -141,8 +141,11 @@ export type ProcessResult =
  * 4. Sends for real only after a clean simulation, with stuck-tx REPLACEMENT (same nonce,
  *    escalating gas) rather than a second independent send, so a slow-to-confirm tx can never
  *    turn into a double-spend of the relayer's gas.
- * 5. On confirmation, atomically books the gas cost against both budget rows
- *    (recordSponsorshipSpend) before marking CONFIRMED.
+ * 5. Books the gas cost against both budget rows (recordSponsorshipSpend) whenever gas was
+ *    actually spent — atomically before marking CONFIRMED on success, and equally for an
+ *    attempt that was MINED and then REVERTED, which burns real ETH just the same. A failure
+ *    caught during gas estimation never reached the chain and is correctly not charged; the
+ *    receipt ethers attaches to its CALL_EXCEPTION is what distinguishes the two.
  */
 export async function processClaim(claimId: string, wallet: ethers.Wallet): Promise<ProcessResult> {
   const claimed = await prisma.sponsoredClaim.updateMany({
@@ -252,6 +255,9 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
 
   const nonce = row.nonce ?? (await wallet.provider!.getTransactionCount(wallet.address, 'pending'))
   let lastError: unknown
+  // Gas burned by attempts that were MINED and then reverted. Real ETH, spent on a claim that
+  // never landed — see the catch below for why it has to be tracked separately.
+  let wastedGasWei = BigInt(0)
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
@@ -301,6 +307,28 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
       return { outcome: 'confirmed', txHash: receipt.hash, gasCostWei }
     } catch (e: unknown) {
       lastError = e
+      // A transaction that was MINED and then reverted still burned gas, and the old code
+      // recorded spend ONLY on the success path — so that ETH left the relayer wallet without
+      // ever being charged to the campaign's sponsorship budget. Harmless while the platform
+      // eats the cost; a direct revenue leak the moment hosts are billed, and it also made the
+      // admin spend dashboard under-report real usage.
+      //
+      // Most failures here never reach the chain at all (a revert caught during gas estimation
+      // means nothing was broadcast and nothing was spent), so we cannot charge every failure.
+      // ethers attaches the receipt to the CALL_EXCEPTION it throws from wait(), and that
+      // receipt is the only reliable signal separating "never broadcast" from "mined and
+      // reverted" — its presence means gas was genuinely consumed.
+      const failedReceipt = (e as { receipt?: ethers.TransactionReceipt })?.receipt
+      if (failedReceipt?.gasUsed != null && failedReceipt?.gasPrice != null) {
+        const burned = failedReceipt.gasUsed * failedReceipt.gasPrice
+        wastedGasWei += burned
+        try {
+          await recordSponsorshipSpend(row.campaignId, burned)
+        } catch (recordError) {
+          // Never let bookkeeping turn a failed claim into a crashed tick.
+          console.warn('[relayer] failed to record reverted-tx gas (non-fatal):', recordError)
+        }
+      }
       const raw =
         (e as { reason?: string })?.reason ||
         (e as { shortMessage?: string })?.shortMessage ||
@@ -316,6 +344,7 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
             status: 'FAILED',
             lastError: 'Already claimed via another path before this attempt confirmed',
             processedAt: new Date(),
+            ...(wastedGasWei > BigInt(0) ? { gasCostWei: wastedGasWei.toString() } : {}),
           },
         })
         return { outcome: 'failed', error: 'already claimed via another path' }
@@ -329,7 +358,14 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
   const message = lastError instanceof Error ? lastError.message : String(lastError ?? 'unknown error')
   await prisma.sponsoredClaim.update({
     where: { id: claimId },
-    data: { status: 'FAILED', lastError: message, processedAt: new Date() },
+    data: {
+      status: 'FAILED',
+      lastError: message,
+      processedAt: new Date(),
+      // Non-zero when an attempt reached the chain and reverted, so a FAILED row is not
+      // silently reported as having cost nothing.
+      ...(wastedGasWei > BigInt(0) ? { gasCostWei: wastedGasWei.toString() } : {}),
+    },
   })
   return { outcome: 'failed', error: message }
 }
