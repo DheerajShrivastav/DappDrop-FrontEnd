@@ -2294,12 +2294,12 @@ export default function CreateCampaignPage() {
                   </h2>
                   <Alert>
                     <Info className="h-4 w-4" />
-                    <AlertTitle>ERC20 Merkle rewards only, for now</AlertTitle>
+                    <AlertTitle>On-chain rewards: ERC20 or NFT</AlertTitle>
                     <AlertDescription>
-                      NFT and off-chain rewards are coming in a later phase. This wizard
-                      escrows an ERC20 token pool that is split among qualifying
-                      participants after the campaign ends (equal split, per task
-                      completion — see below).
+                      Whichever you pick is escrowed now and distributed after the campaign
+                      ends, to wallets that completed every task — an ERC20 pool split
+                      equally, or one NFT per qualifying wallet. Off-chain (text) rewards
+                      are still to come.
                     </AlertDescription>
                   </Alert>
                   <FormField
