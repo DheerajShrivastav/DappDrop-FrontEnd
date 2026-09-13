@@ -70,7 +70,7 @@ export function CampaignHero({
                 {campaign.status}
               </Badge>
               {isTimeExpiredNotClosed && (
-                <Badge className="bg-amber-500/90 backdrop-blur-sm text-white border-amber-400/50 flex items-center gap-1">
+                <Badge className="bg-status-pending-solid/90 backdrop-blur-sm text-white border-transparent flex items-center gap-1">
                   <AlertTriangle className="h-3 w-3" />
                   End time passed — not yet closed
                 </Badge>

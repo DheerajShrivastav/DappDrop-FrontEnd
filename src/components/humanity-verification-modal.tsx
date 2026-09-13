@@ -251,7 +251,7 @@ export function HumanityVerificationModal({
               </div>
 
               {activePresets.length > 1 && (
-                <p className="text-xs text-purple-600 dark:text-purple-400 font-medium text-center">
+                <p className="text-xs text-purple-600 font-medium text-center">
                   All {activePresets.length} checks must pass to complete this task
                 </p>
               )}
@@ -264,7 +264,7 @@ export function HumanityVerificationModal({
               )}
 
               {!isConnected && !isRedirecting && (
-                <p className="text-xs text-yellow-600 dark:text-yellow-400 text-center">
+                <p className="text-xs text-yellow-600 text-center">
                   Please connect your wallet before verifying.
                 </p>
               )}
@@ -273,7 +273,7 @@ export function HumanityVerificationModal({
               {isAlreadyAuthenticated && !isRedirecting && (
                 <div className="flex items-center gap-2 p-3 rounded-lg border border-blue-500/20 bg-blue-500/5">
                   <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0" />
-                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                  <p className="text-xs text-blue-700">
                     Already signed in with Humanity Protocol. Click &quot;Verify Now&quot; to complete.
                   </p>
                 </div>

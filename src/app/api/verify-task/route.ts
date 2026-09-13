@@ -8,6 +8,25 @@ import { isUserVerified } from '@/lib/humanity-service'
 import { prisma } from '@/lib/prisma'
 import { getCampaignById } from '@/lib/web3-service'
 import type { Campaign } from '@/lib/types'
+import { type AttestationEvidence } from '@/lib/signer'
+import { attestAndRespond } from '@/lib/attest-response'
+
+/** Best-effort, never throws — a logging failure must never break the verify-task response
+ * itself. No wallet/user identifier stored (P3 CP3 host analytics: aggregated only). */
+async function logVerificationFailure(
+  campaignId: number,
+  taskIndex: number,
+  taskType: string | undefined,
+  reason: string,
+): Promise<void> {
+  try {
+    await prisma.verificationFailure.create({
+      data: { campaignId, taskIndex, taskType: taskType ?? null, reason },
+    })
+  } catch (e) {
+    console.warn('[verify-task] failed to log verification failure (non-fatal):', e)
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -38,6 +57,8 @@ export async function POST(request: Request) {
     }
 
     let isVerified = false
+    // Evidence snapshot persisted with the signature (BR-V4 audit log).
+    let evidence: AttestationEvidence = { taskType }
 
     // Get task metadata for Discord/Telegram
     const taskMetadata = await prisma.campaignTaskMetadata.findUnique({
@@ -72,6 +93,7 @@ export async function POST(request: Request) {
       const discordServerId = taskMetadata?.discordServerId
 
       if (!discordServerId) {
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'discord_not_configured')
         return NextResponse.json({
           success: false,
           verified: false,
@@ -85,6 +107,13 @@ export async function POST(request: Request) {
         discordServerId,
         discordId,
       )
+      evidence = {
+        taskType,
+        platform: 'discord',
+        discordServerId,
+        method: discordId ? 'oauth' : 'manual',
+        checkedAt: new Date().toISOString(),
+      }
 
       // Store verification if successful
       if (isVerified && userAddress) {
@@ -124,6 +153,7 @@ export async function POST(request: Request) {
           campaignId,
           taskIndex,
         })
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'telegram_not_configured')
         return NextResponse.json({
           success: false,
           verified: false,
@@ -137,6 +167,13 @@ export async function POST(request: Request) {
         telegramChatId,
         telegramUserId,
       )
+      evidence = {
+        taskType,
+        platform: 'telegram',
+        telegramChatId,
+        method: telegramUserId ? 'user_id' : 'username',
+        checkedAt: new Date().toISOString(),
+      }
 
       // Store verification if successful
       if (isVerified && userAddress) {
@@ -208,6 +245,7 @@ export async function POST(request: Request) {
           // Fallback/Update logic: if they are hitting this to complete the Humanity task,
           // we can attempt a real-time check in case the OAuth callback hasn't processed yet.
           if (!isHuman) {
+            await logVerificationFailure(campaignId, taskIndex, effectiveTaskType, 'humanity_pending')
             return NextResponse.json(
               {
                 success: false,
@@ -219,23 +257,17 @@ export async function POST(request: Request) {
               },
               { status: 403 },
             )
-            
+
           }
 
+          // Humanity check passed — fall through to the shared attestation step below.
           isVerified = isHuman
-
-          return NextResponse.json({
-            success: true,
-            verified: isVerified,
-            message: isVerified
-              ? 'Humanity verification successful'
-              : 'Not verified. Please complete Humanity Protocol verification first.',
-            verificationDetails: {
-              taskType: effectiveTaskType,
-              walletAddress: userAddress,
-              isHuman,
-            },
-          })
+          evidence = {
+            taskType: effectiveTaskType,
+            platform: 'humanity',
+            isHuman,
+            checkedAt: new Date().toISOString(),
+          }
         } catch (error: any) {
           console.error('Error checking humanity verification:', error)
           return NextResponse.json(
@@ -253,6 +285,7 @@ export async function POST(request: Request) {
         !userAddress
       ) {
         // HUMANITY_VERIFICATION requires a wallet address - fail closed
+        await logVerificationFailure(campaignId, taskIndex, effectiveTaskType ?? undefined, 'missing_wallet_address')
         return NextResponse.json({
           success: false,
           verified: false,
@@ -270,6 +303,7 @@ export async function POST(request: Request) {
             metadataTaskType: taskMetadata?.taskType,
           },
         )
+        await logVerificationFailure(campaignId, taskIndex, undefined, 'humanity_task_misconfigured')
         return NextResponse.json({
           success: false,
           verified: false,
@@ -284,6 +318,11 @@ export async function POST(request: Request) {
           effectiveTaskType !== 'HUMANITY_VERIFICATION'
         ) {
           isVerified = true
+          evidence = {
+            taskType: effectiveTaskType,
+            method: 'canonical-task-type',
+            checkedAt: new Date().toISOString(),
+          }
         } else {
           // Unknown task type - fail closed for security
           console.warn('Unknown or missing task type - failing closed:', {
@@ -292,6 +331,7 @@ export async function POST(request: Request) {
             canonicalTaskType,
             metadataTaskType: taskMetadata?.taskType,
           })
+          await logVerificationFailure(campaignId, taskIndex, undefined, 'unknown_task_type')
           return NextResponse.json({
             success: false,
             verified: false,
@@ -302,13 +342,23 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({
-      success: true,
-      verified: isVerified,
-      message: isVerified
-        ? 'Task verified successfully'
-        : 'Task verification failed',
-    })
+    if (!isVerified) {
+      const reason = isDiscordTask
+        ? 'discord_not_joined'
+        : isTelegramTask
+          ? 'telegram_not_joined'
+          : 'verification_failed'
+      await logVerificationFailure(campaignId, taskIndex, taskType, reason)
+      return NextResponse.json({
+        success: true,
+        verified: false,
+        message: 'Task verification failed',
+      })
+    }
+
+    // PASS → sign (and best-effort submit) the EIP-712 attestation, and return the signature
+    // for self-submit fallback. Hold tasks are rejected inside the signer and never land here.
+    return attestAndRespond(campaignId, taskIndex, userAddress, evidence)
   } catch (error: any) {
     console.error('API Error:', error)
     return NextResponse.json(

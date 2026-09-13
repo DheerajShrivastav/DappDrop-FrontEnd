@@ -24,7 +24,17 @@ export async function POST(
     )
 
     // Parse request body
-    const { imageUrl, signature, message, shortDescription, longDescription, rewardType, rewardName } = await request.json()
+    const {
+      imageUrl,
+      signature,
+      message,
+      shortDescription,
+      longDescription,
+      rewardType,
+      rewardName,
+      humanityGated,
+      allocationPolicy,
+    } = await request.json()
 
     console.log('📥 Request data received')
 
@@ -58,10 +68,14 @@ export async function POST(
     }
 
     // Prepare optional metadata fields
-    const metadataFields: Record<string, string | undefined> = {}
+    const metadataFields: Record<string, string | boolean | undefined> = {}
     if (shortDescription && typeof shortDescription === 'string') metadataFields.shortDescription = shortDescription
     if (longDescription && typeof longDescription === 'string') metadataFields.longDescription = longDescription
     if (rewardType && typeof rewardType === 'string') metadataFields.rewardType = rewardType
+    // v0.6.0 allocation policy metadata (BR-G2) — set once at creation, consumed by the
+    // allocation pipeline (src/lib/allocation.ts) at tree-build time.
+    if (typeof humanityGated === 'boolean') metadataFields.humanityGated = humanityGated
+    if (allocationPolicy && typeof allocationPolicy === 'string') metadataFields.allocationPolicy = allocationPolicy
     if (rewardName && typeof rewardName === 'string') metadataFields.rewardName = rewardName
 
     const campaignId = parseInt(campaignIdString)
@@ -246,6 +260,7 @@ export async function GET(
         longDescription: true,
         rewardType: true,
         rewardName: true,
+        hiddenFromDiscovery: true,
       },
     })
 
@@ -260,6 +275,7 @@ export async function GET(
       longDescription: campaign.longDescription,
       rewardType: campaign.rewardType,
       rewardName: campaign.rewardName,
+      hiddenFromDiscovery: campaign.hiddenFromDiscovery,
     })
   } catch (error) {
     console.error('Error fetching campaign image:', error)

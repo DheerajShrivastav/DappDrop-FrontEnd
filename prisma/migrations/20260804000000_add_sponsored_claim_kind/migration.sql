@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "SponsoredClaim" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'ERC20_MERKLE';

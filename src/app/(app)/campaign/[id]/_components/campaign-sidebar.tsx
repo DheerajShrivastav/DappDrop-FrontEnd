@@ -74,9 +74,9 @@ export function CampaignSidebar({
         <CardContent className="space-y-4">
           {/* Expired-but-not-closed warning */}
           {isTimeExpiredNotClosed && (
-            <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-300 bg-amber-50">
-              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
-              <p className="text-xs text-amber-800 leading-relaxed">
+            <div className="flex items-start gap-2 p-3 rounded-lg border border-status-pending-border bg-status-pending-bg">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-status-pending-fg" />
+              <p className="text-xs text-status-pending-fg leading-relaxed">
                 End time has passed but this campaign is not yet closed on-chain.
                 {isHostOfCampaign
                   ? ' Please end the campaign below so participants can claim rewards.'
@@ -87,30 +87,30 @@ export function CampaignSidebar({
 
           {/* About This Campaign */}
           {campaign.description && !campaign.description.startsWith('A campaign hosted by') && (
-            <div className="p-3 bg-gradient-to-br from-slate-50 to-blue-50/50 rounded-lg border border-slate-200/60">
+            <div className="p-3 bg-secondary/50 rounded-lg border border-border">
               <div className="flex items-center gap-2 mb-2">
-                <Info className="h-4 w-4 text-primary/70" />
-                <p className="text-xs font-semibold uppercase tracking-wider text-primary/70">About</p>
+                <Info className="h-4 w-4 text-muted-foreground" />
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">About</p>
               </div>
-              <p className="text-sm text-slate-700 leading-relaxed">
+              <p className="text-sm text-foreground/80 leading-relaxed">
                 {campaign.description}
               </p>
             </div>
           )}
           {/* Participants */}
-          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-            <Users className="h-5 w-5 text-primary" />
+          <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+            <Users className="h-5 w-5 text-foreground/70" />
             <div>
-              <p className="text-sm font-medium">Participants</p>
+              <p className="text-sm font-medium text-muted-foreground">Participants</p>
               <p className="text-2xl font-bold">{participantCount}</p>
             </div>
           </div>
 
           {/* End Date */}
-          <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-            <Calendar className="h-5 w-5 text-primary" />
+          <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+            <Calendar className="h-5 w-5 text-foreground/70" />
             <div>
-              <p className="text-sm font-medium">Ends On</p>
+              <p className="text-sm font-medium text-muted-foreground">Ends On</p>
               <p className="font-semibold">
                 {format(new Date(campaign.endDate), 'MMM dd, yyyy')}
               </p>
@@ -118,10 +118,10 @@ export function CampaignSidebar({
           </div>
 
           {/* Reward */}
-          <div className="flex items-center gap-3 p-3 bg-gradient-to-br from-primary/5 to-primary/10 rounded-lg border border-primary/20">
-            <Gift className="h-5 w-5 text-primary" />
+          <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg border border-border">
+            <Gift className="h-5 w-5 text-foreground/70" />
             <div>
-              <p className="text-sm font-medium">Reward</p>
+              <p className="text-sm font-medium text-muted-foreground">Reward</p>
               <p className="font-semibold">{campaign.reward.name}</p>
             </div>
           </div>

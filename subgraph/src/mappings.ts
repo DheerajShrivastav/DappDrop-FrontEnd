@@ -1,67 +1,129 @@
-
+import { BigInt, Bytes } from '@graphprotocol/graph-ts'
 import {
   CampaignCreated,
   CampaignStatusUpdated,
+  CampaignCancelled,
+  MaxParticipantsUpdated,
   TaskAddedToCampaign,
   ParticipantTaskCompleted,
-  RewardSet,
-  RewardClaimed,
+  TaskVerifiedWithSignature,
+  ERC20RewardConfigured,
+  CampaignFundedERC20,
+  ProtocolFeeCollected,
+  ERC20MerkleRootSet,
+  ERC20RewardClaimed,
+  ERC20RewardClaimedOnChain,
+  UnclaimedERC20Swept,
+  NFTRewardsDeposited,
+  OffChainRewardConfigured,
+  FallbackRootPublished,
+  FallbackClosed,
+  RewardModulePinned,
+  NFTModulePinned,
 } from '../generated/Web3Campaigns/Web3Campaigns'
-
+import {
+  OnChainRewardModule as OnChainRewardModuleTemplate,
+  NFTSettlementModule as NFTSettlementModuleTemplate,
+} from '../generated/templates'
 import {
   Campaign,
   Task,
   Participation,
   TaskCompletion,
+  Claim,
 } from '../generated/schema'
 
 // ---------------------------------------------------------------------------
-// CampaignCreated
+// Helpers
 // ---------------------------------------------------------------------------
+
+function loadOrInitParticipation(
+  campaignId: string,
+  participant: Bytes,
+  ts: BigInt,
+): Participation {
+  const id = campaignId.concat('-').concat(participant.toHexString())
+  let p = Participation.load(id)
+  if (p == null) {
+    p = new Participation(id)
+    p.campaign = campaignId
+    p.participant = participant
+    p.tasksCompleted = 0
+    p.firstInteractionAt = ts
+    p.lastInteractionAt = ts
+  }
+  return p
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
+
 export function handleCampaignCreated(event: CampaignCreated): void {
   const id = event.params.campaignId.toString()
-
-  let campaign = new Campaign(id)
-  campaign.host = event.params.host
-  campaign.name = event.params.name
-  campaign.startTime = event.params.startTime
-  campaign.endTime = event.params.endTime
-  campaign.status = 0 // Draft
-  campaign.totalParticipants = 0
-  campaign.createdAt = event.block.timestamp
-  campaign.createdAtBlock = event.block.number
-  // rewardType, rewardTokenAddress, rewardAmountOrTokenId are set by RewardSet event
-  campaign.rewardTokenAddress = null
-  campaign.rewardAmountOrTokenId = null
-  campaign.save()
+  const c = new Campaign(id)
+  c.host = event.params.host
+  c.name = event.params.name
+  c.startTime = event.params.startTime
+  c.endTime = event.params.endTime
+  c.status = 0 // Draft
+  c.totalParticipants = 0
+  c.maxParticipants = BigInt.zero()
+  c.createdAt = event.block.timestamp
+  c.createdAtBlock = event.block.number
+  c.settlementMode = 'UNSET'
+  c.erc20EscrowedNet = BigInt.zero()
+  c.erc20FeePaid = BigInt.zero()
+  c.erc20Swept = false
+  c.fallbackRootPublished = false
+  c.fallbackClosed = false
+  c.save()
 }
 
-// ---------------------------------------------------------------------------
-// CampaignStatusUpdated
-// ---------------------------------------------------------------------------
-export function handleCampaignStatusUpdated(
-  event: CampaignStatusUpdated,
+export function handleCampaignStatusUpdated(event: CampaignStatusUpdated): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.status = event.params.newStatus
+  if (event.params.newStatus == 3) {
+    // Closed — start the 30-day unclaimed-sweep grace clock (NFR-9 / FR-C6).
+    c.closedAt = event.block.timestamp
+  }
+  c.save()
+}
+
+export function handleCampaignCancelled(event: CampaignCancelled): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.status = 4 // Cancelled
+  c.cancelledAt = event.block.timestamp
+  c.refundedERC20 = event.params.refundedERC20
+  c.save()
+}
+
+export function handleMaxParticipantsUpdated(
+  event: MaxParticipantsUpdated,
 ): void {
-  const id = event.params.campaignId.toString()
-  let campaign = Campaign.load(id)
-  if (campaign == null) return
-
-  campaign.status = event.params.newStatus
-  campaign.save()
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.maxParticipants = event.params.maxParticipants
+  c.save()
 }
 
 // ---------------------------------------------------------------------------
-// TaskAddedToCampaign
+// Tasks
 // ---------------------------------------------------------------------------
+
 export function handleTaskAddedToCampaign(event: TaskAddedToCampaign): void {
-  const taskId = event.params.campaignId
+  const id = event.params.campaignId
     .toString()
     .concat('-')
     .concat(event.params.taskId.toString())
-
-  let task = new Task(taskId)
-  task.campaign = event.params.campaignId.toString()
-  task.taskId = event.params.taskId
+  let task = Task.load(id)
+  if (task == null) {
+    task = new Task(id)
+    task.campaign = event.params.campaignId.toString()
+    task.taskId = event.params.taskId
+  }
   task.taskType = event.params.taskType
   task.description = event.params.description
   task.addedAtBlock = event.block.number
@@ -69,89 +131,250 @@ export function handleTaskAddedToCampaign(event: TaskAddedToCampaign): void {
 }
 
 // ---------------------------------------------------------------------------
-// ParticipantTaskCompleted
+// Participation / completion
+//
+// ParticipantTaskCompleted is the universal "task became complete" signal — it fires for
+// self-verify completeTask AND for every completed=true attestation. It is therefore the
+// authoritative driver of the tasksCompleted counter. TaskVerifiedWithSignature carries the
+// attestation version and is the ONLY signal for a completed=false revocation, so it owns
+// the true->false transition (and never double-counts the false->true one).
 // ---------------------------------------------------------------------------
+
 export function handleParticipantTaskCompleted(
   event: ParticipantTaskCompleted,
 ): void {
   const campaignId = event.params.campaignId.toString()
-  const participantHex = event.params.participant.toHexString()
-  const participationId = campaignId.concat('-').concat(participantHex)
-
-  // Load or create Participation
-  let participation = Participation.load(participationId)
-  const isNewParticipant = participation == null
-
-  if (participation == null) {
-    participation = new Participation(participationId)
-    participation.campaign = campaignId
-    participation.participant = event.params.participant
-    participation.hasClaimedReward = false
-    participation.tasksCompleted = 0
-    participation.firstInteractionAt = event.block.timestamp
-    participation.lastInteractionAt = event.block.timestamp
-  }
-
-  participation.lastInteractionAt = event.block.timestamp
-
-  // Only count a distinct task completion once. The contract reverts on
-  // duplicate completion, but guarding here keeps tasksCompleted provably
-  // equal to the number of TaskCompletion records even if an event is ever
-  // reprocessed (e.g. chain reorg).
-  const completionId = participationId
+  const participationId = campaignId
     .concat('-')
-    .concat(event.params.taskId.toString())
-  let completion = TaskCompletion.load(completionId)
-  if (completion == null) {
-    completion = new TaskCompletion(completionId)
-    completion.participation = participationId
-    completion.campaign = campaignId
-    completion.taskId = event.params.taskId
-    completion.completedAt = event.block.timestamp
-    completion.completedAtBlock = event.block.number
-    completion.save()
+    .concat(event.params.participant.toHexString())
+  const wasNew = Participation.load(participationId) == null
+  const p = loadOrInitParticipation(
+    campaignId,
+    event.params.participant,
+    event.block.timestamp,
+  )
+  p.lastInteractionAt = event.block.timestamp
 
-    participation.tasksCompleted = participation.tasksCompleted + 1
+  const completionId = p.id.concat('-').concat(event.params.taskId.toString())
+  let comp = TaskCompletion.load(completionId)
+  let becameComplete = true
+  if (comp == null) {
+    comp = new TaskCompletion(completionId)
+    comp.participation = p.id
+    comp.campaign = campaignId
+    comp.taskId = event.params.taskId
+  } else {
+    becameComplete = !comp.completed
   }
+  comp.completed = true
+  comp.completedAt = event.block.timestamp
+  comp.completedAtBlock = event.block.number
+  comp.save()
 
-  participation.save()
+  if (becameComplete) {
+    p.tasksCompleted = p.tasksCompleted + 1
+  }
+  p.save()
 
-  // Increment campaign participant count only when this address participates
-  // for the first time.
-  if (isNewParticipant) {
-    let campaign = Campaign.load(campaignId)
-    if (campaign != null) {
-      campaign.totalParticipants = campaign.totalParticipants + 1
-      campaign.save()
+  // Bump campaign participant count on a wallet's first counted completion. (Kept in sync
+  // with the contract's own totalParticipants++, which fires under the same condition.)
+  if (wasNew) {
+    const c = Campaign.load(campaignId)
+    if (c != null) {
+      c.totalParticipants = c.totalParticipants + 1
+      c.save()
     }
   }
 }
 
-// ---------------------------------------------------------------------------
-// RewardSet
-// ---------------------------------------------------------------------------
-export function handleRewardSet(event: RewardSet): void {
-  const id = event.params.campaignId.toString()
-  let campaign = Campaign.load(id)
-  if (campaign == null) return
+export function handleTaskVerifiedWithSignature(
+  event: TaskVerifiedWithSignature,
+): void {
+  const campaignId = event.params.campaignId.toString()
+  const p = loadOrInitParticipation(
+    campaignId,
+    event.params.participant,
+    event.block.timestamp,
+  )
+  p.lastInteractionAt = event.block.timestamp
+  p.save()
 
-  campaign.rewardType = event.params.rewardType
-  campaign.rewardTokenAddress = event.params.tokenAddress
-  campaign.rewardAmountOrTokenId = event.params.amountOrTokenId
-  campaign.save()
+  const completionId = p.id.concat('-').concat(event.params.taskIndex.toString())
+  let comp = TaskCompletion.load(completionId)
+  if (comp == null) {
+    comp = new TaskCompletion(completionId)
+    comp.participation = p.id
+    comp.campaign = campaignId
+    comp.taskId = event.params.taskIndex
+    comp.completed = false
+    comp.completedAt = event.block.timestamp
+    comp.completedAtBlock = event.block.number
+  }
+  comp.method = 'ATTESTATION'
+  comp.attestationVersion = event.params.version
+
+  // Only handle the revocation (true -> false) here; the false -> true transition and the
+  // counter are owned by handleParticipantTaskCompleted (fires in the same tx for true).
+  if (!event.params.completed && comp.completed) {
+    comp.completed = false
+    const reloaded = Participation.load(p.id)
+    if (reloaded != null && reloaded.tasksCompleted > 0) {
+      reloaded.tasksCompleted = reloaded.tasksCompleted - 1
+      reloaded.save()
+    }
+  }
+  comp.save()
 }
 
 // ---------------------------------------------------------------------------
-// RewardClaimed
+// ERC20 reward config / funding / settlement
 // ---------------------------------------------------------------------------
-export function handleRewardClaimed(event: RewardClaimed): void {
+
+export function handleERC20RewardConfigured(
+  event: ERC20RewardConfigured,
+): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.erc20Token = event.params.token
+  c.save()
+}
+
+export function handleCampaignFundedERC20(event: CampaignFundedERC20): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  // Event reports the NET escrowed amount (fee already skimmed).
+  c.erc20EscrowedNet = c.erc20EscrowedNet.plus(event.params.amount)
+  c.save()
+}
+
+export function handleProtocolFeeCollected(event: ProtocolFeeCollected): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.erc20FeePaid = c.erc20FeePaid.plus(event.params.feeAmount)
+  c.save()
+}
+
+export function handleERC20MerkleRootSet(event: ERC20MerkleRootSet): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.settlementMode = 'MERKLE_ERC20'
+  // Dispute-window rearm: only reset the anchor when the root VALUE actually changed;
+  // a byte-identical republish does not rearm (matches the contract).
+  const prev = c.erc20MerkleRoot
+  let changed = true
+  if (prev !== null) {
+    changed = !prev.equals(event.params.merkleRoot)
+  }
+  if (changed) {
+    c.erc20RootPublishedAt = event.block.timestamp
+  }
+  c.erc20MerkleRoot = event.params.merkleRoot
+  c.save()
+}
+
+export function handleERC20RewardClaimed(event: ERC20RewardClaimed): void {
   const campaignId = event.params.campaignId.toString()
-  const participantHex = event.params.participant.toHexString()
-  const participationId = campaignId.concat('-').concat(participantHex)
+  const id = campaignId
+    .concat('-ERC20_MERKLE-')
+    .concat(event.params.account.toHexString())
+  const claim = new Claim(id)
+  claim.campaign = campaignId
+  claim.account = event.params.account
+  claim.kind = 'ERC20_MERKLE'
+  claim.amount = event.params.amount
+  claim.claimedAt = event.block.timestamp
+  claim.claimedAtBlock = event.block.number
+  claim.txHash = event.transaction.hash
+  claim.save()
+}
 
-  let participation = Participation.load(participationId)
-  if (participation == null) return
+export function handleERC20RewardClaimedOnChain(
+  event: ERC20RewardClaimedOnChain,
+): void {
+  const campaignId = event.params.campaignId.toString()
+  const id = campaignId
+    .concat('-ERC20_TIERED-')
+    .concat(event.params.account.toHexString())
+  const claim = new Claim(id)
+  claim.campaign = campaignId
+  claim.account = event.params.account
+  claim.kind = 'ERC20_TIERED'
+  claim.amount = event.params.amount
+  claim.rankOrScore = event.params.rankOrScore
+  claim.claimedAt = event.block.timestamp
+  claim.claimedAtBlock = event.block.number
+  claim.txHash = event.transaction.hash
+  claim.save()
+}
 
-  participation.hasClaimedReward = true
-  participation.save()
+export function handleUnclaimedERC20Swept(event: UnclaimedERC20Swept): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.erc20Swept = true
+  c.erc20SweptAt = event.block.timestamp
+  c.save()
+}
+
+// ---------------------------------------------------------------------------
+// NFT deposits (custody on entrypoint) + off-chain reward
+// ---------------------------------------------------------------------------
+
+export function handleNFTRewardsDeposited(event: NFTRewardsDeposited): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  if (c.settlementMode == 'UNSET') c.settlementMode = 'NFT'
+  c.save()
+}
+
+export function handleOffChainRewardConfigured(
+  event: OffChainRewardConfigured,
+): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.offChainRewardDescription = event.params.description
+  c.save()
+}
+
+// ---------------------------------------------------------------------------
+// SETTLER_ROLE fallback (NFR-11) — ERC20 path emits these on the entrypoint
+// ---------------------------------------------------------------------------
+
+export function handleFallbackRootPublished(
+  event: FallbackRootPublished,
+): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.fallbackRootPublished = true
+  c.save()
+}
+
+export function handleFallbackClosed(event: FallbackClosed): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c == null) return
+  c.fallbackClosed = true
+  c.save()
+}
+
+// ---------------------------------------------------------------------------
+// Module pins — spawn per-campaign satellite templates (Decision 3, NFR-2)
+// ---------------------------------------------------------------------------
+
+export function handleRewardModulePinned(event: RewardModulePinned): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c != null) {
+    c.rewardModule = event.params.module
+    c.save()
+  }
+  // Index THIS campaign's pinned OnChainRewardModule instance from here on.
+  OnChainRewardModuleTemplate.create(event.params.module)
+}
+
+export function handleNFTModulePinned(event: NFTModulePinned): void {
+  const c = Campaign.load(event.params.campaignId.toString())
+  if (c != null) {
+    c.nftModule = event.params.module
+    if (c.settlementMode == 'UNSET') c.settlementMode = 'NFT'
+    c.save()
+  }
+  NFTSettlementModuleTemplate.create(event.params.module)
 }

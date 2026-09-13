@@ -214,7 +214,7 @@ export function TelegramVerificationForm({
         {/* Help Link - Replaces Entire Instructions Section */}
         <button
           onClick={() => setShowHelpModal(true)}
-          className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1 transition-colors"
+          className="text-xs text-blue-600 hover:text-blue-700 flex items-center gap-1 transition-colors"
         >
           <HelpCircle className="h-3 w-3" />
           Where do I find my User ID?
@@ -269,7 +269,7 @@ export function TelegramVerificationForm({
           <div className="space-y-3">
             <div className="space-y-2">
               <h4 className="text-sm font-medium flex items-center gap-2">
-                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 text-xs">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs">
                   1
                 </span>
                 Using @userinfobot
@@ -285,7 +285,7 @@ export function TelegramVerificationForm({
 
             <div className="space-y-2">
               <h4 className="text-sm font-medium flex items-center gap-2">
-                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 text-xs">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-xs">
                   2
                 </span>
                 Using @getmyid_bot
@@ -299,8 +299,8 @@ export function TelegramVerificationForm({
               </p>
             </div>
 
-            <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-4">
-              <p className="text-xs text-blue-900 dark:text-blue-100">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
+              <p className="text-xs text-blue-900">
                 <strong>Note:</strong> Your User ID is a numeric value (e.g.,
                 123456789). It's different from your username.
               </p>

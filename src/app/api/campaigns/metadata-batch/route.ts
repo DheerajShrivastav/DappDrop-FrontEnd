@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
         shortDescription: true,
         longDescription: true,
         rewardName: true,
+        hiddenFromDiscovery: true,
       },
     })
 
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest) {
         shortDescription?: string | null
         longDescription?: string | null
         rewardName?: string | null
+        hiddenFromDiscovery?: boolean
       }
     > = {}
 
@@ -57,6 +59,7 @@ export async function GET(request: NextRequest) {
         shortDescription: row.shortDescription,
         longDescription: row.longDescription,
         rewardName: row.rewardName,
+        hiddenFromDiscovery: row.hiddenFromDiscovery,
       }
     }
 

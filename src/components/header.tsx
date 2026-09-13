@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { Rocket } from 'lucide-react';
 import { useRole } from '@/hooks/use-role';
+import { NotificationBell } from '@/components/notification-bell';
 
 export default function Header() {
     const { role } = useRole();
@@ -13,7 +14,7 @@ export default function Header() {
         <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md shadow-soft">
             <div className="container flex h-16 items-center">
                 <Link href="/" className="flex items-center gap-2.5 mr-8">
-                    <div className="bg-gradient-to-br from-slate-700 to-slate-900 p-2 rounded-xl shadow-black-glow">
+                    <div className="bg-gradient-to-br from-slate-700 to-slate-900 p-2 rounded-xl shadow-elevated">
                         <Rocket className="h-5 w-5 text-white" />
                     </div>
                     <span className="font-headline font-bold text-xl bg-gradient-to-r from-slate-900 to-slate-600 bg-clip-text text-transparent">
@@ -37,6 +38,7 @@ export default function Header() {
                     )}
                 </nav>
                 <div className="flex items-center gap-4">
+                    <NotificationBell />
                     <ConnectButton
                         showBalance={false}
                         accountStatus={{

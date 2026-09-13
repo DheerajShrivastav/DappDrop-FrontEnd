@@ -70,11 +70,23 @@ import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useWallet } from '@/context/wallet-provider'
 import React from 'react'
+import { BrowserProvider } from 'ethers'
+import { signAuthMessage } from '@/lib/wallet-auth'
 import type { TaskType } from '@/lib/types'
 import {
   becomeHost,
-  createCampaign,
-  createAndActivateCampaign,
+  createDraftCampaignWithTasks,
+  configureAndFundERC20Reward,
+  setCampaignMaxParticipantsOnChain,
+  getProtocolFeeEnabled,
+  openCampaign,
+  configureRankTiers,
+  configureScoreTiers,
+  configureTaskPoints,
+  getERC20TokenInfo,
+  depositERC721Rewards,
+  depositERC1155Rewards,
+  type DraftTaskInput,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
@@ -87,6 +99,14 @@ import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
+
+/** Comma- or newline-separated list of numeric IDs -> trimmed, non-empty strings. */
+function parseIdList(raw: string): string[] {
+  return raw
+    .split(/[,\n]/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
 
 import { isAddress } from 'viem'
 
@@ -210,6 +230,16 @@ const campaignSchema = z.object({
       path: ['to'],
     }),
   imageUrl: z.string().url('Please enter a valid image URL.'),
+  // Per-campaign sybil-gating toggle (docs/HUMANITY_GATING.md). No contract field — an
+  // off-chain policy flag consumed by the allocation pipeline at tree-build time.
+  humanityGated: z.boolean().default(false),
+  maxParticipants: z
+    .string()
+    .optional()
+    .refine(
+      (v) => !v || (/^\d+$/.test(v) && Number(v) <= 100_000),
+      'Must be a whole number up to 100,000 (0 or blank = unlimited).',
+    ),
   tasks: z.array(taskSchema).min(1, 'At least one task is required.'),
   reward: z.discriminatedUnion('type', [
     z.object({
@@ -222,6 +252,31 @@ const campaignSchema = z.object({
         ),
       amount: z.string().min(1, 'Amount is required for ERC20 tokens.'),
       name: z.string().optional(),
+      // On-chain tiered settlement (P3 CP1, docs/REWARD_SYSTEM.md "ERC20 on-chain tiered
+      // settlement"). MERKLE (default) is the existing P1 off-chain-computed flow, unchanged.
+      settlementMode: z
+        .enum(['MERKLE', 'RANK_TIERED', 'SCORE_TIERED'])
+        .default('MERKLE'),
+      rankTiers: z
+        .array(
+          z.object({
+            startRank: z.coerce.number().int().min(1),
+            endRank: z.coerce.number().int().min(1),
+            amount: z.string().min(1),
+          }),
+        )
+        .optional(),
+      scoreTiers: z
+        .array(
+          z.object({
+            minScore: z.coerce.number().int().min(0),
+            amount: z.string().min(1),
+          }),
+        )
+        .optional(),
+      // Points awarded per task INDEX (aligned with the `tasks` array) toward SCORE_TIERED
+      // scoring. Index i here corresponds to tasks[i]; a task not listed scores 0.
+      taskPoints: z.array(z.coerce.number().int().min(0)).optional(),
     }),
     z.object({
       type: z.literal('ERC721'),
@@ -232,12 +287,65 @@ const campaignSchema = z.object({
           'Please enter a valid Ethereum address.',
         ),
       name: z.string().optional(),
+      // P3 CP2 — NFT settlement (Merkle, same allocation/dispute-window pattern as ERC20).
+      // "ERC721" is kept as the discriminant literal for backwards form-state compatibility;
+      // nftStandard picks the ACTUAL on-chain standard being deposited.
+      nftStandard: z.enum(['ERC721', 'ERC1155']).default('ERC721'),
+      // Comma/newline-separated token IDs to deposit.
+      tokenIds: z.string().min(1, 'Enter at least one token ID.'),
+      // ERC1155 only: comma/newline-separated amounts, same order/count as tokenIds.
+      tokenAmounts: z.string().optional(),
     }),
     z.object({
       type: z.literal('None'),
       name: z.string().min(1, 'A description of the reward is required.'),
     }),
   ]),
+}).superRefine((data, ctx) => {
+  if (data.reward.type === 'ERC721') {
+    const ids = parseIdList(data.reward.tokenIds)
+    if (ids.length === 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter at least one token ID.', path: ['reward', 'tokenIds'] })
+    }
+    if (data.reward.nftStandard === 'ERC1155') {
+      const amounts = parseIdList(data.reward.tokenAmounts || '')
+      if (amounts.length !== ids.length) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Provide exactly ${ids.length} amount(s), one per token ID, in the same order.`,
+          path: ['reward', 'tokenAmounts'],
+        })
+      }
+    }
+    return
+  }
+  if (data.reward.type !== 'ERC20') return
+  if (data.reward.settlementMode === 'RANK_TIERED') {
+    if (!data.reward.rankTiers || data.reward.rankTiers.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Add at least one rank tier.',
+        path: ['reward', 'rankTiers'],
+      })
+    }
+  }
+  if (data.reward.settlementMode === 'SCORE_TIERED') {
+    if (!data.reward.scoreTiers || data.reward.scoreTiers.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Add at least one score tier.',
+        path: ['reward', 'scoreTiers'],
+      })
+    }
+    const totalPoints = (data.reward.taskPoints || []).reduce((s, p) => s + (p || 0), 0)
+    if (totalPoints === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Assign at least one task a point value greater than 0 for score-tiered scoring.',
+        path: ['reward', 'taskPoints'],
+      })
+    }
+  }
 })
 
 type CampaignFormValues = z.infer<typeof campaignSchema>
@@ -264,9 +372,27 @@ export default function CreateCampaignPage() {
   } | null>(null)
   const [isBecomingHost, setIsBecomingHost] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
-  const [createMode, setCreateMode] = useState<'draft' | 'activate'>('activate')
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [campaignCreated, setCampaignCreated] = useState(false)
+  // v0.6.0 Draft flow: creation is a multi-tx sequence (createCampaign -> batchAddTasks ->
+  // configureERC20Reward -> fund -> setMaxParticipants), always landing in Draft. Opening is
+  // a SEPARATE, explicit action gated by the go-live checklist below (FR-H6).
+  const [wizardPhase, setWizardPhase] = useState<'form' | 'created'>('form')
+  const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null)
+  const [creationProgress, setCreationProgress] = useState<string | null>(null)
+  // Resume state (FR-H7, re-enterable wizard): persisted the MOMENT each on-chain step
+  // succeeds, not just held in a local variable — if a LATER step in the sequence fails
+  // (funding is a common rejection point: the host declines the approve/fund tx in their
+  // wallet), retrying onSubmit must resume from the first step that hasn't succeeded, never
+  // re-run createDraftCampaignWithTasks (which would create a SECOND on-chain campaign and
+  // orphan the first, half-configured one).
+  const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null)
+  const [pendingFunded, setPendingFunded] = useState(false)
+  const [pendingTiersSet, setPendingTiersSet] = useState(false)
+  const [pendingDeposited, setPendingDeposited] = useState(false)
+  const [pendingCapSet, setPendingCapSet] = useState(false)
+  const [feeEnabled, setFeeEnabled] = useState(false)
+  const [isOpening, setIsOpening] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
   const { address, isConnected, role, checkRoles } = useWallet()
@@ -284,6 +410,8 @@ export default function CreateCampaignPage() {
         to: addDays(new Date(), 1),
       },
       imageUrl: `https://placehold.co/600x400`,
+      humanityGated: false,
+      maxParticipants: '',
       tasks: [
         {
           type: 'SOCIAL_FOLLOW',
@@ -293,7 +421,16 @@ export default function CreateCampaignPage() {
           telegramInviteLink: '',
         },
       ],
-      reward: { type: 'ERC20', tokenAddress: '0x' as `0x${string}`, amount: '', name: '' },
+      reward: {
+        type: 'ERC20',
+        tokenAddress: '0x' as `0x${string}`,
+        amount: '',
+        name: '',
+        settlementMode: 'MERKLE',
+        rankTiers: [],
+        scoreTiers: [],
+        taskPoints: [],
+      },
     },
     mode: 'onChange',
   })
@@ -302,17 +439,42 @@ export default function CreateCampaignPage() {
     control: form.control,
     name: 'tasks',
   })
+  const {
+    fields: rankTierFields,
+    append: appendRankTier,
+    remove: removeRankTier,
+  } = useFieldArray({ control: form.control, name: 'reward.rankTiers' })
+  const {
+    fields: scoreTierFields,
+    append: appendScoreTier,
+    remove: removeScoreTier,
+  } = useFieldArray({ control: form.control, name: 'reward.scoreTiers' })
 
   const rewardType = form.watch('reward.type')
+  const settlementMode = form.watch('reward.settlementMode')
+  const rankTiersWatched = form.watch('reward.rankTiers')
+  const scoreTiersWatched = form.watch('reward.scoreTiers')
+  const taskPointsWatched = form.watch('reward.taskPoints')
+  const humanityGatedWatched = form.watch('humanityGated')
   const dates = form.watch('dates')
   const tasks = form.watch('tasks')
 
-  const onSubmit = async (data: CampaignFormValues) => {
-    console.log('🚀 === FORM SUBMISSION STARTED ===')
-    console.log('📋 Form data received:', JSON.stringify(data, null, 2))
-    console.log('📋 Tasks in form data:', data.tasks)
-    console.log('📋 Create mode:', createMode)
+  // Keep reward.taskPoints aligned 1:1 with the tasks array (index i = tasks[i]'s points) as
+  // tasks are added/removed, only while SCORE_TIERED is actually selected (no-op otherwise).
+  useEffect(() => {
+    if (settlementMode !== 'SCORE_TIERED') return
+    const current = form.getValues('reward.taskPoints') || []
+    if (current.length !== tasks.length) {
+      const resized = tasks.map((_, i) => current[i] ?? 0)
+      form.setValue('reward.taskPoints', resized)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks.length, settlementMode])
 
+  // v0.6.0 Draft flow (FR-H2..H6): createCampaign -> batchAddTasks -> configureERC20Reward
+  // -> fundCampaignERC20 -> setMaxParticipants (optional). Always lands in Draft — opening is
+  // a separate, explicit step gated by the go-live checklist (see wizardPhase==='created').
+  const onSubmit = async (data: CampaignFormValues) => {
     if (!isConnected || !address) {
       toast({
         variant: 'destructive',
@@ -321,35 +483,293 @@ export default function CreateCampaignPage() {
       })
       return
     }
-    setIsLoading(true)
-    try {
-      console.log('🔄 About to call campaign creation function...')
-      const campaignId =
-        createMode === 'activate'
-          ? await createAndActivateCampaign(data)
-          : await createCampaign(data)
-
-      console.log('✅ Campaign created successfully with ID:', campaignId)
-      console.log('📸 Image URL in form data:', data.imageUrl)
-
-      // Mark campaign as successfully created to prevent cleanup
-      setCampaignCreated(true)
-
-      const successMessage =
-        createMode === 'activate'
-          ? `Your campaign (ID: ${campaignId}) has been created and activated!`
-          : `Your campaign (ID: ${campaignId}) has been created in Draft status.`
-
+    if (data.reward.type === 'None') {
       toast({
-        title: 'Success!',
-        description: successMessage,
+        variant: 'destructive',
+        title: 'Not available yet',
+        description: 'Off-chain rewards are coming in a later phase — choose ERC20 or NFT for now.',
       })
+      return
+    }
 
-      router.push(`/campaign/${campaignId}`)
+    setIsLoading(true)
+    // Tiered settlement has no Merkle tree to filter, so humanity gating for it is enforced by
+    // a REQUIRED HUMANITY_VERIFICATION task instead (docs/HUMANITY_GATING.md point 3) —
+    // auto-add one if the host enabled gating + tiered mode and didn't already add a task of
+    // this type themselves. Every task the wizard creates is already required
+    // (isOptional: false below), so no separate "required" flag is needed. Computed OUTSIDE the
+    // "first attempt only" block below (data-only, doesn't depend on campaign state) since the
+    // per-task metadata step further down needs it on a RESUMED submit too, not just the first.
+    const needsAutoHumanityTask =
+      data.reward.type === 'ERC20' &&
+      data.humanityGated &&
+      data.reward.settlementMode !== 'MERKLE' &&
+      !data.tasks.some((t) => t.type === 'HUMANITY_VERIFICATION')
+    // Resume from wherever a PRIOR attempt left off (FR-H7) — never re-run
+    // createDraftCampaignWithTasks once a campaign already exists on-chain for this
+    // wizard session, or a retry after e.g. a rejected funding tx would create a second,
+    // independent campaign and orphan the first, half-configured one.
+    let campaignId: string | null = pendingCampaignId
+    try {
+      if (!campaignId) {
+        // Contract requires strictly-future start times; nudge a "now" default forward
+        // rather than let the tx revert on a stale default.
+        const now = Math.floor(Date.now() / 1000)
+        const userStart = Math.floor(data.dates.from.getTime() / 1000)
+        const startTime = userStart <= now ? now + 60 : userStart
+        const endTime = Math.floor(data.dates.to.getTime() / 1000)
+
+        const draftTasks: DraftTaskInput[] = data.tasks.map((t) => ({
+          type: t.type,
+          description: t.description,
+          verificationData: t.verificationData || '',
+          isOptional: false,
+        }))
+        if (needsAutoHumanityTask) {
+          draftTasks.push({
+            type: 'HUMANITY_VERIFICATION',
+            description: 'Verify you are human via Humanity Protocol',
+            verificationData: '',
+            isOptional: false,
+          })
+        }
+
+        setCreationProgress('Creating campaign and adding tasks…')
+        campaignId = await createDraftCampaignWithTasks({
+          title: data.title,
+          startTime,
+          endTime,
+          tasks: draftTasks,
+        })
+        // Persist IMMEDIATELY — this on-chain campaign now exists regardless of whether
+        // any later step in this same submit succeeds.
+        setPendingCampaignId(campaignId)
+        setCampaignCreated(true)
+      }
+
+      if (data.reward.type === 'ERC20' && !pendingFunded) {
+        setCreationProgress('Configuring and funding the reward pool…')
+        await configureAndFundERC20Reward(
+          campaignId,
+          data.reward.tokenAddress,
+          data.reward.amount,
+        )
+        setPendingFunded(true)
+      }
+
+      if (data.reward.type === 'ERC20' && data.reward.settlementMode !== 'MERKLE' && !pendingTiersSet) {
+        setCreationProgress(
+          data.reward.settlementMode === 'RANK_TIERED'
+            ? 'Configuring rank tiers…'
+            : 'Configuring score tiers and task points…',
+        )
+        const tokenInfo = await getERC20TokenInfo(data.reward.tokenAddress)
+        const decimals = tokenInfo?.decimals ?? 18
+        if (data.reward.settlementMode === 'RANK_TIERED') {
+          await configureRankTiers(campaignId, data.reward.rankTiers || [], decimals)
+        } else {
+          await configureScoreTiers(campaignId, data.reward.scoreTiers || [], decimals)
+          // Points align 1:1 with the ORIGINAL tasks array by index — the auto-injected
+          // HUMANITY_VERIFICATION task (if any) is appended after it and correctly gets no
+          // points entry (a gating check shouldn't contribute to score).
+          const pointsEntries = (data.reward.taskPoints || [])
+            .map((points, taskIndex) => ({ taskIndex, points }))
+            .filter((p) => p.points > 0)
+          if (pointsEntries.length > 0) {
+            await configureTaskPoints(campaignId, pointsEntries)
+          }
+        }
+        setPendingTiersSet(true)
+      }
+
+      if (data.reward.type === 'ERC721' && !pendingDeposited) {
+        setCreationProgress('Depositing NFTs…')
+        const ids = parseIdList(data.reward.tokenIds)
+        const amounts =
+          data.reward.nftStandard === 'ERC1155' ? parseIdList(data.reward.tokenAmounts || '') : ids.map(() => '1')
+        // Contract caps deposits at 100/call — batch larger sets transparently.
+        const BATCH = 100
+        for (let i = 0; i < ids.length; i += BATCH) {
+          const idBatch = ids.slice(i, i + BATCH)
+          const amountBatch = amounts.slice(i, i + BATCH)
+          setCreationProgress(`Depositing NFTs (${i + idBatch.length}/${ids.length})…`)
+          if (data.reward.nftStandard === 'ERC1155') {
+            await depositERC1155Rewards(campaignId, data.reward.tokenAddress, idBatch, amountBatch)
+          } else {
+            await depositERC721Rewards(campaignId, data.reward.tokenAddress, idBatch)
+          }
+        }
+        // Record what was deposited — the contract has no enumerable view of this, so the
+        // NFT allocation pipeline reads it from here (src/lib/nft-allocation.ts).
+        try {
+          await fetch(`/api/campaigns/${campaignId}/nft-deposits`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              tokenAddress: data.reward.tokenAddress,
+              standard: data.reward.nftStandard,
+              items: ids.map((tokenId, i) => ({ tokenId, amount: amounts[i] })),
+            }),
+          })
+        } catch (e) {
+          console.warn('Failed to record NFT deposits (non-fatal, tokens are already escrowed on-chain):', e)
+        }
+        setPendingDeposited(true)
+      }
+
+      if (data.maxParticipants && Number(data.maxParticipants) > 0 && !pendingCapSet) {
+        setCreationProgress('Setting participant cap…')
+        await setCampaignMaxParticipantsOnChain(
+          campaignId,
+          Number(data.maxParticipants),
+        )
+        setPendingCapSet(true)
+      }
+
+      setCreationProgress('Saving campaign details…')
+      // Off-chain metadata: image/descriptions/reward name + the allocation policy and
+      // humanity-gating flag the pipeline will read at tree-build time (BR-G2).
+      try {
+        const authProvider = new BrowserProvider((window as any).ethereum)
+        const signer = await signAuthMessage(authProvider)
+        await fetch(`/api/campaigns/${campaignId}/image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            imageUrl: data.imageUrl || 'https://placehold.co/600x400',
+            signature: signer.signature,
+            message: signer.message,
+            shortDescription: data.shortDescription || '',
+            longDescription: data.description || '',
+            rewardType: data.reward.type,
+            // 'None' is rejected earlier in onSubmit (the type-guard toast + early return above),
+            // so only ERC20/ERC721 ever reach here.
+            rewardName:
+              data.reward.type === 'ERC20'
+                ? `${data.reward.amount} token pool`
+                : `${parseIdList(data.reward.tokenIds).length} ${data.reward.nftStandard} item(s)`,
+            humanityGated: data.humanityGated,
+            // Descriptive only — the chain is authoritative for which mode a campaign actually
+            // committed to. Tiered campaigns never go through the Merkle allocation pipeline
+            // (src/lib/allocation.ts), so this label is informational/analytics, not consumed
+            // by any settlement logic.
+            allocationPolicy:
+              data.reward.type === 'ERC20' && data.reward.settlementMode !== 'MERKLE'
+                ? `ON_CHAIN_${data.reward.settlementMode}`
+                : 'EQUAL_SPLIT',
+          }),
+        })
+      } catch (metadataError) {
+        console.warn('Failed to save campaign metadata:', metadataError)
+      }
+
+      // Per-task off-chain metadata (Discord/Telegram/Humanity/payment) — unchanged from
+      // the prior flow, still off-chain and orthogonal to the v0.6.0 chain rewrite.
+      for (let i = 0; i < data.tasks.length; i++) {
+        const task = data.tasks[i]
+        try {
+          if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
+            await fetch('/api/campaign-task-metadata', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                campaignId: Number(campaignId),
+                taskIndex: i,
+                taskType: task.type,
+                discordInviteLink: task.discordInviteLink,
+                discordServerId: task.verificationData,
+              }),
+            })
+          } else if (task.type === 'JOIN_TELEGRAM' && task.telegramInviteLink) {
+            await fetch('/api/campaign-task-metadata', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                campaignId: Number(campaignId),
+                taskIndex: i,
+                taskType: task.type,
+                telegramChatId: task.verificationData,
+                telegramInviteLink: task.telegramInviteLink,
+              }),
+            })
+          } else if (task.type === 'HUMANITY_VERIFICATION') {
+            const preset = (task as any).humanityPreset
+            await fetch('/api/campaign-task-metadata', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                campaignId: Number(campaignId),
+                taskIndex: i,
+                taskType: task.type,
+                metadata: {
+                  humanityPreset:
+                    Array.isArray(preset) && preset.length > 0
+                      ? preset
+                      : [preset ?? 'is_human'],
+                },
+              }),
+            })
+          } else if (task.type === 'ONCHAIN_TX' && task.paymentRequired) {
+            await fetch('/api/campaign-task-metadata', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                campaignId: Number(campaignId),
+                taskIndex: i,
+                taskType: task.type,
+                metadata: {
+                  paymentRequired: true,
+                  paymentRecipient: task.paymentRecipient,
+                  chainId: task.chainId,
+                  network: task.network,
+                  tokenAddress: task.tokenAddress || null,
+                  tokenSymbol: task.tokenSymbol,
+                  amount: task.amount,
+                  amountDisplay: task.amountDisplay,
+                },
+              }),
+            })
+          }
+        } catch (e) {
+          console.warn(`Failed to store metadata for task ${i}:`, e)
+        }
+      }
+
+      // Metadata for the auto-injected HUMANITY_VERIFICATION task (if any) — it's appended
+      // after every form-entered task, so its on-chain index is data.tasks.length. Defaults to
+      // the 'is_human' preset since the host never configured one for a task they didn't add.
+      if (needsAutoHumanityTask) {
+        try {
+          await fetch('/api/campaign-task-metadata', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              campaignId: Number(campaignId),
+              taskIndex: data.tasks.length,
+              taskType: 'HUMANITY_VERIFICATION',
+              metadata: { humanityPreset: ['is_human'] },
+            }),
+          })
+        } catch (e) {
+          console.warn('Failed to store metadata for auto-injected humanity task:', e)
+        }
+      }
+
+      setCreatedCampaignId(campaignId)
+      setWizardPhase('created')
+      setCreationProgress(null)
+      toast({
+        title: 'Campaign created!',
+        description: `Campaign ${campaignId} is funded and ready — open it when you're ready to go live.`,
+      })
     } catch (e) {
-      // Error toast is handled in the service
-      // Cleanup uploaded image if campaign creation failed
+      setCreationProgress(null)
+      // Error toast is already shown by the underlying web3-service call. Only clean up the
+      // uploaded image if we never got as far as creating the on-chain campaign — once it
+      // exists, the image is legitimately attached to it even if a later step failed.
       if (
+        !campaignId &&
         uploadedImageUrl &&
         uploadedImageUrl !== 'https://placehold.co/600x400'
       ) {
@@ -362,6 +782,14 @@ export default function CreateCampaignPage() {
   useEffect(() => {
     uploadedImageUrlRef.current = uploadedImageUrl
   }, [uploadedImageUrl])
+
+  // FR-H5: read live whether a protocol fee module is registered, so the funding
+  // itemization on the review step is honest rather than hardcoded.
+  useEffect(() => {
+    if (step === 4 && wizardPhase === 'form') {
+      getProtocolFeeEnabled().then(setFeeEnabled)
+    }
+  }, [step, wizardPhase])
 
   useEffect(() => {
     campaignCreatedRef.current = campaignCreated
@@ -563,7 +991,7 @@ export default function CreateCampaignPage() {
   if (role !== 'host') {
     return (
       <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <Card className="bg-card border shadow-lg">
+        <Card className="bg-card border shadow-elevated">
           <CardHeader>
             <CardTitle className="text-3xl font-bold text-center flex items-center justify-center gap-2">
               <UserPlus /> Become a Host
@@ -607,7 +1035,7 @@ export default function CreateCampaignPage() {
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
-      <Card className="bg-card border shadow-lg">
+      <Card className="bg-card border shadow-elevated">
         <CardHeader>
           <CardTitle className="text-3xl font-bold text-center">
             Create New Campaign
@@ -678,7 +1106,7 @@ export default function CreateCampaignPage() {
                           'text-xs tabular-nums',
                           aiPrompt.trim().length < 20
                             ? 'text-muted-foreground'
-                            : 'text-green-500',
+                            : 'text-foreground font-medium',
                         )}
                       >
                         {aiPrompt.trim().length}/20 min
@@ -768,7 +1196,7 @@ export default function CreateCampaignPage() {
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5">
                             {generationError.category === 'rate_limit' && (
-                              <Clock className="h-5 w-5 text-amber-500" />
+                              <Clock className="h-5 w-5 text-muted-foreground" />
                             )}
                             {generationError.category === 'network' && (
                               <Wifi className="h-5 w-5 text-destructive" />
@@ -1070,11 +1498,34 @@ export default function CreateCampaignPage() {
                             }}
                           />
                           {uploadedImageUrl && (
-                            <div className="mt-3 p-2 bg-green-500/10 border border-green-500/20 rounded text-sm text-green-600">
+                            <div className="mt-3 p-2 bg-status-claimable-bg border border-status-claimable-border rounded text-sm text-status-claimable-fg">
                               ✓ Image uploaded. You can change it after campaign
                               creation.
                             </div>
                           )}
+                        </div>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="humanityGated"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-lg border p-4">
+                        <FormControl>
+                          <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                          <FormLabel>Humanity-verified participants only</FormLabel>
+                          <FormDescription>
+                            When enabled, the reward allocation is built only from wallets
+                            that have completed Humanity Protocol verification — unverified
+                            wallets get no allocation leaf and mathematically cannot claim
+                            (tree-build filtering, not an on-chain check).
+                          </FormDescription>
                         </div>
                       </FormItem>
                     )}
@@ -1091,10 +1542,7 @@ export default function CreateCampaignPage() {
                   {/* Discord Bot Warning - Show if Discord tasks exist but bot URL is not configured */}
                   {tasks.some((task) => task.type === 'JOIN_DISCORD') &&
                     !config.discordBotInviteUrl && (
-                      <Alert
-                        variant="destructive"
-                        className="border-red-200 bg-red-50"
-                      >
+                      <Alert variant="destructive">
                         <Bot className="h-4 w-4" />
                         <AlertTitle>Discord Bot Not Configured</AlertTitle>
                         <AlertDescription>
@@ -1109,10 +1557,7 @@ export default function CreateCampaignPage() {
                   {/* Telegram Bot Warning - Show if Telegram tasks exist but bot username is not configured */}
                   {tasks.some((task) => task.type === 'JOIN_TELEGRAM') &&
                     !config.telegramBotUsername && (
-                      <Alert
-                        variant="destructive"
-                        className="border-orange-200 bg-orange-50"
-                      >
+                      <Alert variant="destructive">
                         <Bot className="h-4 w-4" />
                         <AlertTitle>Telegram Bot Not Configured</AlertTitle>
                         <AlertDescription>
@@ -1209,7 +1654,7 @@ export default function CreateCampaignPage() {
                                   purposes.
                                 </FormDescription>
                                 <details className="mt-2">
-                                  <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                                     How to get your Discord Server ID
                                   </summary>
                                   <div className="mt-2 text-xs space-y-1 text-muted-foreground">
@@ -1248,14 +1693,14 @@ export default function CreateCampaignPage() {
                           />
 
                           {/* Discord Bot Setup Instructions */}
-                          <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
-                            <div className="flex items-center gap-2 text-blue-800">
+                          <div className="p-4 bg-secondary/40 border border-border rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-foreground">
                               <Bot className="h-5 w-5" />
                               <h4 className="font-semibold">
                                 Required: Add DappDrop Bot to Your Server
                               </h4>
                             </div>
-                            <p className="text-sm text-blue-700">
+                            <p className="text-sm text-muted-foreground">
                               To enable automatic verification of Discord join
                               tasks, you must add our bot to your Discord
                               server.
@@ -1266,7 +1711,7 @@ export default function CreateCampaignPage() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="w-fit bg-white border-blue-300 text-blue-700 hover:bg-blue-50"
+                                  className="w-fit bg-background border-border text-foreground hover:bg-secondary"
                                   onClick={() =>
                                     window.open(
                                       config.discordBotInviteUrl!,
@@ -1278,12 +1723,12 @@ export default function CreateCampaignPage() {
                                   Add DappDrop Bot to Server
                                 </Button>
                               ) : (
-                                <p className="text-sm text-blue-600 font-medium">
+                                <p className="text-sm text-muted-foreground font-medium">
                                   Discord bot invite URL not configured. Please
                                   contact support.
                                 </p>
                               )}
-                              <div className="text-xs text-blue-600 space-y-1">
+                              <div className="text-xs text-muted-foreground space-y-1">
                                 <p>
                                   <strong>Required Permissions:</strong>
                                 </p>
@@ -1317,7 +1762,7 @@ export default function CreateCampaignPage() {
                                   (with @) used for verification
                                 </FormDescription>
                                 <details className="mt-2">
-                                  <summary className="cursor-pointer text-blue-600 hover:text-blue-800">
+                                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
                                     How to get your Telegram Channel/Group ID
                                   </summary>
                                   <div className="mt-2 text-xs space-y-1 text-muted-foreground">
@@ -1366,14 +1811,14 @@ export default function CreateCampaignPage() {
                           />
 
                           {/* Telegram Bot Setup Instructions */}
-                          <div className="p-4 bg-sky-50 border border-sky-200 rounded-lg space-y-3">
-                            <div className="flex items-center gap-2 text-sky-800">
+                          <div className="p-4 bg-secondary/40 border border-border rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-foreground">
                               <Bot className="h-5 w-5" />
                               <h4 className="font-semibold">
                                 Required: Add DappDrop Bot to Your Channel/Group
                               </h4>
                             </div>
-                            <p className="text-sm text-sky-700">
+                            <p className="text-sm text-muted-foreground">
                               To enable automatic verification of Telegram join
                               tasks, you must add our bot to your Telegram
                               channel/group.
@@ -1384,7 +1829,7 @@ export default function CreateCampaignPage() {
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  className="w-fit bg-white border-sky-300 text-sky-700 hover:bg-sky-50"
+                                  className="w-fit bg-background border-border text-foreground hover:bg-secondary"
                                   onClick={() =>
                                     window.open(
                                       `https://t.me/${config.telegramBotUsername}`,
@@ -1397,12 +1842,12 @@ export default function CreateCampaignPage() {
                                   Channel/Group
                                 </Button>
                               ) : (
-                                <p className="text-sm text-sky-600 font-medium">
+                                <p className="text-sm text-muted-foreground font-medium">
                                   Telegram bot username not configured. Please
                                   contact support.
                                 </p>
                               )}
-                              <div className="text-xs text-sky-600 space-y-1">
+                              <div className="text-xs text-muted-foreground space-y-1">
                                 <p>
                                   <strong>Required Permissions:</strong>
                                 </p>
@@ -1424,11 +1869,11 @@ export default function CreateCampaignPage() {
                       {tasks[index].type === 'ONCHAIN_TX' && (
                         <div className="space-y-4">
                           {/* Beta Notice */}
-                          <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-amber-400 text-amber-900">
+                          <div className="flex items-center gap-2 p-3 bg-secondary/40 border border-border rounded-lg">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-foreground text-background">
                               BETA
                             </span>
-                            <p className="text-sm text-amber-800">
+                            <p className="text-sm text-muted-foreground">
                               On-chain actions (x402 Payment Protocol) are
                               currently in beta. Features may change.
                             </p>
@@ -1457,16 +1902,16 @@ export default function CreateCampaignPage() {
 
                           {tasks[index].paymentRequired && (
                             <TooltipProvider>
-                              <div className="space-y-3 p-5 bg-gradient-to-br from-purple-50 to-indigo-50 border-2 border-purple-200/60 rounded-xl shadow-sm">
+                              <div className="space-y-3 p-5 bg-secondary/40 border border-border rounded-xl shadow-sm">
                                 <div className="flex items-center justify-between mb-1">
-                                  <h4 className="font-semibold text-purple-900 flex items-center gap-2">
+                                  <h4 className="font-semibold text-foreground flex items-center gap-2">
                                     💰 Payment Configuration
                                   </h4>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <button
                                         type="button"
-                                        className="text-purple-600 hover:text-purple-800 transition-colors"
+                                        className="text-muted-foreground hover:text-foreground transition-colors"
                                       >
                                         <Info className="h-4 w-4" />
                                       </button>
@@ -1487,7 +1932,7 @@ export default function CreateCampaignPage() {
                                   name={`tasks.${index}.paymentRecipient`}
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-sm font-medium text-gray-900">
+                                      <FormLabel className="text-sm font-medium text-foreground">
                                         Recipient Wallet
                                       </FormLabel>
                                       <FormControl>
@@ -1509,7 +1954,7 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.network`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-gray-900">
+                                        <FormLabel className="text-sm font-medium text-foreground">
                                           Network
                                         </FormLabel>
                                         <Select
@@ -1563,7 +2008,7 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.tokenSymbol`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-gray-900">
+                                        <FormLabel className="text-sm font-medium text-foreground">
                                           Token
                                         </FormLabel>
                                         <FormControl>
@@ -1585,11 +2030,11 @@ export default function CreateCampaignPage() {
                                   name={`tasks.${index}.tokenAddress`}
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                      <FormLabel className="text-sm font-medium text-foreground flex items-center gap-2">
                                         Token Contract
                                         <Tooltip>
                                           <TooltipTrigger asChild>
-                                            <span className="text-xs text-purple-600 cursor-help">
+                                            <span className="text-xs text-muted-foreground cursor-help">
                                               (optional)
                                             </span>
                                           </TooltipTrigger>
@@ -1621,11 +2066,11 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.amount`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                        <FormLabel className="text-sm font-medium text-foreground flex items-center gap-1">
                                           Amount (ETH)
                                           <Tooltip>
                                             <TooltipTrigger asChild>
-                                              <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                                              <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                                             </TooltipTrigger>
                                             <TooltipContent>
                                               <p className="text-sm">
@@ -1670,11 +2115,11 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.amountDisplay`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-gray-900 flex items-center gap-1">
+                                        <FormLabel className="text-sm font-medium text-foreground flex items-center gap-1">
                                           Display Format
                                           <Tooltip>
                                             <TooltipTrigger asChild>
-                                              <Info className="h-3 w-3 text-gray-400 cursor-help" />
+                                              <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                                             </TooltipTrigger>
                                             <TooltipContent>
                                               <p className="text-sm">
@@ -1697,7 +2142,7 @@ export default function CreateCampaignPage() {
                                   />
                                 </div>
 
-                                <div className="flex items-center gap-2 pt-1 text-xs text-purple-700 bg-purple-100/50 px-3 py-2 rounded-md border border-purple-200/50">
+                                <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground bg-secondary px-3 py-2 rounded-md border border-border">
                                   <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
                                   <span>
                                     Payments verified automatically via
@@ -1712,14 +2157,14 @@ export default function CreateCampaignPage() {
 
                       {tasks[index].type === 'HUMANITY_VERIFICATION' && (
                         <div className="space-y-4">
-                          <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3 dark:bg-purple-950/20 dark:border-purple-800/40">
-                            <div className="flex items-center gap-2 text-purple-800 dark:text-purple-300">
+                          <div className="p-4 bg-secondary/50 border border-border rounded-lg space-y-3">
+                            <div className="flex items-center gap-2 text-foreground">
                               <ShieldCheck className="h-5 w-5" />
                               <h4 className="font-semibold">
                                 Verification Presets
                               </h4>
                             </div>
-                            <p className="text-sm text-purple-700 dark:text-purple-400">
+                            <p className="text-sm text-muted-foreground">
                               Select one or more Humanity Protocol checks users
                               must pass to complete this task.
                             </p>
@@ -1767,7 +2212,7 @@ export default function CreateCampaignPage() {
                                           key={cat.key}
                                           className="space-y-1.5"
                                         >
-                                          <p className="text-xs font-semibold text-purple-600 dark:text-purple-400 uppercase tracking-wide">
+                                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                                             {cat.label}
                                           </p>
                                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1778,8 +2223,8 @@ export default function CreateCampaignPage() {
                                                 <label
                                                   key={p.preset}
                                                   className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isChecked
-                                                    ? 'border-purple-500 bg-purple-50 dark:bg-purple-950/30 ring-1 ring-purple-500/30'
-                                                    : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 hover:bg-purple-50/50 dark:hover:bg-purple-950/10'
+                                                    ? 'border-foreground/40 bg-secondary/50 ring-1 ring-foreground/20'
+                                                    : 'border-border hover:border-foreground/20 hover:bg-secondary/50'
                                                     }`}
                                                 >
                                                   <Checkbox
@@ -1847,6 +2292,16 @@ export default function CreateCampaignPage() {
                   <h2 className="text-xl font-semibold border-b pb-2">
                     {steps[2].name}
                   </h2>
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>On-chain rewards: ERC20 or NFT</AlertTitle>
+                    <AlertDescription>
+                      Whichever you pick is escrowed now and distributed after the campaign
+                      ends, to wallets that completed every task — an ERC20 pool split
+                      equally, or one NFT per qualifying wallet. Off-chain (text) rewards
+                      are still to come.
+                    </AlertDescription>
+                  </Alert>
                   <FormField
                     control={form.control}
                     name="reward.type"
@@ -1871,16 +2326,14 @@ export default function CreateCampaignPage() {
                               <FormControl>
                                 <RadioGroupItem value="ERC721" />
                               </FormControl>
-                              <FormLabel className="font-normal">
-                                ERC721 Token (NFT)
-                              </FormLabel>
+                              <FormLabel className="font-normal">NFT (ERC721 / ERC1155)</FormLabel>
                             </FormItem>
                             <FormItem className="flex items-center space-x-3 space-y-0">
                               <FormControl>
-                                <RadioGroupItem value="None" />
+                                <RadioGroupItem value="None" disabled />
                               </FormControl>
-                              <FormLabel className="font-normal">
-                                Other (Text description)
+                              <FormLabel className="font-normal text-muted-foreground">
+                                Other (Text description) — coming in a later phase
                               </FormLabel>
                             </FormItem>
                           </RadioGroup>
@@ -1910,18 +2363,366 @@ export default function CreateCampaignPage() {
                       name="reward.amount"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Amount per Participant</FormLabel>
+                          <FormLabel>Total Reward Pool</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
-                              placeholder="1000"
+                              placeholder="10000"
                               {...field}
                             />
                           </FormControl>
+                          <FormDescription>
+                            The total token pool escrowed on-chain. After the campaign ends,
+                            it is split equally among every wallet that completed all tasks
+                            (equal-split policy — the default for this phase). Individual
+                            wallet amounts are computed then, not now.
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
+                  )}
+                  {rewardType === 'ERC20' && (
+                    <FormField
+                      control={form.control}
+                      name="reward.settlementMode"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel>Settlement mode</FormLabel>
+                          <FormControl>
+                            <RadioGroup
+                              onValueChange={field.onChange}
+                              defaultValue={field.value}
+                              className="flex flex-col space-y-1"
+                            >
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="MERKLE" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Merkle allocation — off-chain computed, 24h review window
+                                  before claims open (default)
+                                </FormLabel>
+                              </FormItem>
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="RANK_TIERED" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Rank-tiered — reward by completion order, computed entirely
+                                  on-chain, no dispute window
+                                </FormLabel>
+                              </FormItem>
+                              <FormItem className="flex items-center space-x-3 space-y-0">
+                                <FormControl>
+                                  <RadioGroupItem value="SCORE_TIERED" />
+                                </FormControl>
+                                <FormLabel className="font-normal">
+                                  Score-tiered — reward by task-point score, computed entirely
+                                  on-chain, no dispute window
+                                </FormLabel>
+                              </FormItem>
+                            </RadioGroup>
+                          </FormControl>
+                          <FormDescription>
+                            Tiered modes settle purely from on-chain completion state — no
+                            host-published root, no dispute window, and the campaign still
+                            settles completely even if you disappear after it ends.
+                          </FormDescription>
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                  {rewardType === 'ERC20' && settlementMode === 'RANK_TIERED' && (
+                    <div className="space-y-3 rounded-lg border p-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm">Rank tiers</h4>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            appendRankTier({ startRank: 1, endRank: 1, amount: '' })
+                          }
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" /> Add tier
+                        </Button>
+                      </div>
+                      {rankTierFields.map((f, i) => (
+                        <div
+                          key={f.id}
+                          className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end"
+                        >
+                          <FormField
+                            control={form.control}
+                            name={`reward.rankTiers.${i}.startRank`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">From rank</FormLabel>
+                                <FormControl>
+                                  <Input type="number" min={1} {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`reward.rankTiers.${i}.endRank`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">To rank</FormLabel>
+                                <FormControl>
+                                  <Input type="number" min={1} {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name={`reward.rankTiers.${i}.amount`}
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-xs">Amount / wallet</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="100" {...field} />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeRankTier(i)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      {(form.formState.errors.reward as any)?.rankTiers?.message && (
+                        <p className="text-sm font-medium text-destructive">
+                          {(form.formState.errors.reward as any).rankTiers.message}
+                        </p>
+                      )}
+                      {rankTiersWatched && rankTiersWatched.length > 0 && (
+                        <div className="mt-3 rounded-md bg-secondary/40 p-3 text-sm space-y-1">
+                          <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">
+                            Payout preview
+                          </p>
+                          {rankTiersWatched.map((t, i) => (
+                            <div key={i} className="flex justify-between">
+                              <span>
+                                Rank {t.startRank}–{t.endRank}
+                              </span>
+                              <span>{t.amount || '0'} tokens each</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {rewardType === 'ERC20' && settlementMode === 'SCORE_TIERED' && (
+                    <div className="space-y-4">
+                      <div className="space-y-3 rounded-lg border p-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-sm">Score tiers</h4>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => appendScoreTier({ minScore: 0, amount: '' })}
+                          >
+                            <Plus className="h-3.5 w-3.5 mr-1" /> Add tier
+                          </Button>
+                        </div>
+                        {scoreTierFields.map((f, i) => (
+                          <div
+                            key={f.id}
+                            className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end"
+                          >
+                            <FormField
+                              control={form.control}
+                              name={`reward.scoreTiers.${i}.minScore`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-xs">Minimum score</FormLabel>
+                                  <FormControl>
+                                    <Input type="number" min={0} {...field} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name={`reward.scoreTiers.${i}.amount`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel className="text-xs">Amount / wallet</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="100" {...field} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeScoreTier(i)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        {(form.formState.errors.reward as any)?.scoreTiers?.message && (
+                          <p className="text-sm font-medium text-destructive">
+                            {(form.formState.errors.reward as any).scoreTiers.message}
+                          </p>
+                        )}
+                        {scoreTiersWatched && scoreTiersWatched.length > 0 && (
+                          <div className="mt-3 rounded-md bg-secondary/40 p-3 text-sm space-y-1">
+                            <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">
+                              Payout preview
+                            </p>
+                            {scoreTiersWatched.map((t, i) => (
+                              <div key={i} className="flex justify-between">
+                                <span>Score ≥ {t.minScore}</span>
+                                <span>{t.amount || '0'} tokens</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-3 rounded-lg border p-4">
+                        <h4 className="font-medium text-sm">Points per task</h4>
+                        <FormDescription>
+                          Assign how many points each task contributes to a participant&apos;s
+                          score. A task not given any points doesn&apos;t affect scoring.
+                        </FormDescription>
+                        {tasks.map((t, i) => (
+                          <div key={i} className="flex items-center justify-between gap-3">
+                            <span className="text-sm text-muted-foreground truncate">
+                              [{TASK_TYPE_OPTIONS.find((o) => o.value === t.type)?.label}]{' '}
+                              {t.description || '(no description yet)'}
+                            </span>
+                            <FormField
+                              control={form.control}
+                              name={`reward.taskPoints.${i}`}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormControl>
+                                    <Input type="number" min={0} className="w-24" {...field} />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        ))}
+                        {(form.formState.errors.reward as any)?.taskPoints?.message && (
+                          <p className="text-sm font-medium text-destructive">
+                            {(form.formState.errors.reward as any).taskPoints.message}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {rewardType === 'ERC20' &&
+                    settlementMode !== 'MERKLE' &&
+                    humanityGatedWatched && (
+                      <Alert>
+                        <ShieldCheck className="h-4 w-4" />
+                        <AlertTitle>
+                          A required Humanity Verification task will be added
+                        </AlertTitle>
+                        <AlertDescription>
+                          Tiered settlement has no Merkle tree to filter — humanity gating for
+                          this campaign is enforced by a required &quot;Verify you&apos;re
+                          human&quot; task instead (docs/HUMANITY_GATING.md). It&apos;s added
+                          automatically; you don&apos;t need to add it yourself.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  {rewardType === 'ERC721' && (
+                    <>
+                      <FormField
+                        control={form.control}
+                        name="reward.nftStandard"
+                        render={({ field }) => (
+                          <FormItem className="space-y-3">
+                            <FormLabel>NFT standard</FormLabel>
+                            <FormControl>
+                              <RadioGroup
+                                onValueChange={field.onChange}
+                                defaultValue={field.value}
+                                className="flex flex-col space-y-1"
+                              >
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                  <FormControl>
+                                    <RadioGroupItem value="ERC721" />
+                                  </FormControl>
+                                  <FormLabel className="font-normal">
+                                    ERC721 — one unique item per token ID
+                                  </FormLabel>
+                                </FormItem>
+                                <FormItem className="flex items-center space-x-3 space-y-0">
+                                  <FormControl>
+                                    <RadioGroupItem value="ERC1155" />
+                                  </FormControl>
+                                  <FormLabel className="font-normal">
+                                    ERC1155 — a quantity per token ID
+                                  </FormLabel>
+                                </FormItem>
+                              </RadioGroup>
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="reward.tokenIds"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Token IDs to deposit</FormLabel>
+                            <FormControl>
+                              <Textarea
+                                placeholder={'1\n2\n3\n(comma or newline separated)'}
+                                rows={4}
+                                {...field}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              One qualifying wallet gets one item, assigned in this order after
+                              the campaign ends — more than 100 IDs are deposited in automatic
+                              batches.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      {form.watch('reward.nftStandard') === 'ERC1155' && (
+                        <FormField
+                          control={form.control}
+                          name="reward.tokenAmounts"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Amount per token ID</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder={'10\n5\n1\n(same order/count as Token IDs above)'}
+                                  rows={4}
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormDescription>
+                                Each entry is one indivisible item awarded to a single winner —
+                                one token ID&apos;s balance is not split across multiple wallets.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+                    </>
                   )}
                   {rewardType === 'None' && (
                     <FormField
@@ -1941,10 +2742,31 @@ export default function CreateCampaignPage() {
                       )}
                     />
                   )}
+                  <FormField
+                    control={form.control}
+                    name="maxParticipants"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Participant Cap (optional)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            placeholder="Leave blank for unlimited"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Once this many wallets have qualified, joining closes
+                          (up to 100,000). Leave blank for unlimited.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </section>
               )}
 
-              {step === 4 && (
+              {step === 4 && wizardPhase === 'form' && (
                 <section className="space-y-6 animate-in fade-in-50">
                   <h2 className="text-xl font-semibold border-b pb-2">
                     {steps[3].name} &amp; Create
@@ -1956,21 +2778,52 @@ export default function CreateCampaignPage() {
                     <p className="text-sm text-muted-foreground">
                       {form.getValues('shortDescription')}
                     </p>
-                    <div className="text-sm">
-                      <strong>Reward:</strong>{' '}
-                      {form.getValues('reward.type') === 'ERC20'
-                        ? `${form.getValues(
-                          'reward.amount',
-                        )} tokens from contract `
-                        : form.getValues('reward.type') === 'ERC721'
-                          ? `1 NFT from contract `
-                          : `${(form.getValues('reward') as any).name}`}
-                      {form.getValues('reward.type') !== 'None' && (
+                    {rewardType === 'ERC20' ? (
+                      <div className="text-sm">
+                        <strong>Reward pool:</strong>{' '}
+                        {form.getValues('reward.amount')} tokens from{' '}
                         <code className="text-xs bg-muted p-1 rounded">
-                          {(form.getValues('reward') as any).tokenAddress}
+                          {form.getValues('reward.tokenAddress')}
                         </code>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div className="text-sm">
+                        <strong>Reward:</strong>{' '}
+                        {parseIdList(form.getValues('reward.tokenIds') || '').length}{' '}
+                        {form.getValues('reward.nftStandard')} item(s) from{' '}
+                        <code className="text-xs bg-muted p-1 rounded">
+                          {form.getValues('reward.tokenAddress')}
+                        </code>
+                      </div>
+                    )}
+                    {rewardType === 'ERC20' && (
+                      <div className="text-sm">
+                        <strong>Settlement:</strong>{' '}
+                        {settlementMode === 'RANK_TIERED'
+                          ? `Rank-tiered — on-chain, no dispute window (${(rankTiersWatched || []).length} tier(s) configured)`
+                          : settlementMode === 'SCORE_TIERED'
+                            ? `Score-tiered — on-chain, no dispute window (${(scoreTiersWatched || []).length} tier(s) configured)`
+                            : 'Merkle allocation — equal split among wallets that complete every task'}
+                        {humanityGatedWatched
+                          ? settlementMode === 'MERKLE'
+                            ? ' — Humanity-verified wallets only'
+                            : ' — a required Humanity Verification task was added'
+                          : ''}
+                        .
+                      </div>
+                    )}
+                    {rewardType === 'ERC721' && (
+                      <div className="text-sm">
+                        <strong>Settlement:</strong> Merkle allocation — one item per qualifying
+                        wallet{humanityGatedWatched ? ' — Humanity-verified wallets only' : ''}.
+                      </div>
+                    )}
+                    {form.getValues('maxParticipants') && (
+                      <div className="text-sm">
+                        <strong>Participant cap:</strong>{' '}
+                        {form.getValues('maxParticipants')}
+                      </div>
+                    )}
                     <div className="text-sm">
                       <strong>Tasks:</strong>
                       <ul className="list-disc pl-5 mt-1 space-y-1">
@@ -1987,58 +2840,80 @@ export default function CreateCampaignPage() {
                         ))}
                       </ul>
                     </div>
+                  </div>
 
-                    {/* Campaign Mode Selection */}
-                    <div className="mt-6 p-4 border rounded-lg bg-muted/30">
-                      <h3 className="font-medium mb-3">Campaign Activation</h3>
-                      <div className="space-y-2">
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="createMode"
-                            value="activate"
-                            checked={createMode === 'activate'}
-                            onChange={(e) => setCreateMode('activate')}
-                            className="text-primary focus:ring-primary"
-                          />
-                          <div>
-                            <span className="font-medium">
-                              Create & Activate
-                            </span>
-                            <p className="text-xs text-muted-foreground">
-                              Campaign becomes active immediately (recommended)
-                            </p>
-                          </div>
-                        </label>
-                        <label className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="createMode"
-                            value="draft"
-                            checked={createMode === 'draft'}
-                            onChange={(e) => setCreateMode('draft')}
-                            className="text-primary focus:ring-primary"
-                          />
-                          <div>
-                            <span className="font-medium">Create as Draft</span>
-                            <p className="text-xs text-muted-foreground">
-                              Campaign stays in draft mode until manually opened
-                            </p>
-                          </div>
-                        </label>
+                  {/* FR-H5: itemize the funding transaction before the host signs it. */}
+                  {rewardType === 'ERC20' ? (
+                    <div className="rounded-lg border p-4 space-y-2">
+                      <h3 className="font-medium">Funding breakdown</h3>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Gross debit
+                        </span>
+                        <span>
+                          {form.getValues('reward.amount') || '0'} tokens
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          Protocol fee {feeEnabled ? '' : '(disabled on this deployment)'}
+                        </span>
+                        <span>0 tokens</span>
+                      </div>
+                      <div className="flex justify-between text-sm font-medium border-t pt-2">
+                        <span>Net escrowed</span>
+                        <span>
+                          {form.getValues('reward.amount') || '0'} tokens
+                        </span>
                       </div>
                     </div>
+                  ) : (
+                    <div className="rounded-lg border p-4 space-y-2">
+                      <h3 className="font-medium">NFTs to deposit</h3>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">{form.getValues('reward.nftStandard')} items</span>
+                        <span>{parseIdList(form.getValues('reward.tokenIds') || '').length}</span>
+                      </div>
+                    </div>
+                  )}
 
-                    <p className="text-xs pt-4 text-center text-muted-foreground">
-                      {createMode === 'activate'
-                        ? 'Your campaign will be created and become active based on your selected dates.'
-                        : 'Your campaign will be created in draft mode. You will need to open it manually for participants to join.'}
-                    </p>
-                  </div>
+                  <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>What happens when you click Create</AlertTitle>
+                    <AlertDescription>
+                      This runs several wallet transactions in sequence: create
+                      the campaign, add its tasks, configure the reward token,
+                      approve and fund the pool
+                      {form.getValues('maxParticipants')
+                        ? ', and set the participant cap'
+                        : ''}
+                      . The campaign is created in Draft — you open it live in
+                      a separate, final step.
+                    </AlertDescription>
+                  </Alert>
                 </section>
               )}
 
-              {step > 0 && (
+              {step === 4 && wizardPhase === 'created' && createdCampaignId && (
+                <GoLiveChecklist
+                  campaignId={createdCampaignId}
+                  isOpening={isOpening}
+                  onOpen={async () => {
+                    setIsOpening(true)
+                    try {
+                      await openCampaign(createdCampaignId, toast)
+                      router.push(`/campaign/${createdCampaignId}`)
+                    } catch {
+                      // Error toast already shown by openCampaign.
+                    } finally {
+                      setIsOpening(false)
+                    }
+                  }}
+                  onLater={() => router.push(`/campaign/${createdCampaignId}`)}
+                />
+              )}
+
+              {step > 0 && wizardPhase === 'form' && (
                 <div className="flex justify-between pt-4 mt-8 border-t">
                   <Button
                     type="button"
@@ -2060,7 +2935,7 @@ export default function CreateCampaignPage() {
                       {isLoading && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      Create Campaign
+                      {creationProgress || 'Create Campaign'}
                     </Button>
                   )}
                 </div>
@@ -2070,5 +2945,55 @@ export default function CreateCampaignPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+/** FR-H6: hard-blocks Open until tasks exist AND the reward is configured+funded — both are
+ * always true by the time this renders, since creation only reaches wizardPhase 'created'
+ * after the full Draft+fund sequence succeeds. Opening is a separate, explicit action; a
+ * completed Draft can sit indefinitely (FR-H7) via "I'll open it later". */
+function GoLiveChecklist({
+  campaignId,
+  isOpening,
+  onOpen,
+  onLater,
+}: {
+  campaignId: string
+  isOpening: boolean
+  onOpen: () => void
+  onLater: () => void
+}) {
+  return (
+    <section className="space-y-6 animate-in fade-in-50">
+      <h2 className="text-xl font-semibold border-b pb-2">Go live</h2>
+      <div className="rounded-lg border border-primary/20 bg-primary/5 p-6 space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Campaign {campaignId} was created and funded. It's in{' '}
+          <strong>Draft</strong> — participants can't see or join it until you
+          open it.
+        </p>
+        <ul className="space-y-2 text-sm">
+          <li className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-status-claimable-fg" /> Tasks added
+          </li>
+          <li className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-status-claimable-fg" /> Reward configured and
+            funded
+          </li>
+          <li className="flex items-center gap-2">
+            <Check className="h-4 w-4 text-status-claimable-fg" /> Start/end times valid
+          </li>
+        </ul>
+        <div className="flex gap-3 pt-2">
+          <Button onClick={onOpen} disabled={isOpening}>
+            {isOpening && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Open Campaign
+          </Button>
+          <Button variant="outline" onClick={onLater}>
+            I'll open it later
+          </Button>
+        </div>
+      </div>
+    </section>
   )
 }

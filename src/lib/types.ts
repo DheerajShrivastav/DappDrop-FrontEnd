@@ -1,12 +1,9 @@
 export type { HumanityPreset } from './humanity-presets'
 
-export type TaskType =
-  | 'SOCIAL_FOLLOW'
-  | 'JOIN_DISCORD'
-  | 'JOIN_TELEGRAM'
-  | 'RETWEET'
-  | 'ONCHAIN_TX'
-  | 'HUMANITY_VERIFICATION'
+// TaskType is defined once in the canonical taxonomy (docs/DECISIONS_v0.6.0.md Decision 2)
+// and re-exported here so existing `import { TaskType } from '@/lib/types'` sites keep working.
+import type { TaskType } from './task-types'
+export type { TaskType }
 
 export type Task = {
   id: string
@@ -35,11 +32,58 @@ export type UserTask = {
   isCompleting?: boolean
 }
 
+// v0.6.0 NOTE: the on-chain `Campaign` struct NO LONGER carries reward data (the `reward`
+// tuple was removed when rewards moved to escrow + post-end settlement). This shape is now
+// populated from OFF-CHAIN metadata (rewardName/rewardType persisted at creation).
+// TODO(P1): source authoritative reward figures (token, escrowed/net amount, settlement
+// mode) from the settlement views — getERC20Settlement(id), NFT module escrow, or the
+// tiered module — and extend `type` to distinguish MERKLE_ERC20 / RANK_TIERED /
+// SCORE_TIERED / NFT per docs/REWARD_SYSTEM.md.
 export type Reward = {
   type: 'ERC20' | 'ERC721' | 'None'
   tokenAddress: string
   amount?: string
   name: string
+}
+
+// v0.6.0 settlement mode a campaign has committed to (from indexed events). Mirrors the
+// subgraph SettlementMode enum; UNSET until the first mode-committing action.
+export type SettlementMode =
+  | 'UNSET'
+  | 'MERKLE_ERC20'
+  | 'RANK_TIERED'
+  | 'SCORE_TIERED'
+  | 'NFT'
+
+// Indexed on-chain settlement/lifecycle facts, sourced from the subgraph (or, partially,
+// from direct RPC on the fallback path). All optional so a campaign built from a thin
+// source degrades gracefully (the lifecycle helper + UI treat missing fields as "unknown").
+// NOTE (BR-I4): none of these are authoritative for a value-bearing action — claim/settle
+// paths re-verify against a direct RPC read at execution time (that lands in P1).
+export type CampaignSettlement = {
+  mode: SettlementMode
+  maxParticipants?: number // 0 = unlimited
+  closedAt?: Date
+  cancelledAt?: Date
+  refundedERC20?: string
+  // ERC20 escrow (net of protocol fee) + Merkle settlement
+  erc20Token?: string
+  erc20EscrowedNet?: string
+  erc20FeePaid?: string
+  erc20MerkleRoot?: string | null
+  erc20RootPublishedAt?: Date // dispute-window anchor (claims open at +24h)
+  erc20Swept?: boolean
+  erc20SweptAt?: Date
+  // NFT Merkle settlement (pinned module)
+  nftModule?: string
+  nftMerkleRoot?: string | null
+  nftRootPublishedAt?: Date
+  // On-chain tiered settlement (pinned module)
+  rewardModule?: string
+  tierCount?: number
+  // SETTLER_ROLE fallback (NFR-11)
+  fallbackRootPublished?: boolean
+  fallbackClosed?: boolean
 }
 
 export type Campaign = {
@@ -49,11 +93,14 @@ export type Campaign = {
   longDescription: string
   startDate: Date
   endDate: Date
-  status: 'Draft' | 'Open' | 'Ended' | 'Closed'
+  // v0.6.0 lifecycle: Draft→Open→Ended→Closed, plus terminal Cancelled (FR-M5, NFR-12).
+  status: 'Draft' | 'Open' | 'Ended' | 'Closed' | 'Cancelled'
   participants: number
   host: string
   tasks: Task[]
   reward: Reward
+  // v0.6.0 indexed settlement/lifecycle facts (optional; drives the NFR-9 state ladder).
+  settlement?: CampaignSettlement
   imageUrl: string
   'data-ai-hint'?: string
   lastSyncedAt?: Date

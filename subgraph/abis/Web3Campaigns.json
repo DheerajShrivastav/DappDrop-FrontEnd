@@ -14,6 +14,19 @@
   },
   {
     "type": "function",
+    "name": "CLAIM_GRACE_PERIOD",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "DEFAULT_ADMIN_ROLE",
     "inputs": [],
     "outputs": [
@@ -53,7 +66,7 @@
   },
   {
     "type": "function",
-    "name": "JOIN_COOLDOWN",
+    "name": "MAX_BATCH_SIZE",
     "inputs": [],
     "outputs": [
       {
@@ -79,7 +92,7 @@
   },
   {
     "type": "function",
-    "name": "MAX_PARTICIPANTS",
+    "name": "MAX_PARTICIPANTS_LIMIT",
     "inputs": [],
     "outputs": [
       {
@@ -118,6 +131,19 @@
   },
   {
     "type": "function",
+    "name": "MODERATOR_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "RATE_LIMIT_COOLDOWN",
     "inputs": [],
     "outputs": [
@@ -125,6 +151,58 @@
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "ROOT_DISPUTE_WINDOW",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "SETTLER_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "SIGNER_ROLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TASK_ATTESTATION_TYPEHASH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "stateMutability": "view"
@@ -177,12 +255,134 @@
   },
   {
     "type": "function",
-    "name": "claimReward",
+    "name": "batchAddTasks",
     "inputs": [
       {
         "name": "_campaignId",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "_taskTypes",
+        "type": "uint8[]",
+        "internalType": "enum CampaignStorage.TaskType[]"
+      },
+      {
+        "name": "_descriptions",
+        "type": "string[]",
+        "internalType": "string[]"
+      },
+      {
+        "name": "_verificationData",
+        "type": "bytes[]",
+        "internalType": "bytes[]"
+      },
+      {
+        "name": "_isOptional",
+        "type": "bool[]",
+        "internalType": "bool[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "batchVerifyTaskCompletionWithSignatures",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_participants",
+        "type": "address[]",
+        "internalType": "address[]"
+      },
+      {
+        "name": "_taskIndices",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "_completedFlags",
+        "type": "bool[]",
+        "internalType": "bool[]"
+      },
+      {
+        "name": "_deadlines",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "_signatures",
+        "type": "bytes[]",
+        "internalType": "bytes[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "cancelCampaign",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimERC20",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_proof",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimERC20For",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_proof",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
       }
     ],
     "outputs": [],
@@ -221,6 +421,24 @@
   },
   {
     "type": "function",
+    "name": "configureERC20Reward",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_tokenAddress",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "createCampaign",
     "inputs": [
       {
@@ -250,67 +468,97 @@
   },
   {
     "type": "function",
-    "name": "createCampaignWithTasksAndReward",
+    "name": "depositERC1155Rewards",
     "inputs": [
       {
-        "name": "_name",
-        "type": "string",
-        "internalType": "string"
-      },
-      {
-        "name": "_startTime",
+        "name": "_campaignId",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "_endTime",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "_taskTypes",
-        "type": "uint8[]",
-        "internalType": "enum CampaignStorage.TaskType[]"
-      },
-      {
-        "name": "_descriptions",
-        "type": "string[]",
-        "internalType": "string[]"
-      },
-      {
-        "name": "_verificationData",
-        "type": "bytes[]",
-        "internalType": "bytes[]"
-      },
-      {
-        "name": "_isOptional",
-        "type": "bool[]",
-        "internalType": "bool[]"
-      },
-      {
-        "name": "_rewardType",
-        "type": "uint8",
-        "internalType": "enum CampaignStorage.RewardType"
-      },
-      {
-        "name": "_tokenAddress",
+        "name": "_token",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "_amountOrTokenId",
-        "type": "uint256",
-        "internalType": "uint256"
+        "name": "_ids",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "_amounts",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
       }
     ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "depositERC721Rewards",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_tokenIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "eip712Domain",
+    "inputs": [],
     "outputs": [
       {
-        "name": "",
+        "name": "fields",
+        "type": "bytes1",
+        "internalType": "bytes1"
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "version",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "chainId",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "verifyingContract",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "salt",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "extensions",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
       }
     ],
-    "stateMutability": "nonpayable"
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -332,6 +580,80 @@
     "inputs": [
       {
         "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "executeNFTTransferOut",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_standard",
+        "type": "uint8",
+        "internalType": "enum CampaignStorage.NFTStandard"
+      },
+      {
+        "name": "_token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_tokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_recipient",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "flagAccount",
+    "inputs": [
+      {
+        "name": "_user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_score",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "fundCampaignERC20",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_amount",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -413,28 +735,6 @@
             ]
           },
           {
-            "name": "reward",
-            "type": "tuple",
-            "internalType": "struct CampaignStorage.CampaignReward",
-            "components": [
-              {
-                "name": "rewardType",
-                "type": "uint8",
-                "internalType": "enum CampaignStorage.RewardType"
-              },
-              {
-                "name": "tokenAddress",
-                "type": "address",
-                "internalType": "address"
-              },
-              {
-                "name": "amountOrTokenId",
-                "type": "uint256",
-                "internalType": "uint256"
-              }
-            ]
-          },
-          {
             "name": "createdAt",
             "type": "uint224",
             "internalType": "uint224"
@@ -451,6 +751,25 @@
   },
   {
     "type": "function",
+    "name": "getCampaignClosedAt",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getCampaignCount",
     "inputs": [],
     "outputs": [
@@ -458,6 +777,68 @@
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getCampaignHostAndStatus",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "host",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "status",
+        "type": "uint8",
+        "internalType": "enum CampaignStorage.CampaignStatus"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getCampaignNFTModule",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getCampaignRewardModule",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -510,6 +891,25 @@
   },
   {
     "type": "function",
+    "name": "getCampaignTaskCount",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getCampaignsByHost",
     "inputs": [
       {
@@ -529,6 +929,137 @@
   },
   {
     "type": "function",
+    "name": "getERC20ClaimableAt",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getERC20Settlement",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "escrowed",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "distributed",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "merkleRoot",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "closedAt",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "swept",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getFeeModule",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getMaxParticipants",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getOffChainReward",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct CampaignStorage.OffChainReward",
+        "components": [
+          {
+            "name": "enabled",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "rewardDescription",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "rewardMetadata",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getRoleAdmin",
     "inputs": [
       {
@@ -542,6 +1073,48 @@
         "name": "",
         "type": "bytes32",
         "internalType": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getTaskAttestationVersion",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_participant",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_taskIndex",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getTreasury",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -576,6 +1149,30 @@
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "hasClaimedERC20",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -680,6 +1277,118 @@
   },
   {
     "type": "function",
+    "name": "onERC1155BatchReceived",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      },
+      {
+        "name": "",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "onERC1155Received",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "onERC721Received",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes4",
+        "internalType": "bytes4"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "openCampaign",
     "inputs": [
       {
@@ -703,6 +1412,34 @@
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "payOnChainReward",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_participant",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "_amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_rankOrScore",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -755,7 +1492,7 @@
   },
   {
     "type": "function",
-    "name": "setCampaignReward",
+    "name": "setERC20MerkleRoot",
     "inputs": [
       {
         "name": "_campaignId",
@@ -763,19 +1500,120 @@
         "internalType": "uint256"
       },
       {
-        "name": "_rewardType",
-        "type": "uint8",
-        "internalType": "enum CampaignStorage.RewardType"
-      },
+        "name": "_merkleRoot",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setFeeModule",
+    "inputs": [
       {
-        "name": "_tokenAddress",
+        "name": "_module",
         "type": "address",
         "internalType": "address"
-      },
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMaxParticipants",
+    "inputs": [
       {
-        "name": "_amountOrTokenId",
+        "name": "_campaignId",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "_cap",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setNFTSettlementModule",
+    "inputs": [
+      {
+        "name": "_module",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setOffChainReward",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_description",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "_metadata",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setOnChainRewardModule",
+    "inputs": [
+      {
+        "name": "_module",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setSettlementMode",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_mode",
+        "type": "uint8",
+        "internalType": "enum CampaignStorage.ERC20SettlementMode"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setTreasury",
+    "inputs": [
+      {
+        "name": "_newTreasury",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [],
@@ -802,7 +1640,7 @@
   },
   {
     "type": "function",
-    "name": "verifyTaskCompletion",
+    "name": "verifyTaskCompletionWithSignature",
     "inputs": [
       {
         "name": "_campaignId",
@@ -818,10 +1656,133 @@
         "name": "_taskIndex",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "_completed",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "_deadline",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "_signature",
+        "type": "bytes",
+        "internalType": "bytes"
       }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "withdrawETH",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "withdrawUnclaimedERC20",
+    "inputs": [
+      {
+        "name": "_campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "event",
+    "name": "AccountFlagged",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "score",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "moderator",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BatchTasksAdded",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "count",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BatchTasksVerified",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "count",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "CampaignCancelled",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "host",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "refundedERC20",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
   },
   {
     "type": "event",
@@ -862,6 +1823,31 @@
   },
   {
     "type": "event",
+    "name": "CampaignFundedERC20",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "funder",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "CampaignStatusUpdated",
     "inputs": [
       {
@@ -875,6 +1861,106 @@
         "type": "uint8",
         "indexed": false,
         "internalType": "enum CampaignStorage.CampaignStatus"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "EIP712DomainChanged",
+    "inputs": [],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ERC20MerkleRootSet",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "merkleRoot",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ERC20RewardClaimed",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ERC20RewardClaimedOnChain",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "rankOrScore",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "ERC20RewardConfigured",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -919,6 +2005,76 @@
   },
   {
     "type": "event",
+    "name": "EtherWithdrawn",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FallbackClosed",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "settler",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FallbackRootPublished",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "settler",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FeeModuleUpdated",
+    "inputs": [
+      {
+        "name": "module",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "FundsReceived",
     "inputs": [
       {
@@ -932,6 +2088,120 @@
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MaxParticipantsUpdated",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "maxParticipants",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "NFTModulePinned",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "module",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "NFTModuleUpdated",
+    "inputs": [
+      {
+        "name": "module",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "NFTRewardsDeposited",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "standard",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum CampaignStorage.NFTStandard"
+      },
+      {
+        "name": "count",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OffChainRewardConfigured",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "description",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "OnChainRewardModuleUpdated",
+    "inputs": [
+      {
+        "name": "module",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -976,7 +2246,7 @@
   },
   {
     "type": "event",
-    "name": "RewardClaimed",
+    "name": "ProtocolFeeCollected",
     "inputs": [
       {
         "name": "campaignId",
@@ -985,25 +2255,13 @@
         "internalType": "uint256"
       },
       {
-        "name": "participant",
+        "name": "treasury",
         "type": "address",
         "indexed": true,
         "internalType": "address"
       },
       {
-        "name": "rewardType",
-        "type": "uint8",
-        "indexed": false,
-        "internalType": "enum CampaignStorage.RewardType"
-      },
-      {
-        "name": "tokenAddress",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      },
-      {
-        "name": "amountOrTokenId",
+        "name": "feeAmount",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
@@ -1013,7 +2271,7 @@
   },
   {
     "type": "event",
-    "name": "RewardSet",
+    "name": "RankTiersConfigured",
     "inputs": [
       {
         "name": "campaignId",
@@ -1022,22 +2280,29 @@
         "internalType": "uint256"
       },
       {
-        "name": "rewardType",
-        "type": "uint8",
-        "indexed": false,
-        "internalType": "enum CampaignStorage.RewardType"
-      },
-      {
-        "name": "tokenAddress",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      },
-      {
-        "name": "amountOrTokenId",
+        "name": "tierCount",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RewardModulePinned",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "module",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
       }
     ],
     "anonymous": false
@@ -1119,6 +2384,25 @@
   },
   {
     "type": "event",
+    "name": "ScoreTiersConfigured",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "tierCount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "SecurityViolationDetected",
     "inputs": [
       {
@@ -1188,6 +2472,106 @@
   },
   {
     "type": "event",
+    "name": "TaskPointsSet",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "count",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TaskVerifiedWithSignature",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "participant",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "taskIndex",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "completed",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      },
+      {
+        "name": "version",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "signer",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TreasuryUpdated",
+    "inputs": [
+      {
+        "name": "treasury",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "UnclaimedERC20Swept",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Unpaused",
     "inputs": [
       {
@@ -1222,6 +2606,33 @@
   },
   {
     "type": "error",
+    "name": "ECDSAInvalidSignature",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ECDSAInvalidSignatureLength",
+    "inputs": [
+      {
+        "name": "length",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ECDSAInvalidSignatureS",
+    "inputs": [
+      {
+        "name": "s",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "EnforcedPause",
     "inputs": []
   },
@@ -1232,17 +2643,54 @@
   },
   {
     "type": "error",
+    "name": "InvalidShortString",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ReentrancyGuardReentrantCall",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__AllTasksNotCompleted",
+    "name": "SafeERC20FailedOperation",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "StringTooLong",
+    "inputs": [
+      {
+        "name": "str",
+        "type": "string",
+        "internalType": "string"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__AlreadyClaimedSettlement",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__AlreadyClaimed",
+    "name": "Web3Campaigns__AlreadySwept",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__ArrayLengthMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__BatchTooLarge",
     "inputs": []
   },
   {
@@ -1262,7 +2710,12 @@
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__CampaignEnded",
+    "name": "Web3Campaigns__CampaignHasParticipants",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__CampaignNotCancellable",
     "inputs": []
   },
   {
@@ -1282,22 +2735,27 @@
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__CampaignStartTimeNotYetStrated",
+    "name": "Web3Campaigns__CampaignStartTimeNotYetStarted",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__ERC20TransferFailed",
+    "name": "Web3Campaigns__ERC20RewardNotConfigured",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__ERC721TransferFailed",
+    "name": "Web3Campaigns__FallbackDelayNotElapsed",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__InsufficientERC20Allowance",
+    "name": "Web3Campaigns__FeeExceedsAmount",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__GracePeriodActive",
     "inputs": []
   },
   {
@@ -1307,22 +2765,47 @@
   },
   {
     "type": "error",
+    "name": "Web3Campaigns__InsufficientEscrow",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InvalidAmount",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "Web3Campaigns__InvalidCampaignDuration",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__InvalidRewardAmount",
+    "name": "Web3Campaigns__InvalidFeeTreasury",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__InvalidRewardType",
+    "name": "Web3Campaigns__InvalidMerkleProof",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__InvalidTaskType",
+    "name": "Web3Campaigns__InvalidParticipantLimit",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InvalidSigner",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InvalidTierConfiguration",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__InvalidTokenAddress",
     "inputs": []
   },
   {
@@ -1332,7 +2815,53 @@
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__NoRewardSet",
+    "name": "Web3Campaigns__MerkleRootNotSet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__NFTModuleMismatch",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "expected",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "caller",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__NFTNotEscrowed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__NoFundsReceived",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__NoTierMatched",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__NotAContract",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__NotFullyCompleted",
     "inputs": []
   },
   {
@@ -1342,17 +2871,89 @@
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__PosterCannotAcceptOwnTask",
+    "name": "Web3Campaigns__NotOnChainRewardModule",
     "inputs": []
   },
   {
     "type": "error",
-    "name": "Web3Campaigns__RewardAlreadySet",
+    "name": "Web3Campaigns__NotSelfVerifiable",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__NothingToSweep",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__ParticipantLimitReached",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__RewardModuleMismatch",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "expected",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "caller",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__RootAlreadyPublished",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__RootDisputeWindowActive",
+    "inputs": [
+      {
+        "name": "campaignId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "claimableAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__SettlementModeAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__SettlementNotPublished",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__SignatureExpired",
     "inputs": []
   },
   {
     "type": "error",
     "name": "Web3Campaigns__TaskAlreadyCompleted",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__TaskManagedBySignature",
     "inputs": []
   },
   {
@@ -1367,7 +2968,27 @@
   },
   {
     "type": "error",
+    "name": "Web3Campaigns__TooManyTiers",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "Web3Campaigns__TransferFailed",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__TreasuryNotSet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__WrongSettlementMode",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__ZeroAddress",
     "inputs": []
   }
 ]

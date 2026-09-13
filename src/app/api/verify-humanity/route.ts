@@ -5,6 +5,7 @@ import {
   isUserVerified,
 } from '@/lib/humanity-service'
 import { validateWalletAddress } from '@/lib/validation-utils'
+import { autoAttestHumanityTasksForWallet } from '@/lib/humanity-tiered-attest'
 
 /**
  * POST /api/verify-humanity
@@ -53,12 +54,29 @@ export async function POST(request: Request) {
       lastVerifiedAt = result.verified_at
     }
 
+    // Best-effort, never allowed to turn this success into an error (docs/HUMANITY_GATING.md
+    // point 3): proactively attest any pending HUMANITY_VERIFICATION task on a humanity-gated
+    // campaign this wallet already has a task row for, so a tiered campaign's required-task
+    // qualification updates immediately rather than waiting for the participant to separately
+    // click "verify" on that specific task.
+    let autoAttested = 0
+    try {
+      const autoAttestResult = await autoAttestHumanityTasksForWallet(validAddress)
+      autoAttested = autoAttestResult.attested
+      if (autoAttestResult.errors.length > 0) {
+        console.warn('Auto-attest partial failures:', autoAttestResult.errors)
+      }
+    } catch (e) {
+      console.warn('Auto-attest for tiered campaigns failed (non-fatal):', e)
+    }
+
     return NextResponse.json({
       success: true,
       isHuman: true,
       walletAddress: validAddress,
       verifiedAt: lastVerifiedAt,
       presetsVerified: presets,
+      autoAttested,
     })
   } catch (error: any) {
     console.error('Humanity verification API error:', error)

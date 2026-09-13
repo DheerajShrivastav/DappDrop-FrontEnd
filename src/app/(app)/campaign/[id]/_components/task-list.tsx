@@ -22,20 +22,20 @@ import {
 } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 
+// Task-type icons are categorical, not status — kept neutral/monochrome (icon shape
+// alone communicates the type; color is reserved for lifecycle/money state).
 const TaskIcon = ({ type }: { type: TaskType['type'] }) => {
   switch (type) {
     case 'SOCIAL_FOLLOW':
-      return <Twitter className="h-5 w-5 text-primary" />
-    case 'JOIN_DISCORD':
-      return <MessageSquare className="h-5 w-5 text-indigo-600" />
-    case 'JOIN_TELEGRAM':
-      return <Bot className="h-5 w-5 text-blue-600" />
     case 'RETWEET':
-      return <Twitter className="h-5 w-5 text-primary" />
+      return <Twitter className="h-5 w-5 text-foreground/70" />
+    case 'JOIN_DISCORD':
+      return <MessageSquare className="h-5 w-5 text-foreground/70" />
+    case 'JOIN_TELEGRAM':
+      return <Bot className="h-5 w-5 text-foreground/70" />
     case 'ONCHAIN_TX':
-      return <ShieldCheck className="h-5 w-5 text-green-600" />
     case 'HUMANITY_VERIFICATION':
-      return <ShieldCheck className="h-5 w-5 text-purple-600" />
+      return <ShieldCheck className="h-5 w-5 text-foreground/70" />
     default:
       return <Bot className="h-5 w-5 text-muted-foreground" />
   }
@@ -67,12 +67,12 @@ export function TaskList({
           initial={{ y: -10, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.4 }}
-          className="flex items-start gap-3 p-4 rounded-xl border-2 border-amber-300 bg-amber-50 text-amber-900"
+          className="flex items-start gap-3 p-4 rounded-xl border border-status-pending-border bg-status-pending-bg text-status-pending-fg"
         >
-          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0 text-amber-500" />
+          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
           <div>
             <p className="font-semibold text-sm">Campaign end time has passed</p>
-            <p className="text-sm mt-0.5 text-amber-800">
+            <p className="text-sm mt-0.5 opacity-90">
               This campaign has passed its end date but has not been officially
               closed on-chain by the creator. Task interactions are disabled
               until the campaign is closed.
@@ -134,18 +134,18 @@ export function TaskList({
                   initial={{ x: -20, opacity: 0 }}
                   animate={{ x: 0, opacity: 1 }}
                   transition={{ delay: 0.5 + index * 0.1, duration: 0.4 }}
-                  className={`p-4 rounded-xl border-2 transition-all ${
+                  className={`p-4 rounded-xl border transition-all ${
                     isCompleted
-                      ? 'bg-green-50 border-green-200'
-                      : 'bg-white border-slate-200 hover:border-primary hover:shadow-card'
+                      ? 'bg-status-claimable-bg border-status-claimable-border'
+                      : 'bg-card border-border hover:border-foreground/20 hover:shadow-card'
                   }`}
                 >
                   <div className="flex items-start gap-4">
                     <div
-                      className={`p-3 rounded-lg ${isCompleted ? 'bg-green-100' : 'bg-slate-100'}`}
+                      className={`p-3 rounded-lg ${isCompleted ? 'bg-status-claimable-solid/10' : 'bg-secondary'}`}
                     >
                       {isCompleted ? (
-                        <CheckCircle className="h-5 w-5 text-green-600" />
+                        <CheckCircle className="h-5 w-5 text-status-claimable-fg" />
                       ) : (
                         <TaskIcon type={task.type} />
                       )}
@@ -156,7 +156,7 @@ export function TaskList({
                         {task.type === 'ONCHAIN_TX' && (
                           <Badge
                             variant="outline"
-                            className="text-[10px] px-1.5 py-0 h-5 border-amber-400 bg-amber-50 text-amber-700 font-semibold"
+                            className="text-[10px] px-1.5 py-0 h-5 font-semibold text-muted-foreground"
                           >
                             Beta
                           </Badge>
@@ -174,24 +174,23 @@ export function TaskList({
                       !isCompleted &&
                       campaign.status === 'Open' &&
                       (isTimeExpiredNotClosed ? (
-                        <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-700">
+                        <Badge variant="outline" className="border-status-pending-border bg-status-pending-bg text-status-pending-fg">
                           Expired
                         </Badge>
                       ) : campaign.participants >= 1000 ? (
-                        <Badge variant="destructive" className="bg-red-500">
+                        <Badge variant="destructive">
                           Campaign Full
                         </Badge>
                       ) : (
                         <Button
                           size="sm"
-                          className="shimmer"
                           onClick={() => onOpenVerifyDialog(task.id, task.type)}
                         >
                           Verify
                         </Button>
                       ))}
                     {isCompleted && (
-                      <Badge className="bg-green-600">
+                      <Badge className="bg-status-claimable-solid text-white border-transparent">
                         <CheckCircle className="h-3 w-3 mr-1" />
                         Done
                       </Badge>

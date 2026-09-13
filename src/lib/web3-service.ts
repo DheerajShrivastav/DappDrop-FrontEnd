@@ -1,8 +1,17 @@
 import { ethers, BrowserProvider, Contract, Eip1193Provider } from 'ethers'
 import { toast } from '@/hooks/use-toast'
-import type { Campaign, ParticipantData, TaskType } from './types'
+import type {
+  Campaign,
+  CampaignSettlement,
+  ParticipantData,
+  SettlementMode,
+  TaskType,
+} from './types'
+import { fromOnChainTaskType, toOnChainTaskType, OnChainTaskType } from './task-types'
 import config from '@/app/config'
 import Web3Campaigns from './abi/Web3Campaigns.json'
+import OnChainRewardModule from './abi/OnChainRewardModule.json'
+import NFTSettlementModule from './abi/NFTSettlementModule.json'
 import { addDays, endOfDay, differenceInSeconds } from 'date-fns'
 import {
   getGraphCampaigns,
@@ -110,6 +119,13 @@ export const initializeProviderAndContract = (
 // Initial call for read-only access
 initializeReadOnlyProvider()
 
+/** The signer-backed BrowserProvider for the connected wallet, or null before
+ * initializeProviderAndContract has run. Exposed so callers that need a provider for
+ * NON-contract work (SIWE message signing in the wallet context) reuse this one instance
+ * instead of constructing `new BrowserProvider(...)` themselves — CLAUDE.md keeps ethers out
+ * of components, and a second provider over the same transport is pure duplication anyway. */
+export const getWalletBrowserProvider = (): BrowserProvider | null => provider
+
 // --- Helper Functions ---
 
 const getSigner = async () => {
@@ -124,6 +140,15 @@ const getSigner = async () => {
   const signer = await provider.getSigner()
   return signer
 }
+
+// Exported as runWithConcurrencyPublic for reuse by server-side analytics aggregation
+// (src/lib/campaign-funnel.ts) — same bounded-concurrency helper the participant-detail fetch
+// already uses internally, not a duplicate implementation.
+export const runWithConcurrencyPublic = async <T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> => runWithConcurrency(items, limit, worker)
 
 const runWithConcurrency = async <T, R>(
   items: T[],
@@ -162,27 +187,19 @@ const mapContractDataToCampaign = (
     rewardName?: string | null
   },
 ): Campaign => {
-  const statusMap = ['Draft', 'Open', 'Ended', 'Closed']
-  const rewardTypeMap = ['ERC20', 'ERC721', 'None']
-  // Must match Solidity enum CampaignStorage.TaskType exactly:
-  // 0=SOCIAL_FOLLOW, 1=JOIN_DISCORD, 2=JOIN_TELEGRAM, 3=SOCIAL_REPOST,
-  // 4=ONCHAIN_TX, 5=HUMANITY_VERIFICATION, 6=SOCIAL_LIKE, 7=SOCIAL_POST,
-  // 8=WALLET_CONNECT, 9=ONCHAIN_HOLD_ERC20, 10=ONCHAIN_HOLD_ERC721
-  const taskTypeMap: TaskType[] = [
-    'SOCIAL_FOLLOW',         // 0
-    'JOIN_DISCORD',          // 1
-    'JOIN_TELEGRAM',         // 2
-    'RETWEET',               // 3 (SOCIAL_REPOST in Solidity)
-    'ONCHAIN_TX',            // 4
-    'HUMANITY_VERIFICATION', // 5
-  ]
+  const statusMap = ['Draft', 'Open', 'Ended', 'Closed', 'Cancelled']
 
-  // Use stored reward name if available, otherwise fall back to generated text
-  let rewardName = campaignMetadata?.rewardName || `Reward for ${contractData.name}`
-  if (!campaignMetadata?.rewardName && Number(contractData.reward.rewardType) === 2) {
-    // "None" type - use a more descriptive fallback
-    rewardName = 'A special off-chain reward'
-  }
+  // v0.6.0: on-chain task type is an advisory uint8; the app type is resolved through the
+  // canonical taxonomy (docs/DECISIONS_v0.6.0.md Decision 2). DISCORD_JOIN is shared by
+  // Discord and Telegram — the platform discriminator comes from off-chain metadata, which
+  // is joined later in getCampaignByIdWithMetadata. Without it we default to JOIN_DISCORD.
+  // TODO(P0): thread metadata.platform in here so Telegram tasks resolve to JOIN_TELEGRAM
+  // at map time rather than only after the metadata enrichment pass.
+
+  // Reward data is no longer on-chain (the `reward` struct field was removed in v0.6.0).
+  // Use the stored reward name/type from off-chain metadata.
+  const rewardName =
+    campaignMetadata?.rewardName || `Reward for ${contractData.name}`
 
   // Use stored descriptions if available, otherwise fall back to generated placeholders
   const shortDescription = campaignMetadata?.shortDescription || `A campaign hosted by ${contractData.host}`
@@ -215,7 +232,8 @@ const mapContractDataToCampaign = (
       | 'Draft'
       | 'Open'
       | 'Ended'
-      | 'Closed',
+      | 'Closed'
+      | 'Cancelled',
     participants: Number(contractData.totalParticipants),
     host: contractData.host,
     tasks: contractData.tasks.map((task: any, index: number) => {
@@ -237,7 +255,7 @@ const mapContractDataToCampaign = (
 
       // For Discord tasks, try to load invite link from task metadata
       let discordInviteLink = ''
-      if (taskTypeMap[Number(task.taskType)] === 'JOIN_DISCORD') {
+      if (fromOnChainTaskType(Number(task.taskType)) === 'JOIN_DISCORD') {
         if (taskMetadata && Array.isArray(taskMetadata)) {
           const metadata = taskMetadata.find((tm) => tm.taskIndex === index)
           if (metadata && metadata.discordInviteLink) {
@@ -258,19 +276,20 @@ const mapContractDataToCampaign = (
 
       return {
         id: index.toString(),
-        type: taskTypeMap[Number(task.taskType)] as TaskType,
+        type: fromOnChainTaskType(Number(task.taskType)) as TaskType,
         description: task.description,
         verificationData: verificationDataString,
         discordInviteLink: discordInviteLink || undefined,
       }
     }),
+    // v0.6.0: reward data comes from off-chain metadata, not the on-chain struct.
+    // TODO(P1): populate type/tokenAddress/amount from the settlement views
+    // (getERC20Settlement / NFT module escrow / tiered module) per docs/REWARD_SYSTEM.md.
     reward: {
-      type: rewardTypeMap[Number(contractData.reward.rewardType)] as
-        | 'ERC20'
-        | 'ERC721'
-        | 'None',
-      tokenAddress: contractData.reward.tokenAddress,
-      amount: contractData.reward.amountOrTokenId.toString(),
+      type: (campaignMetadata as { rewardType?: 'ERC20' | 'ERC721' | 'None' })
+        ?.rewardType || 'None',
+      tokenAddress: '',
+      amount: undefined,
       name: rewardName,
     },
     imageUrl: imageUrl || `https://placehold.co/600x400`,
@@ -462,12 +481,14 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
                 rewardName?: string
               }
             | undefined
+          let hiddenFromDiscovery = false
           if (typeof window !== 'undefined') {
             try {
               const imageResponse = await fetch(`/api/campaigns/${i}/image`)
               if (imageResponse.ok) {
                 const imageData = await imageResponse.json()
                 imageUrl = imageData.imageUrl
+                hiddenFromDiscovery = Boolean(imageData.hiddenFromDiscovery)
                 if (
                   imageData.shortDescription ||
                   imageData.longDescription ||
@@ -485,15 +506,20 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
             }
           }
 
-          const campaign = mapContractDataToCampaign(
-            campaignData,
-            i,
-            undefined,
-            imageUrl,
-            campaignMeta,
-          )
+          // P3 CP4: public discovery excludes admin-hidden campaigns (off-chain only —
+          // getCampaignsByHostAddress's RPC fallback does NOT apply this filter, so a host
+          // still sees their own hidden campaign on their dashboard).
+          if (!hiddenFromDiscovery) {
+            const campaign = mapContractDataToCampaign(
+              campaignData,
+              i,
+              undefined,
+              imageUrl,
+              campaignMeta,
+            )
 
-          campaigns.push(campaign)
+            campaigns.push(campaign)
+          }
         }
       } catch (error: any) {
         if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
@@ -725,6 +751,674 @@ export const getCampaignById = async (id: string): Promise<Campaign | null> => {
   }
 }
 
+/**
+ * Construct a Web3Campaigns entrypoint Contract bound to an arbitrary runner (a
+ * JsonRpcProvider for reads, or a Wallet for signing/sending). This is the single place
+ * outside this module's own client-side `contract`/`readOnlyContract` singletons that ABI +
+ * address wiring happens — server-only services (e.g. src/lib/signer.ts) MUST go through
+ * this instead of constructing `new ethers.Contract(...)` themselves, per this repo's
+ * "never instantiate a Contract outside web3-service.ts" convention (CLAUDE.md).
+ */
+export const getEntrypointContract = (
+  runner: ethers.ContractRunner,
+): Contract => new ethers.Contract(config.addresses.entrypoint, Web3Campaigns.abi, runner) as Contract
+
+/**
+ * The shared read-only entrypoint contract (server- and client-safe), initializing the
+ * module-level read-only provider on first use if needed. For server callers that only need
+ * view calls (e.g. the signer service reading task type / attestation version).
+ */
+export const getEntrypointReadContract = (): Contract => {
+  const c = getReadOnlyContract()
+  if (!c) throw new Error('Read-only contract could not be initialized')
+  return c
+}
+
+/**
+ * Construct an OnChainRewardModule Contract bound to an arbitrary runner AND an explicit
+ * module address — deliberately no default/global fallback baked in here. Per
+ * docs/ARCHITECTURE.md, a campaign's authoritative module is whichever instance it PINNED at
+ * settlement-mode adoption, which can differ from the current global default
+ * (`config.addresses.onChainRewardModule`) if the default has since rotated. Every call site
+ * below resolves the address explicitly (via getPinnedRewardModule for an existing campaign,
+ * or the global default ONLY for a brand-new campaign's first setRankTiers/setScoreTiers call,
+ * before any pin exists) — never hardcode or assume one over the other.
+ */
+export const getOnChainRewardModuleContract = (
+  moduleAddress: string,
+  runner: ethers.ContractRunner,
+): Contract => new ethers.Contract(moduleAddress, OnChainRewardModule.abi, runner) as Contract
+
+/**
+ * Read the campaign's PINNED reward-module address directly from the entrypoint
+ * (getCampaignRewardModule) — undefined if the campaign never adopted a tiered mode (no pin).
+ * This is the ONLY correct way to find which module instance is authoritative for an existing
+ * campaign; never assume it's the current global default (docs/ARCHITECTURE.md pinning rules).
+ */
+export const getPinnedRewardModule = async (campaignId: string): Promise<string | undefined> => {
+  const c = getEntrypointReadContract()
+  const addr: string = await c.getCampaignRewardModule(campaignId)
+  return addr && addr !== ethers.ZeroAddress ? addr : undefined
+}
+
+export type TieredRewardStatus = {
+  mode: 'UNSET' | 'MERKLE' | 'RANK_TIERED' | 'SCORE_TIERED'
+  rank: number
+  score: number
+  qualified: boolean
+  claimed: boolean
+}
+
+const ONCHAIN_SETTLEMENT_MODE_LABELS: TieredRewardStatus['mode'][] = [
+  'UNSET',
+  'MERKLE',
+  'RANK_TIERED',
+  'SCORE_TIERED',
+]
+
+/**
+ * A single participant's rank/score/qualification/claimed status, read from the campaign's
+ * PINNED module (never the global default). Returns undefined if the campaign never pinned a
+ * reward module (not a tiered campaign).
+ */
+export const getTieredRewardStatus = async (
+  campaignId: string,
+  participant: string,
+): Promise<TieredRewardStatus | undefined> => {
+  const moduleAddress = await getPinnedRewardModule(campaignId)
+  if (!moduleAddress) return undefined
+  const c = getOnChainRewardModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  const [mode, rank, score, qualified, claimed] = await c.getOnChainRewardStatus(
+    campaignId,
+    participant,
+  )
+  return {
+    mode: ONCHAIN_SETTLEMENT_MODE_LABELS[Number(mode)] ?? 'UNSET',
+    rank: Number(rank),
+    score: Number(score),
+    qualified,
+    claimed,
+  }
+}
+
+export type TierView = { threshold: string; thresholdEnd: string; amount: string }
+
+/** Configured tiers for a campaign, read from its PINNED module. Empty if never pinned. */
+export const getTieredTiers = async (campaignId: string): Promise<TierView[]> => {
+  const moduleAddress = await getPinnedRewardModule(campaignId)
+  if (!moduleAddress) return []
+  const c = getOnChainRewardModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  const tiers = await c.getTiers(campaignId)
+  return tiers.map((t: any) => ({
+    threshold: t.threshold.toString(),
+    thresholdEnd: t.thresholdEnd.toString(),
+    amount: t.amount.toString(),
+  }))
+}
+
+export type LeaderboardEntry = {
+  address: string
+  rank: number
+  score: number
+  qualified: boolean
+  claimed: boolean
+}
+
+/**
+ * Leaderboard standings for a tiered campaign. There is no bulk on-chain getter for
+ * rank/score (OnChainRewardModule only exposes getOnChainRewardStatus per-participant), so
+ * this reads the participant list (already indexed/cached elsewhere in this file) and fans out
+ * with the SAME bounded concurrency (PARTICIPANT_QUERY_CONCURRENCY) used by
+ * getCampaignParticipants, against the campaign's PINNED module. Sorted by rank (RANK_TIERED,
+ * unranked last) or score descending (SCORE_TIERED).
+ */
+export const getTieredLeaderboard = async (campaign: Campaign): Promise<LeaderboardEntry[]> => {
+  const moduleAddress = await getPinnedRewardModule(campaign.id)
+  if (!moduleAddress) return []
+
+  const participants = await getCampaignParticipants(campaign)
+  if (participants.length === 0) return []
+
+  const c = getOnChainRewardModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  const isRank = campaign.settlement?.mode === 'RANK_TIERED'
+
+  const entries = await runWithConcurrency(
+    participants.map((p) => p.address),
+    PARTICIPANT_QUERY_CONCURRENCY,
+    async (address): Promise<LeaderboardEntry> => {
+      const [, rank, score, qualified, claimed] = await c.getOnChainRewardStatus(
+        campaign.id,
+        address,
+      )
+      return {
+        address,
+        rank: Number(rank),
+        score: Number(score),
+        qualified,
+        claimed,
+      }
+    },
+  )
+
+  return entries
+    .filter((e) => (isRank ? e.rank > 0 : e.score > 0))
+    .sort((a, b) => (isRank ? a.rank - b.rank : b.score - a.score))
+}
+
+export type ClaimEvent = { account: string; blockNumber: number; timestamp: number }
+
+/**
+ * Claim events for a campaign, read directly from chain logs (BR-I4 — the subgraph is
+ * currently disabled per docs/DECISIONS_v0.6.0.md Decision 3, so this is the direct-RPC
+ * equivalent of "indexed data" for claim-rate-over-time analytics). Selects the event/contract
+ * matching the campaign's settlement mode: ERC20RewardClaimed (Merkle, on the entrypoint —
+ * covers both self- and sponsored claims, since claimERC20For shares the same emit path),
+ * ERC20RewardClaimedOnChain (tiered, entrypoint), or NFTRewardClaimed (NFT, on the campaign's
+ * PINNED module). `campaignId` is an indexed topic on all three, so the RPC filters server-side
+ * rather than scanning every campaign's events.
+ *
+ * Chunked with a single range-limit fallback (not the full adaptive retry loop
+ * getCampaignParticipantAddresses uses) — claim events are orders of magnitude rarer than
+ * per-participant task-completion events, so a simpler scan is an acceptable, documented
+ * tradeoff for a display-only analytics feature.
+ */
+export const getClaimEvents = async (campaign: Campaign): Promise<ClaimEvent[]> => {
+  const mode = campaign.settlement?.mode
+  let contractToUse: Contract | null = null
+  let filter: ReturnType<Contract['filters']['ERC20RewardClaimed']> | null = null
+
+  if (mode === 'RANK_TIERED' || mode === 'SCORE_TIERED') {
+    contractToUse = getEntrypointReadContract()
+    filter = contractToUse.filters.ERC20RewardClaimedOnChain(campaign.id)
+  } else if (mode === 'NFT') {
+    const moduleAddress = await getPinnedNFTModule(campaign.id)
+    if (!moduleAddress) return []
+    contractToUse = getNFTSettlementModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+    filter = contractToUse.filters.NFTRewardClaimed(campaign.id)
+  } else if (mode === 'MERKLE_ERC20') {
+    contractToUse = getEntrypointReadContract()
+    filter = contractToUse.filters.ERC20RewardClaimed(campaign.id)
+  } else {
+    return []
+  }
+
+  const provider = contractToUse.runner as ethers.Provider
+  const latestBlock = await provider.getBlockNumber()
+  // Scanning from the CONTRACT's deploy block (weeks/months of history for a long-lived
+  // deployment) rather than this CAMPAIGN's own window is wasteful and, on a rate/range-limited
+  // provider, can make the scan take many minutes for no reason. Estimate a start block from
+  // the campaign's own startDate via the deploy block's real timestamp (one cheap extra read)
+  // interpolated against the current block/time, with a safety margin for estimation error —
+  // a campaign's claim events can only exist after it started, so this can never miss real
+  // events, only avoid scanning blocks that could never contain any.
+  const deployBlock = config.addresses.deployBlock || 0
+  let fromBlockBase = deployBlock
+  try {
+    const [deployBlockInfo, latestBlockInfo] = await Promise.all([
+      provider.getBlock(deployBlock),
+      provider.getBlock(latestBlock),
+    ])
+    if (deployBlockInfo && latestBlockInfo && latestBlockInfo.timestamp > deployBlockInfo.timestamp) {
+      const avgSecondsPerBlock =
+        (latestBlockInfo.timestamp - deployBlockInfo.timestamp) / (latestBlock - deployBlock)
+      const campaignStartUnix = Math.floor(campaign.startDate.getTime() / 1000)
+      const SAFETY_MARGIN_SECONDS = 6 * 3600 // 6h — generous cushion against estimation drift
+      const estimatedBlocksSinceDeploy = Math.floor(
+        (campaignStartUnix - SAFETY_MARGIN_SECONDS - deployBlockInfo.timestamp) / avgSecondsPerBlock,
+      )
+      fromBlockBase = Math.max(deployBlock, deployBlock + estimatedBlocksSinceDeploy)
+    }
+  } catch (e) {
+    console.warn('getClaimEvents: block-time estimation failed, falling back to deployBlock:', e)
+  }
+
+  // Probe the provider's actual max eth_getLogs range with a single call before building the
+  // chunk plan — found live against this deployment's RPC (Alchemy free tier): it hard-caps at
+  // 10 blocks/request, nowhere near MAX_LOG_RANGE_FALLBACK (2000). Discovering this AFTER
+  // starting a sequential scan (the original approach) meant shrinking chunk size mid-scan and
+  // continuing sequentially — over a ~13k block window at 10 blocks/chunk that's ~1300
+  // sequential round-trips, effectively hanging. Discovering it up front lets the whole chunk
+  // plan be fetched CONCURRENTLY instead (bounded), which is what actually fixes the wall-clock
+  // time — smaller chunks alone would not have.
+  let chunkSize = MAX_LOG_RANGE_FALLBACK
+  try {
+    await contractToUse.queryFilter(filter, fromBlockBase, Math.min(fromBlockBase + chunkSize, latestBlock))
+  } catch (error: any) {
+    const msg: string = error?.error?.message || error?.shortMessage || error?.message || ''
+    const rangeMatch = msg.match(/up to a (\d+) block range/i)
+    if (rangeMatch?.[1]) {
+      chunkSize = Math.max(1, Number(rangeMatch[1]))
+    }
+  }
+
+  let ranges: { from: number; to: number }[] = []
+  for (let from = fromBlockBase; from <= latestBlock; from += chunkSize) {
+    ranges.push({ from, to: Math.min(from + chunkSize - 1, latestBlock) })
+  }
+
+  // Hard cap on total requests: on a heavily rate/range-limited free-tier RPC (10
+  // blocks/request observed live against this deployment's endpoint), a wide window can still
+  // mean hundreds of chunks even after scoping to the campaign's own dates. This is a
+  // display-only analytics feature (BR-I4: never a value-bearing read), so a bounded-time
+  // partial result is the right tradeoff over blocking the host's page load for minutes — if
+  // the cap is hit, the OLDEST part of the window is dropped first (claims right after Ended
+  // are the common case and most useful to show; a campaign's full historical curve is a
+  // nice-to-have, not required for the funnel counts elsewhere in this module, which come from
+  // getCampaignParticipants/DB, not from this scan).
+  const MAX_CHUNKS = 200
+  if (ranges.length > MAX_CHUNKS) {
+    console.warn(
+      `getClaimEvents: ${ranges.length} chunks needed for campaign ${campaign.id}, capping to the most recent ${MAX_CHUNKS} (partial result — claims-over-time chart may be missing older entries)`,
+    )
+    ranges = ranges.slice(-MAX_CHUNKS)
+  }
+
+  const CONCURRENCY = 4 // matches PARTICIPANT_QUERY_CONCURRENCY's convention — a higher value
+  // was tried live and made rate-limiting worse, not better, against this free-tier RPC.
+  const MAX_RATE_LIMIT_RETRIES = 3
+  const chunkResults = await runWithConcurrency(ranges, CONCURRENCY, async ({ from, to }) => {
+    let retries = 0
+    for (;;) {
+      try {
+        return await contractToUse!.queryFilter(filter!, from, to)
+      } catch (error: any) {
+        const msg: string = error?.error?.message || error?.shortMessage || error?.message || ''
+        const isRateLimit = /compute units per second|rate limit|429/i.test(msg)
+        if (isRateLimit && retries < MAX_RATE_LIMIT_RETRIES) {
+          retries++
+          await new Promise((resolve) => setTimeout(resolve, 400 * retries))
+          continue
+        }
+        console.warn(`getClaimEvents: chunk [${from},${to}] failed, skipping:`, msg)
+        return []
+      }
+    }
+  })
+  const events: ethers.Log[] = chunkResults.flat() as unknown as ethers.Log[]
+
+  // Resolve block timestamps with bounded concurrency — one RPC call per unique block.
+  const uniqueBlocks = Array.from(new Set(events.map((e) => e.blockNumber)))
+  const blockTimestamps = new Map<number, number>()
+  await runWithConcurrency(uniqueBlocks, PARTICIPANT_QUERY_CONCURRENCY, async (bn) => {
+    const block = await provider.getBlock(bn)
+    if (block) blockTimestamps.set(bn, block.timestamp)
+  })
+
+  return events.map((e) => {
+    const parsed = contractToUse!.interface.parseLog(e)
+    return {
+      account: (parsed?.args?.account as string) ?? '',
+      blockNumber: e.blockNumber,
+      timestamp: blockTimestamps.get(e.blockNumber) ?? 0,
+    }
+  })
+}
+
+/**
+ * Draft-only: commit a campaign to RANK_TIERED and configure its tiers, via the CURRENT GLOBAL
+ * DEFAULT module (config.addresses.onChainRewardModule) — the one legitimate call site that
+ * uses the default directly, because this is exactly the call that CREATES the pin (per
+ * docs/ARCHITECTURE.md: "the first RANK_TIERED/SCORE_TIERED commit records
+ * _campaignRewardModule[id] = _onChainRewardModule"). Never use this address for anything else.
+ */
+export const configureRankTiers = async (
+  campaignId: string,
+  tiers: { startRank: number; endRank: number; amount: string }[],
+  tokenDecimals: number,
+): Promise<void> => {
+  const signer = await getSigner()
+  const c = getOnChainRewardModuleContract(config.addresses.onChainRewardModule, signer)
+  try {
+    const tx = await c.setRankTiers(
+      campaignId,
+      tiers.map((t) => t.startRank),
+      tiers.map((t) => t.endRank),
+      tiers.map((t) => ethers.parseUnits(t.amount, tokenDecimals)),
+    )
+    await tx.wait()
+  } catch (error: any) {
+    console.error('Error configuring rank tiers:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to configure rank tiers',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Draft-only: commit a campaign to SCORE_TIERED and configure its tiers. Same global-default
+ * pinning call site as configureRankTiers — see its docstring. */
+export const configureScoreTiers = async (
+  campaignId: string,
+  tiers: { minScore: number; amount: string }[],
+  tokenDecimals: number,
+): Promise<void> => {
+  const signer = await getSigner()
+  const c = getOnChainRewardModuleContract(config.addresses.onChainRewardModule, signer)
+  try {
+    const tx = await c.setScoreTiers(
+      campaignId,
+      tiers.map((t) => t.minScore),
+      tiers.map((t) => ethers.parseUnits(t.amount, tokenDecimals)),
+    )
+    await tx.wait()
+  } catch (error: any) {
+    console.error('Error configuring score tiers:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to configure score tiers',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Draft-only: assign point values to specific tasks for SCORE_TIERED scoring. Same
+ * global-default call site (must run before/alongside setScoreTiers — either order is fine,
+ * per REWARD_SYSTEM.md, since points and tier-mode adoption are independent state). */
+export const configureTaskPoints = async (
+  campaignId: string,
+  points: { taskIndex: number; points: number }[],
+): Promise<void> => {
+  const signer = await getSigner()
+  const c = getOnChainRewardModuleContract(config.addresses.onChainRewardModule, signer)
+  try {
+    const tx = await c.setTaskPoints(
+      campaignId,
+      points.map((p) => p.taskIndex),
+      points.map((p) => p.points),
+    )
+    await tx.wait()
+  } catch (error: any) {
+    console.error('Error configuring task points:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to configure task points',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Self-claim: OnChainRewardModule.claimReward on the campaign's PINNED module. */
+export const claimTieredReward = async (campaignId: string): Promise<string> => {
+  const moduleAddress = await getPinnedRewardModule(campaignId)
+  if (!moduleAddress) throw new Error('This campaign has no tiered reward module pinned.')
+  const signer = await getSigner()
+  const c = getOnChainRewardModuleContract(moduleAddress, signer)
+  try {
+    const tx = await c.claimReward(campaignId)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error claiming tiered reward:', error)
+    throw error
+  }
+}
+
+// ---------------------------------------------------------------------------
+// P3 CP2 — NFT Merkle settlement (NFTSettlementModule, ERC721 + ERC1155)
+// ---------------------------------------------------------------------------
+
+export const NFTStandardValue = { ERC721: 0, ERC1155: 1 } as const
+export type NFTStandardLabel = keyof typeof NFTStandardValue
+
+/**
+ * Construct an NFTSettlementModule Contract at an EXPLICIT address — same discipline as
+ * getOnChainRewardModuleContract: never a baked-in default, every caller resolves the
+ * campaign's actual pin first (getPinnedNFTModule) except the one legitimate exception (a
+ * brand-new campaign's first deposit, which is what CREATES the pin).
+ */
+export const getNFTSettlementModuleContract = (
+  moduleAddress: string,
+  runner: ethers.ContractRunner,
+): Contract => new ethers.Contract(moduleAddress, NFTSettlementModule.abi, runner) as Contract
+
+/**
+ * Read the campaign's PINNED NFT module address (getCampaignNFTModule on the entrypoint) —
+ * undefined if the campaign never received an NFT deposit (no pin yet). Unlike the reward
+ * module (pinned at settlement-mode adoption), the NFT module pins at FIRST DEPOSIT
+ * (docs/ARCHITECTURE.md) — so this can be undefined even for a campaign that will end up NFT,
+ * right up until its first depositERC721Rewards/depositERC1155Rewards call.
+ */
+export const getPinnedNFTModule = async (campaignId: string): Promise<string | undefined> => {
+  const c = getEntrypointReadContract()
+  const addr: string = await c.getCampaignNFTModule(campaignId)
+  return addr && addr !== ethers.ZeroAddress ? addr : undefined
+}
+
+/**
+ * Draft/Open/Ended: escrow ERC721 tokenIds for a campaign, max 100/call (contract-enforced) —
+ * callers with more than 100 must batch across multiple calls (the wizard does this). Approval
+ * (setApprovalForAll) must already be granted to the entrypoint; checked/requested here.
+ */
+export const depositERC721Rewards = async (
+  campaignId: string,
+  tokenAddress: string,
+  tokenIds: string[],
+): Promise<string> => {
+  if (tokenIds.length === 0 || tokenIds.length > 100) {
+    throw new Error('depositERC721Rewards: batch must be 1-100 tokenIds.')
+  }
+  const signer = await getSigner()
+  const signerAddress = await signer.getAddress()
+  const nft = new ethers.Contract(
+    tokenAddress,
+    ['function isApprovedForAll(address,address) view returns (bool)', 'function setApprovalForAll(address,bool)'],
+    signer,
+  )
+  const approved: boolean = await nft.isApprovedForAll(signerAddress, config.addresses.entrypoint)
+  if (!approved) {
+    const approveTx = await nft.setApprovalForAll(config.addresses.entrypoint, true)
+    await approveTx.wait()
+  }
+  if (!contract) throw new Error('Contract not initialized')
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.depositERC721Rewards(campaignId, tokenAddress, tokenIds)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error depositing ERC721 rewards:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to deposit NFTs',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Same as depositERC721Rewards but for ERC1155 (ids + per-id amounts, max 100/call). */
+export const depositERC1155Rewards = async (
+  campaignId: string,
+  tokenAddress: string,
+  ids: string[],
+  amounts: string[],
+): Promise<string> => {
+  if (ids.length === 0 || ids.length > 100 || ids.length !== amounts.length) {
+    throw new Error('depositERC1155Rewards: 1-100 ids, matching amounts array.')
+  }
+  const signer = await getSigner()
+  const signerAddress = await signer.getAddress()
+  const nft = new ethers.Contract(
+    tokenAddress,
+    ['function isApprovedForAll(address,address) view returns (bool)', 'function setApprovalForAll(address,bool)'],
+    signer,
+  )
+  const approved: boolean = await nft.isApprovedForAll(signerAddress, config.addresses.entrypoint)
+  if (!approved) {
+    const approveTx = await nft.setApprovalForAll(config.addresses.entrypoint, true)
+    await approveTx.wait()
+  }
+  if (!contract) throw new Error('Contract not initialized')
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.depositERC1155Rewards(campaignId, tokenAddress, ids, amounts)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error depositing ERC1155 rewards:', error)
+    toast({
+      variant: 'destructive',
+      title: 'Failed to deposit NFTs',
+      description: error.reason || error.message || 'An unknown error occurred.',
+    })
+    throw error
+  }
+}
+
+/** Host-signed setNFTMerkleRoot on the campaign's PINNED module (mirrors submitERC20MerkleRoot). */
+export const submitNFTMerkleRoot = async (campaignId: string, root: string): Promise<string> => {
+  const moduleAddress = await getPinnedNFTModule(campaignId)
+  if (!moduleAddress) throw new Error('This campaign has no NFT module pinned (no deposit made yet).')
+  const signer = await getSigner()
+  const c = getNFTSettlementModuleContract(moduleAddress, signer)
+  try {
+    const tx = await c.setNFTMerkleRoot(campaignId, root)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error publishing NFT Merkle root:', error)
+    throw error
+  }
+}
+
+/** Self-claim: NFTSettlementModule.claimNFT on the campaign's PINNED module. */
+export const claimNFTReward = async (
+  campaignId: string,
+  standard: NFTStandardLabel,
+  tokenAddress: string,
+  tokenId: string,
+  amount: string,
+  proof: string[],
+): Promise<string> => {
+  const moduleAddress = await getPinnedNFTModule(campaignId)
+  if (!moduleAddress) throw new Error('This campaign has no NFT module pinned.')
+  const signer = await getSigner()
+  const c = getNFTSettlementModuleContract(moduleAddress, signer)
+  try {
+    const tx = await c.claimNFT(campaignId, NFTStandardValue[standard], tokenAddress, tokenId, amount, proof)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error claiming NFT reward:', error)
+    throw error
+  }
+}
+
+/**
+ * O(1) on-chain check for a single participant/task. Used where a caller must distinguish
+ * "already completed on-chain" from "verified in our DB cache but never actually recorded
+ * on-chain" (e.g. a verifier route deciding whether to skip re-attesting a cached PASS).
+ */
+export const hasCompletedTaskOnChain = async (
+  campaignId: number,
+  participant: string,
+  taskIndex: number,
+): Promise<boolean> => {
+  try {
+    const c = getEntrypointReadContract()
+    return await c.hasCompletedTask(campaignId, participant, taskIndex)
+  } catch (e) {
+    console.warn('hasCompletedTaskOnChain failed:', e)
+    return false
+  }
+}
+
+const ZERO_ROOT = '0x' + '00'.repeat(32)
+
+/**
+ * Read a campaign's on-chain settlement/lifecycle facts directly (O(1) RPC). Powers the
+ * lifecycle-state ladder (NFR-9) on the single-campaign detail path, which does not go
+ * through the subgraph. Best-effort: returns undefined if reads fail.
+ *
+ * BR-I4: this IS a direct-RPC read, so it is authoritative enough to display; the eventual
+ * claim action (P1) still re-simulates against chain state at execution time.
+ */
+export const getCampaignSettlement = async (
+  id: string,
+): Promise<CampaignSettlement | undefined> => {
+  let c = contract ?? readOnlyContract
+  if (!c) {
+    initializeReadOnlyProvider()
+    c = readOnlyContract
+  }
+  if (!c) return undefined
+
+  try {
+    const [erc20, maxP, nftModule, rewardModule] = await Promise.all([
+      c.getERC20Settlement(id), // [token, escrowed, distributed, merkleRoot, closedAt, swept]
+      c.getMaxParticipants(id),
+      c.getCampaignNFTModule(id),
+      c.getCampaignRewardModule(id),
+    ])
+
+    const token: string = erc20.token ?? erc20[0]
+    const escrowed = (erc20.escrowed ?? erc20[1]).toString()
+    const merkleRoot: string = erc20.merkleRoot ?? erc20[3]
+    const closedAtRaw = Number(erc20.closedAt ?? erc20[4])
+    const swept: boolean = erc20.swept ?? erc20[5]
+
+    const hasErc20Root = Boolean(merkleRoot && merkleRoot !== ZERO_ROOT)
+    let erc20RootPublishedAt: Date | undefined
+    if (hasErc20Root) {
+      const claimableAt = Number(await c.getERC20ClaimableAt(id))
+      if (claimableAt > 0) {
+        erc20RootPublishedAt = new Date((claimableAt - 24 * 3600) * 1000)
+      }
+    }
+
+    const nftPinned = Boolean(nftModule && nftModule !== ethers.ZeroAddress)
+    const rewardPinned = Boolean(rewardModule && rewardModule !== ethers.ZeroAddress)
+
+    // Mode derivation. RANK_TIERED vs SCORE_TIERED is only distinguishable via a module read
+    // (CP1 fix — was a TODO): when a reward module is pinned, read the campaign's own
+    // committed mode straight off it (getOnChainRewardStatus's `mode` field is campaign-level,
+    // not participant-specific, so ZeroAddress is a valid probe address) rather than guessing.
+    let mode: SettlementMode = 'UNSET'
+    let tierCount: number | undefined
+    if (hasErc20Root) {
+      mode = 'MERKLE_ERC20'
+    } else if (nftPinned) {
+      mode = 'NFT'
+    } else if (rewardPinned) {
+      try {
+        const rewardModuleContract = getOnChainRewardModuleContract(rewardModule, c.runner!)
+        const [[onChainMode], tiers] = await Promise.all([
+          rewardModuleContract.getOnChainRewardStatus(id, ethers.ZeroAddress),
+          rewardModuleContract.getTiers(id),
+        ])
+        mode = ONCHAIN_SETTLEMENT_MODE_LABELS[Number(onChainMode)] === 'SCORE_TIERED'
+          ? 'SCORE_TIERED'
+          : 'RANK_TIERED'
+        tierCount = tiers.length
+      } catch (e) {
+        console.warn(`getCampaignSettlement: reward-module mode read failed for ${id}, defaulting to RANK_TIERED:`, e)
+        mode = 'RANK_TIERED'
+      }
+    }
+
+    return {
+      mode,
+      maxParticipants: Number(maxP),
+      closedAt: closedAtRaw > 0 ? new Date(closedAtRaw * 1000) : undefined,
+      erc20Token: token && token !== ethers.ZeroAddress ? token : undefined,
+      erc20EscrowedNet: escrowed,
+      erc20MerkleRoot: hasErc20Root ? merkleRoot : null,
+      erc20RootPublishedAt,
+      erc20Swept: swept,
+      nftModule: nftPinned ? nftModule : undefined,
+      rewardModule: rewardPinned ? rewardModule : undefined,
+      tierCount,
+    }
+  } catch (e) {
+    console.warn(`getCampaignSettlement failed for ${id}:`, e)
+    return undefined
+  }
+}
+
 // Enhanced function to get campaign by ID with Discord invite links for client-side use
 export const getCampaignByIdWithMetadata = async (
   id: string,
@@ -737,6 +1431,9 @@ export const getCampaignByIdWithMetadata = async (
   // First get the basic campaign data
   const campaign = await getCampaignById(id)
   if (!campaign) return null
+
+  // Attach on-chain settlement/lifecycle facts for the NFR-9 state ladder (best-effort).
+  campaign.settlement = await getCampaignSettlement(id)
 
   console.log(`Base campaign data fetched for ${id}:`, {
     status: campaign.status,
@@ -812,6 +1509,18 @@ export const createAndActivateCampaign = async (campaignData: any) => {
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
 
+  // ── QUARANTINED (v0.6.0) ──────────────────────────────────────────────────────────
+  // TODO(P1): `createCampaignWithTasksAndReward` was REMOVED in v0.6.0 (it baked the old
+  // direct-reward model into one tx). Rebuild this as the multi-step Draft flow:
+  //   createCampaign → batchAddTasks/addTaskToCampaign → configureERC20Reward +
+  //   fundCampaignERC20 (or depositERC721/1155Rewards, or module setRankTiers/setScoreTiers)
+  //   → openCampaign. See docs/GAP_ANALYSIS_v0.6.0.md §2.4 and PRD FR-H2..H6. The legacy
+  //   body below is retained as reference and is intentionally unreachable.
+  throw new Error(
+    'Campaign creation is being rebuilt for the v0.6.0 escrow/settlement contracts (P1). ' +
+      'The single-transaction create+reward path no longer exists on-chain.',
+  )
+
   // Use the actual dates provided by the user, but ensure start time is not in the past
   const now = Math.floor(Date.now() / 1000)
   const userStartTime = Math.floor(campaignData.dates.from.getTime() / 1000)
@@ -824,16 +1533,6 @@ export const createAndActivateCampaign = async (campaignData: any) => {
   // Check if localStorage is available (not server-side)
   const hasLocalStorage = typeof window !== 'undefined' && window.localStorage
 
-  // Must match Solidity enum CampaignStorage.TaskType exactly
-  const taskTypeMap: Record<TaskType, number> = {
-    SOCIAL_FOLLOW: 0,
-    JOIN_DISCORD: 1,
-    JOIN_TELEGRAM: 2,
-    RETWEET: 3,               // SOCIAL_REPOST in Solidity
-    ONCHAIN_TX: 4,
-    HUMANITY_VERIFICATION: 5,
-  }
-
   try {
     // Prepare task arrays for unified call
     const taskTypes: number[] = []
@@ -842,7 +1541,8 @@ export const createAndActivateCampaign = async (campaignData: any) => {
     const isOptionals: boolean[] = []
 
     for (const task of campaignData.tasks) {
-      taskTypes.push(taskTypeMap[task.type as TaskType])
+      // Route through the canonical taxonomy — never hardcode enum numbers (Decision 2).
+      taskTypes.push(toOnChainTaskType(task.type as TaskType))
       descriptions.push(task.description)
       verificationDatas.push(
         ethers.encodeBytes32String(task.verificationData || ''),
@@ -1155,22 +1855,23 @@ export const createCampaign = async (campaignData: any) => {
   const signer = await getSigner()
   const contractWithSigner = contract.connect(signer) as Contract
 
+  // ── QUARANTINED (v0.6.0) ──────────────────────────────────────────────────────────
+  // TODO(P1): same as createAndActivateCampaign — `createCampaignWithTasksAndReward` is
+  // gone in v0.6.0. Rebuild as the multi-step Draft flow (createCampaign → batchAddTasks →
+  // configureERC20Reward + fundCampaignERC20 / deposits / tiered module → keep in Draft).
+  // See docs/GAP_ANALYSIS_v0.6.0.md §2.4 and PRD FR-H2..H6. Legacy body below is
+  // intentionally unreachable and kept only for reference.
+  throw new Error(
+    'Campaign creation is being rebuilt for the v0.6.0 escrow/settlement contracts (P1). ' +
+      'The single-transaction create+reward path no longer exists on-chain.',
+  )
+
   // Use the actual dates provided by the user
   const userStartTime = Math.floor(campaignData.dates.from.getTime() / 1000)
   const userEndTime = Math.floor(campaignData.dates.to.getTime() / 1000)
 
   // Check if localStorage is available (not server-side)
   const hasLocalStorage = typeof window !== 'undefined' && window.localStorage
-
-  // Must match Solidity enum CampaignStorage.TaskType exactly
-  const taskTypeMap: Record<TaskType, number> = {
-    SOCIAL_FOLLOW: 0,
-    JOIN_DISCORD: 1,
-    JOIN_TELEGRAM: 2,
-    RETWEET: 3,               // SOCIAL_REPOST in Solidity
-    ONCHAIN_TX: 4,
-    HUMANITY_VERIFICATION: 5,
-  }
 
   try {
     // Prepare task arrays for unified call
@@ -1180,7 +1881,8 @@ export const createCampaign = async (campaignData: any) => {
     const isOptionals: boolean[] = []
 
     for (const task of campaignData.tasks) {
-      taskTypes.push(taskTypeMap[task.type as TaskType])
+      // Route through the canonical taxonomy — never hardcode enum numbers (Decision 2).
+      taskTypes.push(toOnChainTaskType(task.type as TaskType))
       descriptions.push(task.description)
       verificationDatas.push(
         ethers.encodeBytes32String(task.verificationData || ''),
@@ -1780,6 +2482,433 @@ export const endCampaign = async (campaignId: string) => {
   }
 }
 
+/** P4 — closes a campaign (Ended -> Closed), freezing the allocation permanently. There was
+ * no frontend caller of this ABI function before P4; the UI trigger lives in the settlement
+ * panels alongside the dispute-report resolution flow, since that's where a host needs to see
+ * the "unresolved reports" warning before calling this. */
+export const closeCampaignOnChain = async (campaignId: string): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const campaignIdNumber = parseInt(campaignId, 10)
+    const tx = await contractWithSigner.closeCampaign(campaignIdNumber)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error(`Error closing campaign ${campaignId}:`, error)
+    throw error
+  }
+}
+
+// ---------------------------------------------------------------------------
+// P1 — Draft creation flow (FR-H2..H6). Replaces the removed single-tx
+// createCampaignWithTasksAndReward with the actual v0.6.0 multi-step Draft sequence:
+// createCampaign -> batchAddTasks -> configureERC20Reward -> fundCampaignERC20 ->
+// setMaxParticipants (optional) -> openCampaign (existing, unchanged export above).
+// ---------------------------------------------------------------------------
+
+const ERC20_MIN_ABI = [
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+  'function allowance(address owner, address spender) view returns (uint256)',
+  'function approve(address spender, uint256 amount) returns (bool)',
+]
+
+/** Read a reward token's decimals/symbol so funding amounts are converted correctly. */
+export const getERC20TokenInfo = async (
+  tokenAddress: string,
+): Promise<{ decimals: number; symbol: string } | null> => {
+  try {
+    const runner: ethers.ContractRunner | null =
+      provider ?? getReadOnlyContract()?.runner ?? null
+    if (!runner) return null
+    const token = new ethers.Contract(tokenAddress, ERC20_MIN_ABI, runner)
+    const [decimals, symbol] = await Promise.all([token.decimals(), token.symbol()])
+    return { decimals: Number(decimals), symbol: String(symbol) }
+  } catch (e) {
+    console.warn('getERC20TokenInfo failed:', e)
+    return null
+  }
+}
+
+export type DraftTaskInput = {
+  type: TaskType
+  description: string
+  verificationData?: string
+  isOptional?: boolean
+}
+
+/**
+ * createCampaign -> batchAddTasks, both Draft-only (FR-H2/H3). Task types route through the
+ * canonical taxonomy (src/lib/task-types.ts) — no hardcoded enum numbers (Decision 2). Tasks
+ * are capped at 20 by the contract; batchAddTasks itself caps at MAX_BATCH_SIZE=50, so the
+ * wizard's 20-task cap always fits in a single batch call.
+ */
+export const createDraftCampaignWithTasks = async (params: {
+  title: string
+  startTime: number // unix seconds
+  endTime: number
+  tasks: DraftTaskInput[]
+}): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+
+  try {
+    const tx = await contractWithSigner.createCampaign(
+      params.title,
+      params.startTime,
+      params.endTime,
+    )
+    const receipt = await tx.wait()
+    const event = receipt.logs
+      .map((log: any) => {
+        try {
+          return contract?.interface.parseLog(log) || null
+        } catch {
+          return null
+        }
+      })
+      .find((e: any) => e && e.name === 'CampaignCreated')
+    if (!event) throw new Error('CampaignCreated event not found')
+    const campaignId: bigint = event.args.campaignId
+
+    if (params.tasks.length > 0) {
+      const taskTypes = params.tasks.map((t) => toOnChainTaskType(t.type))
+      const descriptions = params.tasks.map((t) => t.description)
+      const verificationData = params.tasks.map((t) =>
+        ethers.encodeBytes32String(t.verificationData || ''),
+      )
+      const isOptional = params.tasks.map((t) => t.isOptional ?? false)
+
+      const batchTx = await contractWithSigner.batchAddTasks(
+        campaignId,
+        taskTypes,
+        descriptions,
+        verificationData,
+        isOptional,
+      )
+      await batchTx.wait()
+    }
+
+    return campaignId.toString()
+  } catch (error: any) {
+    console.error('Error creating draft campaign:', error)
+    const reason = error.reason || error.message || 'An unknown error occurred.'
+    toast({
+      variant: 'destructive',
+      title: 'Campaign Creation Failed',
+      description: reason,
+    })
+    throw error
+  }
+}
+
+/**
+ * configureERC20Reward -> (approve if needed) -> fundCampaignERC20 (FR-H4/H5). All Draft-only.
+ * `amountHumanReadable` is parsed against the token's OWN decimals (read on-chain), not a
+ * hardcoded 18 — the old pre-v0.6.0 code assumed 18 and would have silently mis-funded any
+ * token with a different decimals count.
+ */
+export const configureAndFundERC20Reward = async (
+  campaignId: string,
+  tokenAddress: string,
+  amountHumanReadable: string,
+): Promise<{ decimals: number; amountWei: bigint }> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const signerAddress = await signer.getAddress()
+  const contractWithSigner = contract.connect(signer) as Contract
+
+  const info = await getERC20TokenInfo(tokenAddress)
+  if (!info) {
+    throw new Error(
+      'Could not read this token contract (decimals/symbol). Confirm the address is a deployed ERC20 token on the target chain.',
+    )
+  }
+  const amountWei = ethers.parseUnits(amountHumanReadable, info.decimals)
+
+  try {
+    const configureTx = await contractWithSigner.configureERC20Reward(
+      campaignId,
+      tokenAddress,
+    )
+    await configureTx.wait()
+
+    const token = new ethers.Contract(tokenAddress, ERC20_MIN_ABI, signer)
+    const allowance: bigint = await token.allowance(
+      signerAddress,
+      config.addresses.entrypoint,
+    )
+    if (allowance < amountWei) {
+      const approveTx = await token.approve(config.addresses.entrypoint, amountWei)
+      await approveTx.wait()
+    }
+
+    const fundTx = await contractWithSigner.fundCampaignERC20(campaignId, amountWei)
+    await fundTx.wait()
+
+    return { decimals: info.decimals, amountWei }
+  } catch (error: any) {
+    console.error('Error configuring/funding ERC20 reward:', error)
+    const reason = error.reason || error.message || 'An unknown error occurred.'
+    toast({
+      variant: 'destructive',
+      title: 'Funding Failed',
+      description: reason,
+    })
+    throw error
+  }
+}
+
+/** setMaxParticipants — Draft-only, optional participant cap (FR-H2, FR-T6). 0 = unlimited. */
+export const setCampaignMaxParticipantsOnChain = async (
+  campaignId: string,
+  cap: number,
+): Promise<void> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.setMaxParticipants(campaignId, cap)
+    await tx.wait()
+  } catch (error: any) {
+    console.error('Error setting max participants:', error)
+    const reason = error.reason || error.message || 'An unknown error occurred.'
+    toast({
+      variant: 'destructive',
+      title: 'Failed to Set Participant Cap',
+      description: reason,
+    })
+    throw error
+  }
+}
+
+/**
+ * Whether a protocol fee module is currently registered (FR-H5 itemization). This
+ * deployment ships with none (fees disabled, gross = net) — reading it live rather than
+ * hardcoding false means the wizard stays honest if fees are ever enabled later without a
+ * code change (PRD Q2 default, docs/DECISIONS_v0.6.0.md).
+ */
+export const getProtocolFeeEnabled = async (): Promise<boolean> => {
+  try {
+    const c = getEntrypointReadContract()
+    const feeModule: string = await c.getFeeModule()
+    return feeModule !== ethers.ZeroAddress
+  } catch (e) {
+    console.warn('getProtocolFeeEnabled failed:', e)
+    return false
+  }
+}
+
+// ---------------------------------------------------------------------------
+// P1 — Merkle settlement: host publish + participant self-claim (FR-M3, FR-C2, BR-M3)
+// ---------------------------------------------------------------------------
+
+/** Host-signed setERC20MerkleRoot — the pipeline PROPOSES, the host PUBLISHES (BR-M3). */
+export const submitERC20MerkleRoot = async (
+  campaignId: string,
+  root: string,
+): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.setERC20MerkleRoot(campaignId, root)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    // Re-thrown unmapped: mapContractRevertToMessage runs once, at the UI layer, against
+    // this original error object (its .reason/.shortMessage fields are what it inspects —
+    // wrapping in a plain Error here would lose them).
+    console.error('Error publishing Merkle root:', error)
+    throw error
+  }
+}
+
+/** Self-claim: claimERC20(campaignId, amount, proof) from the connected wallet (FR-C2). */
+export const claimERC20Reward = async (
+  campaignId: string,
+  amount: string,
+  proof: string[],
+): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.claimERC20(campaignId, amount, proof)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error claiming ERC20 reward:', error)
+    throw error
+  }
+}
+
+/**
+ * NFR-10: map every contract revert reachable from the wizard/claim UI to a specific,
+ * actionable message — a raw revert string reaching the user is a defect. Custom-error
+ * names are matched against `error.reason`/`error.data`/`error.message` since ethers
+ * surfaces them differently depending on RPC provider and call path (staticCall vs sent tx).
+ */
+export const mapContractRevertToMessage = (error: any): string => {
+  const raw: string =
+    error?.reason ||
+    error?.shortMessage ||
+    error?.error?.message ||
+    error?.message ||
+    ''
+
+  const has = (name: string) => raw.includes(name)
+
+  if (has('Web3Campaigns__AlreadyClaimedSettlement')) {
+    return 'This wallet has already claimed its reward for this campaign.'
+  }
+  if (has('Web3Campaigns__AlreadySwept')) {
+    return 'The host has already swept unclaimed funds for this campaign — claiming is closed.'
+  }
+  if (has('Web3Campaigns__RootDisputeWindowActive')) {
+    return 'Allocations were just published and are in their 24-hour community review window. Try again once it elapses.'
+  }
+  if (has('Web3Campaigns__MerkleRootNotSet')) {
+    return 'No reward allocation has been published for this campaign yet.'
+  }
+  if (has('Web3Campaigns__InvalidMerkleProof')) {
+    return 'This wallet has no allocation in this campaign, or the allocation data is stale — refresh and try again.'
+  }
+  if (has('Web3Campaigns__CampaignNotYetEnded')) {
+    return 'Claims open once the campaign has ended.'
+  }
+  if (has('Web3Campaigns__WrongSettlementMode')) {
+    return 'This campaign uses a different settlement mode than expected.'
+  }
+  if (has('Web3Campaigns__InsufficientEscrow')) {
+    return 'This campaign’s escrow cannot cover this claim — please contact the host.'
+  }
+  if (has('Web3Campaigns__CampaignNotFound')) {
+    return 'This campaign could not be found on-chain.'
+  }
+  if (has('Web3Campaigns__RootAlreadyPublished')) {
+    return 'A root has already been published for this campaign by the platform fallback — publish again to correct it.'
+  }
+  if (has('Web3Campaigns__ERC20RewardNotConfigured')) {
+    return 'This campaign has no ERC20 reward configured yet.'
+  }
+  if (has('Web3Campaigns__SettlementModeAlreadySet')) {
+    return 'This campaign already committed to a different settlement mode.'
+  }
+  if (has('Web3Campaigns__CallerIsNotHost')) {
+    return 'Only the campaign host can perform this action.'
+  }
+  if (has('Web3Campaigns__NotFullyCompleted')) {
+    return 'You have not currently completed all required tasks for this campaign.'
+  }
+  if (has('Web3Campaigns__NoTierMatched')) {
+    return 'Your current rank/score does not fall into any configured reward tier.'
+  }
+  if (has('OnChainRewardModule__NotAuthoritativeModule')) {
+    return 'This campaign’s reward module has changed — please refresh and try again.'
+  }
+  if (has('OnChainRewardModule__CampaignAlreadyStarted')) {
+    return 'Reward tiers can only be configured while the campaign is in Draft.'
+  }
+  if (has('NFTSettlementModule__NotAuthoritativeModule')) {
+    return 'This campaign’s NFT module has changed — please refresh and try again.'
+  }
+  if (has('NFTSettlementModule__NotCampaignHost')) {
+    return 'Only the campaign host can perform this action.'
+  }
+  if (has('Web3Campaigns__NFTNotEscrowed')) {
+    return 'This NFT is not currently escrowed for this campaign (already claimed or withdrawn).'
+  }
+  if (has('Web3Campaigns__NFTModuleMismatch')) {
+    return 'This campaign’s NFT module has changed — please refresh and try again.'
+  }
+  if (has('Web3Campaigns__GracePeriodActive')) {
+    return 'Unclaimed NFTs cannot be withdrawn until the claim grace period ends.'
+  }
+  if (has('Web3Campaigns__BatchTooLarge')) {
+    return 'Too many items in one transaction — try a smaller batch.'
+  }
+  if (has('EnforcedPause') || has('paused')) {
+    return 'The platform is temporarily paused for maintenance. Please try again shortly.'
+  }
+  if (error?.code === 'ACTION_REJECTED') {
+    return 'Transaction was rejected in your wallet.'
+  }
+
+  return raw || 'Transaction failed. Please try again.'
+}
+
+/**
+ * Direct-RPC settlement read for the claim UI's value-bearing checks (BR-I4) — never trust
+ * the indexer alone for whether a claim will actually succeed. Combines getERC20Settlement,
+ * getERC20ClaimableAt, and hasClaimedERC20 into one call site.
+ */
+export const getERC20SettlementOnChain = async (
+  campaignId: string,
+  wallet?: string,
+): Promise<{
+  token: string
+  escrowed: bigint
+  distributed: bigint
+  merkleRoot: string
+  closedAt: number
+  swept: boolean
+  claimableAt: number
+  hasClaimed: boolean
+}> => {
+  const c = getEntrypointReadContract()
+  const [settlement, claimableAt, hasClaimed] = await Promise.all([
+    c.getERC20Settlement(campaignId),
+    c.getERC20ClaimableAt(campaignId),
+    wallet ? c.hasClaimedERC20(campaignId, wallet) : Promise.resolve(false),
+  ])
+  return {
+    token: settlement.token,
+    escrowed: settlement.escrowed,
+    distributed: settlement.distributed,
+    merkleRoot: settlement.merkleRoot,
+    closedAt: Number(settlement.closedAt),
+    swept: settlement.swept,
+    claimableAt: Number(claimableAt),
+    hasClaimed,
+  }
+}
+
+/**
+ * Direct-RPC NFT settlement read (BR-I4), mirroring getERC20SettlementOnChain — resolves the
+ * campaign's PINNED module first (never a default), then reads its root/claimable-at state.
+ * Returns undefined if the campaign never pinned an NFT module (no deposit yet). The
+ * leaf-claimed check is a separate call (isNFTLeafClaimedOnChain) since the leaf itself depends
+ * on which AllocationEntry the caller resolves AFTER seeing the root — a two-phase lookup, same
+ * shape as the ERC20 proof API's own root-then-entry sequence.
+ */
+export const getNFTSettlementOnChain = async (
+  campaignId: string,
+): Promise<{ moduleAddress: string; merkleRoot: string; claimableAt: number } | undefined> => {
+  const moduleAddress = await getPinnedNFTModule(campaignId)
+  if (!moduleAddress) return undefined
+  const c = getNFTSettlementModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  const [merkleRoot, claimableAt] = await Promise.all([
+    c.getNFTMerkleRoot(campaignId),
+    c.getNFTClaimableAt(campaignId),
+  ])
+  return { moduleAddress, merkleRoot, claimableAt: Number(claimableAt) }
+}
+
+/** Whether a specific NFT leaf has already been claimed, read directly against the given
+ * module address (the caller must have already resolved it, e.g. via getNFTSettlementOnChain). */
+export const isNFTLeafClaimedOnChain = async (
+  moduleAddress: string,
+  campaignId: string,
+  leaf: string,
+): Promise<boolean> => {
+  const c = getNFTSettlementModuleContract(moduleAddress, getReadOnlyContract()!.runner!)
+  return c.isNFTLeafClaimed(campaignId, leaf)
+}
+
 export const completeTask = async (campaignId: string, taskIndex: number) => {
   if (!contract) throw new Error('Contract not initialized')
 
@@ -1885,10 +3014,17 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       taskIndex,
     })
 
-    // Check the task type from the contract — HUMANITY_VERIFICATION (type 4) and
-    // other on-chain task types may cause estimateGas to fail with "missing revert
-    // data" because the RPC node doesn't return custom error data. In that case we
-    // send the tx with a manual gas limit to bypass the estimateGas pre-flight.
+    // Read the on-chain task type. In v0.6.0, completeTask self-verifies ONLY the two
+    // hold types (ONCHAIN_HOLD_ERC20 = 8, ONCHAIN_HOLD_ERC721 = 9); their in-tx balance
+    // check can make estimateGas fail with "missing revert data" when the RPC doesn't
+    // return custom error data, so those get the manual-gas-limit path below.
+    //
+    // TODO(P1): every OTHER task type (social, discord/telegram, humanity, onchain_tx) is
+    // an ATTESTED task in v0.6.0 — completeTask will revert TaskManagedBySignature for any
+    // index an attestation has touched. They must settle via the backend SIGNER_ROLE service
+    // (verifyTaskCompletionWithSignature), NOT this client call. See docs/GAP_ANALYSIS §3,
+    // docs/DECISIONS_v0.6.0.md Decision 2, PRD FR-T1/FR-T3/BR-V*. This function should narrow
+    // to self-verify hold tasks once the signer service lands.
     let taskTypeOnChain: number | null = null
     try {
       const taskData = await contractToRead.getCampaignTask(
@@ -1901,14 +3037,13 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       console.warn('Could not read task type, proceeding with default flow')
     }
 
-    // For ONCHAIN_TX (4), HUMANITY_VERIFICATION (5) and similar on-chain
-    // verified tasks, the contract's completeTask may revert during estimateGas
-    // because the contract performs direct on-chain verification that can fail
-    // silently (no revert data returned by the RPC). We handle this by:
-    // 1. First trying a staticCall to check if the tx would succeed
-    // 2. If staticCall succeeds, send with default gas estimation
-    // 3. If staticCall fails with "missing revert data", send with manual gas
-    const isOnChainVerifiedTask = taskTypeOnChain === 4 || taskTypeOnChain === 5
+    // Hold tasks (8/9) may revert during estimateGas without decodable data; handle via:
+    // 1. staticCall to detect a real revert reason
+    // 2. on success, send with default gas estimation
+    // 3. on "missing revert data", send with a manual gas limit
+    const isOnChainVerifiedTask =
+      taskTypeOnChain === OnChainTaskType.ONCHAIN_HOLD_ERC20 ||
+      taskTypeOnChain === OnChainTaskType.ONCHAIN_HOLD_ERC721
 
     let tx
     if (isOnChainVerifiedTask) {
@@ -2170,7 +3305,7 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
           const now = Math.floor(Date.now() / 1000)
 
           if (Number(campaignData.status) !== 1) {
-            description = `Campaign is not open. Current status: ${['Draft', 'Open', 'Ended', 'Closed'][Number(campaignData.status)] || campaignData.status}.`
+            description = `Campaign is not open. Current status: ${['Draft', 'Open', 'Ended', 'Closed', 'Cancelled'][Number(campaignData.status)] || campaignData.status}.`
           } else if (
             userAddress.toLowerCase() === campaignData.host.toLowerCase()
           ) {
@@ -2210,6 +3345,36 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     console.error('Parsed error description:', description)
     throw new Error(description)
   }
+}
+
+/**
+ * Self-submit fallback for an attested task (BR-V3). When the backend signed a
+ * TaskAttestation but could not submit it (relayer down/unfunded), the connected wallet
+ * submits `verifyTaskCompletionWithSignature` itself using the returned signature. The
+ * recovered signer must hold SIGNER_ROLE, so a user cannot forge completion this way — they
+ * can only broadcast an attestation the backend already signed for them.
+ */
+export const submitAttestationFromWallet = async (
+  campaignId: string,
+  participant: string,
+  taskIndex: number,
+  completed: boolean,
+  deadline: number,
+  signature: string,
+) => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  const tx = await contractWithSigner.verifyTaskCompletionWithSignature(
+    parseInt(campaignId, 10),
+    participant,
+    taskIndex,
+    completed,
+    deadline,
+    signature,
+  )
+  const receipt = await tx.wait()
+  return receipt?.hash as string | undefined
 }
 
 // Function to check if a user has completed specific tasks in a campaign
@@ -2553,6 +3718,11 @@ export const getCampaignParticipants = async (
       participantAddresses,
       PARTICIPANT_QUERY_CONCURRENCY,
       async (address) => {
+        // TODO(P1): `hasClaimedReward` still exists in the v0.6.0 ABI but is not the
+        // authoritative claim signal for escrow settlement. Claim status must be read
+        // per settlement mode: hasClaimedERC20(id, account) for Merkle ERC20,
+        // NFTSettlementModule.isNFTLeafClaimed for NFT, tiered module state for tiered.
+        // See docs/GAP_ANALYSIS_v0.6.0.md §2.1.
         const hasClaimed = await contractToUse.hasClaimedReward(
           campaignIdNumber,
           address,
@@ -2660,4 +3830,187 @@ export const isPaused = async (): Promise<boolean> => {
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// P3 CP4 — Admin console: moderation + emergency-pause actions, all signed by the CONNECTED
+// wallet's own signer (never a backend key) — the admin console is a UI convenience over the
+// same "you sign your own privileged tx" pattern hosts already use, not a new trust model.
+// The actual authorization gate is on-chain (onlyRole(MODERATOR_ROLE)/onlyRole(EMERGENCY_ADMIN)
+// in the contract); the API-route-level checks in src/lib/admin-auth.ts are a UX nicety
+// (fail fast with a clear message) layered on top of that, not a substitute for it.
+// ---------------------------------------------------------------------------
+
+/** MODERATOR_ROLE: flag (score > 0) or clear (score = 0) an account's suspicious-activity
+ * score. MAX_SUSPICIOUS_SCORE (100) blocks the account from completing tasks entirely. */
+export const flagAccountOnChain = async (userAddress: string, score: number): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.flagAccount(userAddress, score)
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error flagging account:', error)
+    throw error
+  }
+}
+
+/** EMERGENCY_ADMIN: pause all state-changing entrypoints platform-wide. */
+export const emergencyPauseOnChain = async (): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.emergencyPause()
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error pausing contract:', error)
+    throw error
+  }
+}
+
+/** EMERGENCY_ADMIN: lift a platform-wide pause. */
+export const emergencyUnpauseOnChain = async (): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const contractWithSigner = contract.connect(signer) as Contract
+  try {
+    const tx = await contractWithSigner.emergencyUnpause()
+    const receipt = await tx.wait()
+    return receipt?.hash
+  } catch (error: any) {
+    console.error('Error unpausing contract:', error)
+    throw error
+  }
+}
+
+export type FlagEvent = { user: string; score: number; moderator: string; blockNumber: number; timestamp: number }
+
+/** Recent AccountFlagged events (the only way to see moderation history — _suspiciousActivityScore
+ * has no getter, only the event trail). Bounded scan, same probe-then-concurrent-fetch shape as
+ * getClaimEvents (see its docstring for why: this deployment's RPC hard-caps eth_getLogs). */
+export const getRecentFlagEvents = async (lookbackBlocks = 50000): Promise<FlagEvent[]> => {
+  const c = getEntrypointReadContract()
+  const provider = c.runner as ethers.Provider
+  const latestBlock = await provider.getBlockNumber()
+  const fromBlockBase = Math.max(config.addresses.deployBlock || 0, latestBlock - lookbackBlocks)
+  const filter = c.filters.AccountFlagged()
+
+  let chunkSize = MAX_LOG_RANGE_FALLBACK
+  try {
+    await c.queryFilter(filter, fromBlockBase, Math.min(fromBlockBase + chunkSize, latestBlock))
+  } catch (error: any) {
+    const msg: string = error?.error?.message || error?.shortMessage || error?.message || ''
+    const rangeMatch = msg.match(/up to a (\d+) block range/i)
+    if (rangeMatch?.[1]) chunkSize = Math.max(1, Number(rangeMatch[1]))
+  }
+  let ranges: { from: number; to: number }[] = []
+  for (let from = fromBlockBase; from <= latestBlock; from += chunkSize) {
+    ranges.push({ from, to: Math.min(from + chunkSize - 1, latestBlock) })
+  }
+  const MAX_CHUNKS = 200
+  if (ranges.length > MAX_CHUNKS) ranges = ranges.slice(-MAX_CHUNKS)
+
+  const chunkResults = await runWithConcurrency(ranges, 4, async ({ from, to }) => {
+    try {
+      return await c.queryFilter(filter, from, to)
+    } catch {
+      return []
+    }
+  })
+  const logs = chunkResults.flat()
+
+  const uniqueBlocks = Array.from(new Set(logs.map((l) => l.blockNumber)))
+  const blockTimestamps = new Map<number, number>()
+  await runWithConcurrency(uniqueBlocks, PARTICIPANT_QUERY_CONCURRENCY, async (bn) => {
+    const block = await provider.getBlock(bn)
+    if (block) blockTimestamps.set(bn, block.timestamp)
+  })
+
+  return logs.map((log) => {
+    const parsed = c.interface.parseLog(log)
+    return {
+      user: (parsed?.args?.user as string) ?? '',
+      score: Number(parsed?.args?.score ?? 0),
+      moderator: (parsed?.args?.moderator as string) ?? '',
+      blockNumber: log.blockNumber,
+      timestamp: blockTimestamps.get(log.blockNumber) ?? 0,
+    }
+  })
+}
+
+export type SettlerActivityEvent = {
+  campaignId: number
+  settler: string
+  kind: 'root_published' | 'closed'
+  blockNumber: number
+  timestamp: number
+}
+
+/** Recent SETTLER_ROLE fallback activity (FallbackRootPublished / FallbackClosed) — the
+ * "last-fallback-action-at" health signal. Same bounded-scan shape as getRecentFlagEvents. */
+export const getRecentSettlerActivity = async (lookbackBlocks = 50000): Promise<SettlerActivityEvent[]> => {
+  const c = getEntrypointReadContract()
+  const provider = c.runner as ethers.Provider
+  const latestBlock = await provider.getBlockNumber()
+  const fromBlockBase = Math.max(config.addresses.deployBlock || 0, latestBlock - lookbackBlocks)
+
+  let chunkSize = MAX_LOG_RANGE_FALLBACK
+  try {
+    await c.queryFilter(c.filters.FallbackRootPublished(), fromBlockBase, Math.min(fromBlockBase + chunkSize, latestBlock))
+  } catch (error: any) {
+    const msg: string = error?.error?.message || error?.shortMessage || error?.message || ''
+    const rangeMatch = msg.match(/up to a (\d+) block range/i)
+    if (rangeMatch?.[1]) chunkSize = Math.max(1, Number(rangeMatch[1]))
+  }
+  let ranges: { from: number; to: number }[] = []
+  for (let from = fromBlockBase; from <= latestBlock; from += chunkSize) {
+    ranges.push({ from, to: Math.min(from + chunkSize - 1, latestBlock) })
+  }
+  const MAX_CHUNKS = 150
+  if (ranges.length > MAX_CHUNKS) ranges = ranges.slice(-MAX_CHUNKS)
+
+  const [publishedChunks, closedChunks] = await Promise.all([
+    runWithConcurrency(ranges, 4, async ({ from, to }) => {
+      try {
+        return await c.queryFilter(c.filters.FallbackRootPublished(), from, to)
+      } catch {
+        return []
+      }
+    }),
+    runWithConcurrency(ranges, 4, async ({ from, to }) => {
+      try {
+        return await c.queryFilter(c.filters.FallbackClosed(), from, to)
+      } catch {
+        return []
+      }
+    }),
+  ])
+  const logs = [
+    ...publishedChunks.flat().map((l) => ({ log: l, kind: 'root_published' as const })),
+    ...closedChunks.flat().map((l) => ({ log: l, kind: 'closed' as const })),
+  ]
+
+  const uniqueBlocks = Array.from(new Set(logs.map((l) => l.log.blockNumber)))
+  const blockTimestamps = new Map<number, number>()
+  await runWithConcurrency(uniqueBlocks, PARTICIPANT_QUERY_CONCURRENCY, async (bn) => {
+    const block = await provider.getBlock(bn)
+    if (block) blockTimestamps.set(bn, block.timestamp)
+  })
+
+  return logs
+    .map(({ log, kind }) => {
+      const parsed = c.interface.parseLog(log)
+      return {
+        campaignId: Number(parsed?.args?.campaignId ?? 0),
+        settler: (parsed?.args?.settler as string) ?? '',
+        kind,
+        blockNumber: log.blockNumber,
+        timestamp: blockTimestamps.get(log.blockNumber) ?? 0,
+      }
+    })
+    .sort((a, b) => b.blockNumber - a.blockNumber)
 }
