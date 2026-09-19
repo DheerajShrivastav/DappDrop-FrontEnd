@@ -1347,48 +1347,6 @@ export default function CreateCampaignPage() {
                             </FormControl>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
-                            {/* Typed entry, offered alongside the calendar rather than instead
-                                of it. Clicking through two months to reach a date is slow when
-                                you already know it, and testing/scheduling a campaign for a
-                                specific timestamp was previously only possible by clicking a day
-                                and then correcting the hour/minute fields below. Both controls
-                                write the same form value, so either stays in sync with the other. */}
-                            <div className="p-4 border-b grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="start-datetime">Starts</Label>
-                                <Input
-                                  type="datetime-local"
-                                  id="start-datetime"
-                                  className="w-full"
-                                  value={
-                                    dates?.from ? format(dates.from, "yyyy-MM-dd'T'HH:mm") : ''
-                                  }
-                                  onChange={(e) => {
-                                    const next = new Date(e.target.value)
-                                    // A partially-typed value parses to Invalid Date; ignore it
-                                    // until it is complete rather than wiping the field.
-                                    if (!isNaN(next.getTime())) {
-                                      field.onChange({ ...dates, from: next })
-                                    }
-                                  }}
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="end-datetime">Ends</Label>
-                                <Input
-                                  type="datetime-local"
-                                  id="end-datetime"
-                                  className="w-full"
-                                  value={dates?.to ? format(dates.to, "yyyy-MM-dd'T'HH:mm") : ''}
-                                  onChange={(e) => {
-                                    const next = new Date(e.target.value)
-                                    if (!isNaN(next.getTime())) {
-                                      field.onChange({ ...dates, to: next })
-                                    }
-                                  }}
-                                />
-                              </div>
-                            </div>
                             <Calendar
                               mode="range"
                               selected={field.value}
@@ -1396,10 +1354,30 @@ export default function CreateCampaignPage() {
                               initialFocus
                               numberOfMonths={2}
                             />
-                            <div className="p-4 border-t grid grid-cols-2 gap-4">
+                            <div className="p-4 border-t grid grid-cols-1 lg:grid-cols-2 gap-4">
                               <div className="space-y-2">
-                                <Label htmlFor="start-time-h">Start Time</Label>
+                                <Label htmlFor="start-date">Start (date · hh · mm)</Label>
                                 <div className="flex gap-2">
+                                  {/* Typed date, inline with the time fields so the
+                                      whole timestamp is editable in one row. Keeps the calendar
+                                      above as the click-to-pick path — the two write the same
+                                      form value, so neither is authoritative. */}
+                                  <Input
+                                    type="date"
+                                    id="from-date"
+                                    className="w-[9.5rem]"
+                                    value={dates?.from ? format(dates.from, 'yyyy-MM-dd') : ''}
+                                    onChange={(e) => {
+                                      const [y, m, d] = e.target.value.split('-').map(Number)
+                                      // Ignore a partially-typed value rather than wiping the field.
+                                      if (!y || !m || !d) return
+                                      // Change only the calendar date; the chosen time is preserved
+                                      // (new Date(value) would silently reset it to midnight).
+                                      const next = new Date(dates?.from ?? new Date())
+                                      next.setFullYear(y, m - 1, d)
+                                      field.onChange({ ...dates, from: next })
+                                    }}
+                                  />
                                   <Input
                                     type="number"
                                     id="start-time-h"
@@ -1449,8 +1427,28 @@ export default function CreateCampaignPage() {
                                 </div>
                               </div>
                               <div className="space-y-2">
-                                <Label htmlFor="end-time-h">End Time</Label>
+                                <Label htmlFor="end-date">End (date · hh · mm)</Label>
                                 <div className="flex gap-2">
+                                  {/* Typed date, inline with the time fields so the
+                                      whole timestamp is editable in one row. Keeps the calendar
+                                      above as the click-to-pick path — the two write the same
+                                      form value, so neither is authoritative. */}
+                                  <Input
+                                    type="date"
+                                    id="to-date"
+                                    className="w-[9.5rem]"
+                                    value={dates?.to ? format(dates.to, 'yyyy-MM-dd') : ''}
+                                    onChange={(e) => {
+                                      const [y, m, d] = e.target.value.split('-').map(Number)
+                                      // Ignore a partially-typed value rather than wiping the field.
+                                      if (!y || !m || !d) return
+                                      // Change only the calendar date; the chosen time is preserved
+                                      // (new Date(value) would silently reset it to midnight).
+                                      const next = new Date(dates?.to ?? new Date())
+                                      next.setFullYear(y, m - 1, d)
+                                      field.onChange({ ...dates, to: next })
+                                    }}
+                                  />
                                   <Input
                                     type="number"
                                     id="end-time-h"
