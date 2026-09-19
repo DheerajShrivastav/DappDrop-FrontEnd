@@ -1341,12 +1341,54 @@ export default function CreateCampaignPage() {
                                     format(field.value.from, 'LLL dd, y HH:mm')
                                   )
                                 ) : (
-                                  <span>Pick a date range</span>
+                                  <span>Pick or type a date range</span>
                                 )}
                               </Button>
                             </FormControl>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
+                            {/* Typed entry, offered alongside the calendar rather than instead
+                                of it. Clicking through two months to reach a date is slow when
+                                you already know it, and testing/scheduling a campaign for a
+                                specific timestamp was previously only possible by clicking a day
+                                and then correcting the hour/minute fields below. Both controls
+                                write the same form value, so either stays in sync with the other. */}
+                            <div className="p-4 border-b grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="start-datetime">Starts</Label>
+                                <Input
+                                  type="datetime-local"
+                                  id="start-datetime"
+                                  className="w-full"
+                                  value={
+                                    dates?.from ? format(dates.from, "yyyy-MM-dd'T'HH:mm") : ''
+                                  }
+                                  onChange={(e) => {
+                                    const next = new Date(e.target.value)
+                                    // A partially-typed value parses to Invalid Date; ignore it
+                                    // until it is complete rather than wiping the field.
+                                    if (!isNaN(next.getTime())) {
+                                      field.onChange({ ...dates, from: next })
+                                    }
+                                  }}
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="end-datetime">Ends</Label>
+                                <Input
+                                  type="datetime-local"
+                                  id="end-datetime"
+                                  className="w-full"
+                                  value={dates?.to ? format(dates.to, "yyyy-MM-dd'T'HH:mm") : ''}
+                                  onChange={(e) => {
+                                    const next = new Date(e.target.value)
+                                    if (!isNaN(next.getTime())) {
+                                      field.onChange({ ...dates, to: next })
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </div>
                             <Calendar
                               mode="range"
                               selected={field.value}
