@@ -2738,6 +2738,148 @@ export const getProtocolFeeEnabled = async (): Promise<boolean> => {
   }
 }
 
+/**
+ * The protocol fee fundCampaignERC20 would skim from `amountWei`, straight from the registered
+ * fee module's computeFee — no hardcoded rate. The reference module ignores campaignId (flat
+ * global bps), so this can be quoted before the campaign exists. null = couldn't read it; the
+ * caller must say so rather than show 0. (Quoted on the nominal amount: a fee-on-transfer token
+ * that skims in transit would be charged on slightly less.)
+ */
+export const quoteProtocolFee = async (amountWei: bigint): Promise<bigint | null> => {
+  try {
+    const c = getEntrypointReadContract()
+    const feeModule: string = await c.getFeeModule()
+    if (feeModule === ethers.ZeroAddress) return BigInt(0)
+    const fm = new ethers.Contract(
+      feeModule,
+      ['function computeFee(uint256,uint256) view returns (uint256 feeAmount, address treasury)'],
+      c.runner,
+    )
+    const [fee]: [bigint] = await fm.computeFee(0, amountWei)
+    return fee
+  } catch (e) {
+    console.warn('quoteProtocolFee failed:', e)
+    return null
+  }
+}
+
+export type RewardTokenInspection =
+  | { kind: 'erc20'; symbol: string; decimals: number; balance: bigint | null }
+  | { kind: 'nft'; standardMatches: boolean; notOwned: string[]; checked: number; total: number }
+  | { kind: 'not_contract' } // nothing deployed at this address on the target chain
+  | { kind: 'not_erc20' } // a contract, but no decimals()/symbol()
+  | { kind: 'error' } // RPC failure — unknown, not a negative answer
+
+const MAX_OWNERSHIP_CHECKS = 200
+
+/**
+ * Pre-flight look at the reward token the host typed, on the TARGET chain (read-only RPC, so a
+ * wallet on the wrong network can't make a Sepolia token look missing). Everything the wizard can
+ * check before any transaction: is it a contract, is it the right kind, does the host hold it.
+ * Catches the mistakes that otherwise surface only after createCampaign has already mined.
+ */
+export const inspectRewardToken = async (params: {
+  tokenAddress: string
+  owner?: string | null
+  kind: 'ERC20' | 'ERC721' | 'ERC1155'
+  /** NFT only: the rows the host will deposit (id + quantity; quantity ignored for ERC721). */
+  items?: { id: string; qty: string }[]
+}): Promise<RewardTokenInspection> => {
+  const rpc = getReadOnlyContract()?.runner?.provider
+  if (!rpc) return { kind: 'error' }
+  try {
+    const code = await rpc.getCode(params.tokenAddress)
+    // An EIP-7702-delegated wallet has code too (0xef0100 ‖ delegate address) — it's still a
+    // wallet, not a token, so it gets the "no contract here" answer rather than "not an ERC20".
+    const isDelegatedWallet = /^0xef0100[0-9a-f]{40}$/i.test(code ?? '')
+    if (!code || code === '0x' || isDelegatedWallet) return { kind: 'not_contract' }
+  } catch {
+    return { kind: 'error' }
+  }
+
+  if (params.kind === 'ERC20') {
+    const t = new ethers.Contract(
+      params.tokenAddress,
+      [
+        'function decimals() view returns (uint8)',
+        'function symbol() view returns (string)',
+        'function balanceOf(address) view returns (uint256)',
+      ],
+      rpc,
+    )
+    let decimals: number
+    let symbol: string
+    try {
+      const [d, s] = await Promise.all([t.decimals(), t.symbol()])
+      decimals = Number(d)
+      symbol = String(s)
+    } catch {
+      return { kind: 'not_erc20' }
+    }
+    let balance: bigint | null = null
+    if (params.owner) {
+      try {
+        balance = await t.balanceOf(params.owner)
+      } catch {
+        balance = null
+      }
+    }
+    return { kind: 'erc20', symbol, decimals, balance }
+  }
+
+  // NFTs: ERC165 interface check, then ownership of each ID to be deposited.
+  const INTERFACE_ID = params.kind === 'ERC721' ? '0x80ac58cd' : '0xd9b67a26'
+  const nft = new ethers.Contract(
+    params.tokenAddress,
+    [
+      'function supportsInterface(bytes4) view returns (bool)',
+      'function ownerOf(uint256) view returns (address)',
+      'function balanceOf(address,uint256) view returns (uint256)',
+    ],
+    rpc,
+  )
+  let standardMatches = false
+  try {
+    standardMatches = await nft.supportsInterface(INTERFACE_ID)
+  } catch {
+    standardMatches = false
+  }
+  const items = (params.items ?? []).filter((r) => /^\d+$/.test(r.id.trim()))
+  const toCheck = items.slice(0, MAX_OWNERSHIP_CHECKS)
+  const notOwned: string[] = []
+  if (standardMatches && params.owner && toCheck.length) {
+    const owner = params.owner.toLowerCase()
+    // ERC1155: the host needs the SUM of every row for an ID, not each row on its own.
+    const need = new Map<string, bigint>()
+    for (const r of toCheck) {
+      const qty = params.kind === 'ERC1155' && /^\d+$/.test(r.qty.trim()) ? BigInt(r.qty.trim()) : BigInt(1)
+      need.set(r.id.trim(), (need.get(r.id.trim()) ?? BigInt(0)) + qty)
+    }
+    const ids = [...need.keys()]
+    for (let i = 0; i < ids.length; i += 10) {
+      const batch = ids.slice(i, i + 10)
+      const results = await Promise.all(
+        batch.map(async (id) => {
+          try {
+            if (params.kind === 'ERC721') {
+              const o: string = await nft.ownerOf(id)
+              return o.toLowerCase() === owner
+            }
+            const bal: bigint = await nft.balanceOf(params.owner, id)
+            return bal >= (need.get(id) ?? BigInt(1))
+          } catch {
+            return false // ownerOf reverts for a nonexistent token — not owned either way
+          }
+        }),
+      )
+      results.forEach((ok, j) => {
+        if (!ok) notOwned.push(batch[j])
+      })
+    }
+  }
+  return { kind: 'nft', standardMatches, notOwned, checked: toCheck.length, total: items.length }
+}
+
 // ---------------------------------------------------------------------------
 // P1 — Merkle settlement: host publish + participant self-claim (FR-M3, FR-C2, BR-M3)
 // ---------------------------------------------------------------------------
@@ -2905,6 +3047,12 @@ export const mapContractRevertToMessage = (error: any): string => {
   }
   if (has('Web3Campaigns__InvalidParticipantLimit')) {
     return 'That participant cap is not allowed.'
+  }
+  if (has('Web3Campaigns__TooManyTiers')) {
+    return 'Reward tiers must number between 1 and 10.'
+  }
+  if (has('Web3Campaigns__InvalidTierConfiguration')) {
+    return 'The reward tiers are invalid: rank tiers must not overlap, and score tiers need different minimum scores.'
   }
   if (has('Web3Campaigns__ArrayLengthMismatch')) {
     return 'Token IDs and amounts must have the same number of entries.'
