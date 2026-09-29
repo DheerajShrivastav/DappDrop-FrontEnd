@@ -2741,7 +2741,11 @@ export const getProtocolFeeEnabled = async (): Promise<boolean> => {
 /**
  * The protocol fee fundCampaignERC20 would skim from `amountWei`, straight from the registered
  * fee module's computeFee — no hardcoded rate. The reference module ignores campaignId (flat
- * global bps), so this can be quoted before the campaign exists. null = couldn't read it; the
+ * global bps), so this can be quoted before the campaign exists.
+ * ASSUMPTION: quotes with campaignId 0. If a fee module that prices PER CAMPAIGN is ever
+ * registered via setFeeModule, this quote (shown on the wizard's Review step) would be wrong —
+ * the real id only exists after createCampaign, so the quote would have to move after creation,
+ * or the fee's dependence on the id be exposed some other way. null = couldn't read it; the
  * caller must say so rather than show 0. (Quoted on the nominal amount: a fee-on-transfer token
  * that skims in transit would be charged on slightly less.)
  */
