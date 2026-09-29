@@ -13,9 +13,14 @@ import {
   EXPIRED_OPEN_WARNING,
 } from '@/lib/campaign-timing'
 import { OpenExpiredCampaignDialog } from '@/components/open-expired-campaign-dialog'
-import { addDays, format, setHours, setMinutes } from 'date-fns'
+import { CampaignScheduleField } from '@/components/campaign-schedule-field'
 import {
-  Calendar as CalendarIcon,
+  defaultScheduleState,
+  scheduleSummary,
+  scheduleToDates,
+  type ScheduleState,
+} from '@/lib/campaign-schedule'
+import {
   Loader2,
   Plus,
   ShieldCheck,
@@ -54,12 +59,6 @@ import {
   CardDescription,
 } from '@/components/ui/card'
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -95,6 +94,7 @@ import {
   depositERC721Rewards,
   depositERC1155Rewards,
   getLatestBlockTimestamp,
+  getCampaignById,
   type DraftTaskInput,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
@@ -388,6 +388,10 @@ export default function CreateCampaignPage() {
   // re-run createDraftCampaignWithTasks (which would create a SECOND on-chain campaign and
   // orphan the first, half-configured one).
   const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null)
+  // The endTime actually submitted on-chain. Kept separate from the `dates` form value, which is
+  // derived from "now" and would drift if read after creation — the go-live expiry warning must
+  // compare against the real on-chain end, not a re-derived one.
+  const [submittedEndDate, setSubmittedEndDate] = useState<Date | null>(null)
   const [pendingFunded, setPendingFunded] = useState(false)
   const [pendingTiersSet, setPendingTiersSet] = useState(false)
   const [pendingDeposited, setPendingDeposited] = useState(false)
@@ -400,16 +404,17 @@ export default function CreateCampaignPage() {
   const uploadedImageUrlRef = useRef<string | null>(null)
   const campaignCreatedRef = useRef(false)
 
+  // The Schedule field's input model. `dates` (what the schema validates and submit sends) is
+  // always DERIVED from this via scheduleToDates — never edited directly — so the field, the
+  // Review step and submit can't disagree. See src/lib/campaign-schedule.ts.
+  const [schedule, setSchedule] = useState<ScheduleState>(() => defaultScheduleState())
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignSchema),
     defaultValues: {
       title: '',
       shortDescription: '',
       description: '',
-      dates: {
-        from: new Date(),
-        to: addDays(new Date(), 1),
-      },
+      dates: scheduleToDates(schedule, new Date()),
       imageUrl: `https://placehold.co/600x400`,
       humanityGated: false,
       maxParticipants: '',
@@ -457,7 +462,38 @@ export default function CreateCampaignPage() {
   const scoreTiersWatched = form.watch('reward.scoreTiers')
   const taskPointsWatched = form.watch('reward.taskPoints')
   const humanityGatedWatched = form.watch('humanityGated')
-  const dates = form.watch('dates')
+  // (3) Safety net: if the go-live step is reached without the submitted end in state, read the
+  // real endTime from chain rather than re-deriving it from the schedule.
+  useEffect(() => {
+    if (wizardPhase !== 'created' || !createdCampaignId || submittedEndDate) return
+    let cancelled = false
+    getCampaignById(createdCampaignId)
+      .then((c) => {
+        if (!cancelled && c) setSubmittedEndDate(c.endDate)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [wizardPhase, createdCampaignId, submittedEndDate])
+
+  const applySchedule = (next: ScheduleState) => {
+    setSchedule(next)
+    form.setValue('dates', scheduleToDates(next, new Date()), { shouldValidate: true, shouldDirty: true })
+  }
+  // "As soon as it's created" and preset durations are relative to NOW, so `dates` goes stale
+  // while the tab sits open. Re-derive every minute; Next and submit re-derive again anyway.
+  // Stops once the campaign exists: its start/end are then fixed on-chain, and re-deriving would
+  // make `dates` describe a campaign that was never submitted.
+  useEffect(() => {
+    if (campaignCreated) return
+    const t = setInterval(() => {
+      form.setValue('dates', scheduleToDates(schedule, new Date()), {
+        shouldValidate: Boolean(form.formState.errors.dates),
+      })
+    }, 60_000)
+    return () => clearInterval(t)
+  }, [schedule, form, campaignCreated])
   const tasks = form.watch('tasks')
 
   // Keep reward.taskPoints aligned 1:1 with the tasks array (index i = tasks[i]'s points) as
@@ -530,9 +566,15 @@ export default function CreateCampaignPage() {
           })
           return
         }
+        // Re-derive from the Schedule input against CHAIN time: "as soon as it's created" and
+        // preset durations are relative to now, and `data.dates` was derived from the local clock
+        // whenever it last refreshed. (The go-live step reads submittedEndDate, set below once
+        // the campaign exists — not this form value.)
+        const submittedDates = scheduleToDates(schedule, new Date(chainNow * 1000))
+        form.setValue('dates', submittedDates)
         const timing = resolveCampaignTiming({
-          pickedStart: Math.floor(data.dates.from.getTime() / 1000),
-          end: Math.floor(data.dates.to.getTime() / 1000),
+          pickedStart: Math.floor(submittedDates.from.getTime() / 1000),
+          end: Math.floor(submittedDates.to.getTime() / 1000),
           chainNow,
         })
         const timingError = campaignTimingMessage(timing)
@@ -571,6 +613,7 @@ export default function CreateCampaignPage() {
         // any later step in this same submit succeeds.
         setPendingCampaignId(campaignId)
         setCampaignCreated(true)
+        setSubmittedEndDate(new Date(timing.endTime * 1000))
       }
 
       if (data.reward.type === 'ERC20' && !pendingFunded) {
@@ -888,6 +931,9 @@ export default function CreateCampaignPage() {
       | (keyof CampaignFormValues)[]
       | `tasks.${number}.${'description' | 'type'}`[]
       | `reward.${'type' | 'tokenAddress' | 'amount' | 'name'}`[] = []
+    if (step === 1 && !campaignCreated) {
+      form.setValue('dates', scheduleToDates(schedule, new Date()))
+    }
     if (step === 1)
       fieldsToValidate = [
         'title',
@@ -1336,196 +1382,15 @@ export default function CreateCampaignPage() {
                   <FormField
                     control={form.control}
                     name="dates"
-                    render={({ field }) => (
+                    render={() => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Campaign Duration</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={'outline'}
-                                className={cn(
-                                  'w-full justify-start text-left font-normal',
-                                  !field.value?.from && 'text-muted-foreground',
-                                )}
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {field.value?.from ? (
-                                  field.value.to ? (
-                                    <>
-                                      {format(
-                                        field.value.from,
-                                        'LLL dd, y HH:mm',
-                                      )}{' '}
-                                      -{' '}
-                                      {format(
-                                        field.value.to,
-                                        'LLL dd, y HH:mm',
-                                      )}
-                                    </>
-                                  ) : (
-                                    format(field.value.from, 'LLL dd, y HH:mm')
-                                  )
-                                ) : (
-                                  <span>Pick or type a date range</span>
-                                )}
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="range"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              initialFocus
-                              numberOfMonths={2}
-                            />
-                            <div className="p-4 border-t grid grid-cols-1 lg:grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="start-date">Start (date · hh · mm)</Label>
-                                <div className="flex gap-2">
-                                  {/* Typed date, inline with the time fields so the
-                                      whole timestamp is editable in one row. Keeps the calendar
-                                      above as the click-to-pick path — the two write the same
-                                      form value, so neither is authoritative. */}
-                                  <Input
-                                    type="date"
-                                    id="from-date"
-                                    className="w-[9.5rem]"
-                                    value={dates?.from ? format(dates.from, 'yyyy-MM-dd') : ''}
-                                    onChange={(e) => {
-                                      const [y, m, d] = e.target.value.split('-').map(Number)
-                                      // Ignore a partially-typed value rather than wiping the field.
-                                      if (!y || !m || !d) return
-                                      // Change only the calendar date; the chosen time is preserved
-                                      // (new Date(value) would silently reset it to midnight).
-                                      const next = new Date(dates?.from ?? new Date())
-                                      next.setFullYear(y, m - 1, d)
-                                      field.onChange({ ...dates, from: next })
-                                    }}
-                                  />
-                                  <Input
-                                    type="number"
-                                    id="start-time-h"
-                                    min="0"
-                                    max="23"
-                                    className="w-16"
-                                    placeholder="HH"
-                                    value={dates?.from?.getHours() ?? 0}
-                                    onChange={(e) => {
-                                      const newHour = parseInt(
-                                        e.target.value,
-                                        10,
-                                      )
-                                      if (!isNaN(newHour))
-                                        field.onChange({
-                                          ...dates,
-                                          from: setHours(
-                                            dates.from ?? new Date(),
-                                            newHour,
-                                          ),
-                                        })
-                                    }}
-                                  />
-                                  <Input
-                                    type="number"
-                                    id="start-time-m"
-                                    min="0"
-                                    max="59"
-                                    className="w-16"
-                                    placeholder="MM"
-                                    value={dates?.from?.getMinutes() ?? 0}
-                                    onChange={(e) => {
-                                      const newMin = parseInt(
-                                        e.target.value,
-                                        10,
-                                      )
-                                      if (!isNaN(newMin))
-                                        field.onChange({
-                                          ...dates,
-                                          from: setMinutes(
-                                            dates.from ?? new Date(),
-                                            newMin,
-                                          ),
-                                        })
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="end-date">End (date · hh · mm)</Label>
-                                <div className="flex gap-2">
-                                  {/* Typed date, inline with the time fields so the
-                                      whole timestamp is editable in one row. Keeps the calendar
-                                      above as the click-to-pick path — the two write the same
-                                      form value, so neither is authoritative. */}
-                                  <Input
-                                    type="date"
-                                    id="to-date"
-                                    className="w-[9.5rem]"
-                                    value={dates?.to ? format(dates.to, 'yyyy-MM-dd') : ''}
-                                    onChange={(e) => {
-                                      const [y, m, d] = e.target.value.split('-').map(Number)
-                                      // Ignore a partially-typed value rather than wiping the field.
-                                      if (!y || !m || !d) return
-                                      // Change only the calendar date; the chosen time is preserved
-                                      // (new Date(value) would silently reset it to midnight).
-                                      const next = new Date(dates?.to ?? new Date())
-                                      next.setFullYear(y, m - 1, d)
-                                      field.onChange({ ...dates, to: next })
-                                    }}
-                                  />
-                                  <Input
-                                    type="number"
-                                    id="end-time-h"
-                                    min="0"
-                                    max="23"
-                                    className="w-16"
-                                    placeholder="HH"
-                                    value={dates?.to?.getHours() ?? 0}
-                                    onChange={(e) => {
-                                      const newHour = parseInt(
-                                        e.target.value,
-                                        10,
-                                      )
-                                      if (!isNaN(newHour))
-                                        field.onChange({
-                                          ...dates,
-                                          to: setHours(
-                                            dates.to ?? new Date(),
-                                            newHour,
-                                          ),
-                                        })
-                                    }}
-                                  />
-                                  <Input
-                                    type="number"
-                                    id="end-time-m"
-                                    min="0"
-                                    max="59"
-                                    className="w-16"
-                                    placeholder="MM"
-                                    value={dates?.to?.getMinutes() ?? 0}
-                                    onChange={(e) => {
-                                      const newMin = parseInt(
-                                        e.target.value,
-                                        10,
-                                      )
-                                      if (!isNaN(newMin))
-                                        field.onChange({
-                                          ...dates,
-                                          to: setMinutes(
-                                            dates.to ?? new Date(),
-                                            newMin,
-                                          ),
-                                        })
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
+                        <FormLabel>Schedule</FormLabel>
+                        <CampaignScheduleField value={schedule} onChange={applySchedule} />
+                        <FormDescription>
+                          Times are in your local time zone. Campaigns run between 1 hour and 365
+                          days, and the start and end can&apos;t be changed after creation.
+                        </FormDescription>
+                        {/* The schema's issue sits on `dates` itself (no path) so this renders it. */}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -2884,6 +2749,15 @@ export default function CreateCampaignPage() {
                         wallet{humanityGatedWatched ? ' — Humanity-verified wallets only' : ''}.
                       </div>
                     )}
+                    <div className="text-sm">
+                      <strong>Schedule:</strong> {scheduleSummary(schedule, new Date()).primary}
+                      <p className="text-muted-foreground">
+                        {scheduleSummary(schedule, new Date()).utc}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Start and end times can&apos;t be changed after the campaign is created.
+                      </p>
+                    </div>
                     {form.getValues('maxParticipants') && (
                       <div className="text-sm">
                         <strong>Participant cap:</strong>{' '}
@@ -2963,7 +2837,7 @@ export default function CreateCampaignPage() {
               {step === 4 && wizardPhase === 'created' && createdCampaignId && (
                 <GoLiveChecklist
                   campaignId={createdCampaignId}
-                  endDate={form.getValues('dates')?.to}
+                  endDate={submittedEndDate ?? undefined}
                   isOpening={isOpening}
                   onOpen={async () => {
                     setIsOpening(true)
