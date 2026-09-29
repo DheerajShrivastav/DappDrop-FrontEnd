@@ -24,6 +24,7 @@ export type LifecycleState =
   | 'allocations_published' // root set, within the 24h dispute window
   | 'claims_open' // root set, dispute window elapsed
   | 'closed_claimable' // Closed, within the 30-day grace period
+  | 'closed_no_claimants' // Closed, but nobody can claim (zero participants, or no root ever published)
   | 'swept' // unclaimed escrow swept / claiming ended
   | 'cancelled' // terminal, refunded
 
@@ -127,6 +128,28 @@ export function getLifecycleState(
   }
 
   if (campaign.status === 'Closed') {
+    // Nobody can claim from a Closed campaign with zero participants, or from a Merkle/NFT
+    // campaign that was closed without ever publishing a root (no tree, no leaves). "Claim now"
+    // would be false for both. The root rule only applies when settlement facts actually loaded
+    // (`s` defined) — a missing snapshot must not be read as "no root", or every Closed Merkle
+    // campaign would claim to have no eligible participants whenever the indexer is unavailable.
+    // Tiered campaigns with participants but no qualifier aren't detectable from this snapshot
+    // and keep the claimable copy; their claim panel reports per-wallet eligibility.
+    const noClaimants = campaign.participants === 0 || (s !== undefined && !tiered && !hasRoot)
+    if (noClaimants) {
+      // The sweep is NOT automatic — withdrawUnclaimedERC20 / withdrawUnclaimedERC721/1155 are
+      // host-called. So this says the funds become withdrawable, never that they "return".
+      return {
+        state: 'closed_no_claimants',
+        label: 'Closed — no eligible participants',
+        detail: sweepEligibleAt
+          ? `No eligible participants — the host can withdraw the escrowed rewards from ${sweepEligibleAt.toLocaleDateString()}.`
+          : 'No eligible participants — the host can withdraw the escrowed rewards once the 30-day grace period ends.',
+        sweepEligibleAt,
+        inDisputeWindow: false,
+        claimable: false,
+      }
+    }
     return {
       state: 'closed_claimable',
       label: 'Closed — claim now',

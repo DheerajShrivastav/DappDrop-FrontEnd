@@ -5,6 +5,14 @@ import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
+import {
+  campaignDatesSchema,
+  resolveCampaignTiming,
+  campaignTimingMessage,
+  hasEndTimePassed,
+  EXPIRED_OPEN_WARNING,
+} from '@/lib/campaign-timing'
+import { OpenExpiredCampaignDialog } from '@/components/open-expired-campaign-dialog'
 import { addDays, format, setHours, setMinutes } from 'date-fns'
 import {
   Calendar as CalendarIcon,
@@ -86,6 +94,7 @@ import {
   getERC20TokenInfo,
   depositERC721Rewards,
   depositERC1155Rewards,
+  getLatestBlockTimestamp,
   type DraftTaskInput,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
@@ -94,7 +103,7 @@ import {
   parseCampaignGenerationError,
   type GenerationStage,
 } from '@/ai/flows/generate-campaign.errors'
-import { AlertCircle, Wifi, Clock, RefreshCw } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Wifi, Clock, RefreshCw } from 'lucide-react'
 import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
@@ -220,15 +229,7 @@ const campaignSchema = z.object({
   description: z
     .string()
     .min(50, 'Detailed description must be at least 50 characters long.'),
-  dates: z
-    .object({
-      from: z.date({ required_error: 'Start date is required.' }),
-      to: z.date({ required_error: 'End date is required.' }),
-    })
-    .refine((data) => data.to > data.from, {
-      message: 'End date must be after the start date.',
-      path: ['to'],
-    }),
+  dates: campaignDatesSchema,
   imageUrl: z.string().url('Please enter a valid image URL.'),
   // Per-campaign sybil-gating toggle (docs/HUMANITY_GATING.md). No contract field — an
   // off-chain policy flag consumed by the allocation pipeline at tree-build time.
@@ -512,12 +513,37 @@ export default function CreateCampaignPage() {
     let campaignId: string | null = pendingCampaignId
     try {
       if (!campaignId) {
-        // Contract requires strictly-future start times; nudge a "now" default forward
-        // rather than let the tx revert on a stale default.
-        const now = Math.floor(Date.now() / 1000)
-        const userStart = Math.floor(data.dates.from.getTime() / 1000)
-        const startTime = userStart <= now ? now + 60 : userStart
-        const endTime = Math.floor(data.dates.to.getTime() / 1000)
+        // The contract checks startTime against the block the tx is MINED in. Resolve against
+        // the latest block's timestamp (not Date.now() — a skewed local clock is exactly how a
+        // "future" start ends up in the chain's past), moving any start closer than
+        // START_BUFFER_SEC out. Then re-check the duration with that effective start: moving the
+        // start later can push a campaign under 1 hour, and that must stop here, before any tx,
+        // rather than revert on-chain.
+        let chainNow: number
+        try {
+          chainNow = await getLatestBlockTimestamp()
+        } catch {
+          toast({
+            variant: 'destructive',
+            title: 'Could not check the network time',
+            description: 'We couldn’t read the current block time, so nothing was submitted. Check your connection and try again.',
+          })
+          return
+        }
+        const timing = resolveCampaignTiming({
+          pickedStart: Math.floor(data.dates.from.getTime() / 1000),
+          end: Math.floor(data.dates.to.getTime() / 1000),
+          chainNow,
+        })
+        const timingError = campaignTimingMessage(timing)
+        if (timingError) {
+          toast({ variant: 'destructive', title: 'Adjust the campaign dates', description: timingError })
+          // Send the host back to where the dates live and surface the same message inline.
+          setStep(1)
+          form.setError('dates', { type: 'custom', message: timingError })
+          return
+        }
+        const { startTime, endTime } = timing
 
         const draftTasks: DraftTaskInput[] = data.tasks.map((t) => ({
           type: t.type,
@@ -2937,6 +2963,7 @@ export default function CreateCampaignPage() {
               {step === 4 && wizardPhase === 'created' && createdCampaignId && (
                 <GoLiveChecklist
                   campaignId={createdCampaignId}
+                  endDate={form.getValues('dates')?.to}
                   isOpening={isOpening}
                   onOpen={async () => {
                     setIsOpening(true)
@@ -2994,15 +3021,28 @@ export default function CreateCampaignPage() {
  * completed Draft can sit indefinitely (FR-H7) via "I'll open it later". */
 function GoLiveChecklist({
   campaignId,
+  endDate,
   isOpening,
   onOpen,
   onLater,
 }: {
   campaignId: string
+  /** The end time submitted on-chain (the wizard's `dates.to`). */
+  endDate?: Date
   isOpening: boolean
   onOpen: () => void
   onLater: () => void
 }) {
+  // Re-evaluated every 30s: a host can sit on this screen past the end time (the minimum
+  // campaign is only 1 hour), and the checklist must not keep claiming the times are fine.
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+  const [confirmExpiredOpen, setConfirmExpiredOpen] = useState(false)
+  const endPassed = endDate ? hasEndTimePassed(endDate, now) : false
+
   return (
     <section className="space-y-6 animate-in fade-in-50">
       <h2 className="text-xl font-semibold border-b pb-2">Go live</h2>
@@ -3021,11 +3061,38 @@ function GoLiveChecklist({
             funded
           </li>
           <li className="flex items-center gap-2">
-            <Check className="h-4 w-4 text-status-claimable-fg" /> Start/end times valid
+            {endPassed ? (
+              <>
+                <AlertTriangle className="h-4 w-4 text-destructive" /> End time has passed
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4 text-status-claimable-fg" /> Start/end times valid
+              </>
+            )}
           </li>
         </ul>
+        {endPassed && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>End time has passed</AlertTitle>
+            <AlertDescription>{EXPIRED_OPEN_WARNING}</AlertDescription>
+          </Alert>
+        )}
+        <OpenExpiredCampaignDialog
+          open={confirmExpiredOpen}
+          onOpenChange={setConfirmExpiredOpen}
+          onConfirm={onOpen}
+        />
         <div className="flex gap-3 pt-2">
-          <Button onClick={onOpen} disabled={isOpening}>
+          <Button
+            onClick={() => {
+              // Re-check at click time, not just render time — the interval can be up to 30s stale.
+              if (endDate && hasEndTimePassed(endDate)) setConfirmExpiredOpen(true)
+              else onOpen()
+            }}
+            disabled={isOpening}
+          >
             {isOpening && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Open Campaign
           </Button>

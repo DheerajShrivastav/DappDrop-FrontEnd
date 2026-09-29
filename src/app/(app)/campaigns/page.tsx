@@ -92,7 +92,7 @@ export default function CampaignsPage() {
             !['claims_open', 'allocations_published', 'closed_claimable'].includes(state)
           )
             return false
-          if (status === 'closed' && !['swept', 'cancelled'].includes(state)) return false
+          if (status === 'closed' && !['swept', 'cancelled', 'closed_no_claimants'].includes(state)) return false
         }
         return true
       })

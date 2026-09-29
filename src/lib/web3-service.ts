@@ -1081,7 +1081,7 @@ export const configureRankTiers = async (
     toast({
       variant: 'destructive',
       title: 'Failed to configure rank tiers',
-      description: error.reason || error.message || 'An unknown error occurred.',
+      description: mapContractRevertToMessage(error),
     })
     throw error
   }
@@ -1108,7 +1108,7 @@ export const configureScoreTiers = async (
     toast({
       variant: 'destructive',
       title: 'Failed to configure score tiers',
-      description: error.reason || error.message || 'An unknown error occurred.',
+      description: mapContractRevertToMessage(error),
     })
     throw error
   }
@@ -1135,7 +1135,7 @@ export const configureTaskPoints = async (
     toast({
       variant: 'destructive',
       title: 'Failed to configure task points',
-      description: error.reason || error.message || 'An unknown error occurred.',
+      description: mapContractRevertToMessage(error),
     })
     throw error
   }
@@ -1224,7 +1224,7 @@ export const depositERC721Rewards = async (
     toast({
       variant: 'destructive',
       title: 'Failed to deposit NFTs',
-      description: error.reason || error.message || 'An unknown error occurred.',
+      description: mapContractRevertToMessage(error),
     })
     throw error
   }
@@ -1263,7 +1263,7 @@ export const depositERC1155Rewards = async (
     toast({
       variant: 'destructive',
       title: 'Failed to deposit NFTs',
-      description: error.reason || error.message || 'An unknown error occurred.',
+      description: mapContractRevertToMessage(error),
     })
     throw error
   }
@@ -2344,11 +2344,10 @@ export const becomeHost = async () => {
     })
   } catch (error: any) {
     console.error('Error granting host role:', error)
-    const reason = error.reason || 'An unknown error occurred.'
     toast({
       variant: 'destructive',
-      title: 'Transaction Failed',
-      description: `Failed to get host role. Reason: ${reason}`,
+      title: 'Could not become a host',
+      description: mapContractRevertToMessage(error),
     })
     throw error
   }
@@ -2404,31 +2403,11 @@ export const openCampaign = async (
     } catch (openError: any) {
       console.error(`Failed to open campaign ${campaignId}:`, openError)
 
-      // Handle specific smart contract errors
-      let errorMessage = 'Could not open this campaign.'
-
-      if (openError.reason) {
-        if (
-          openError.reason.includes(
-            'Web3Campaigns__CampaignStartTimeNotYetStrated',
-          )
-        ) {
-          errorMessage = 'Campaign start time has not been reached yet.'
-        } else if (
-          openError.reason.includes('Web3Campaigns__CampaignAlreadyStarted')
-        ) {
-          errorMessage = 'Campaign has already been started.'
-        } else if (
-          openError.reason.includes('Web3Campaigns__CallerIsNotHost')
-        ) {
-          errorMessage = 'Only the campaign host can open this campaign.'
-        } else {
-          errorMessage = `Contract error: ${openError.reason}`
-        }
-      } else if (openError.code === 'CALL_EXCEPTION') {
-        errorMessage =
-          'Smart contract rejected the transaction. Please check the campaign status and your permissions.'
-      }
+      // Previously matched a misspelled error name ('...NotYetStrated') and fell through to
+      // raw `Contract error: ${reason}` text — route through the shared mapper instead.
+      const errorMessage = openError?.reason?.includes('Web3Campaigns__CampaignAlreadyStarted')
+        ? 'This campaign has already been opened.'
+        : mapContractRevertToMessage(openError)
 
       toast({
         title: 'Failed to Open Campaign',
@@ -2501,6 +2480,47 @@ export const closeCampaignOnChain = async (campaignId: string): Promise<string> 
   }
 }
 
+/**
+ * What a host's options are before closing (Ended -> Closed). Both answers come from the chain,
+ * not the indexer: the participant count decides whether we tell the host "no one
+ * participated", and closing vs cancelling routes escrow — subgraph lag must not drive either.
+ *
+ * `canCancel` is a staticCall of cancelCampaign from the host's own signer rather than a
+ * client-side re-derivation of its rules (Draft/Open/Ended, zero participants, ERC20 mode UNSET,
+ * no NFT root, onlyHost, not paused). There's no on-chain getter for the ERC20 settlement mode,
+ * and a staticCall can't drift from the contract. Any failure — a real revert or a flaky RPC —
+ * reads as "can't cancel", which only hides the option; it never offers one that would revert.
+ * Tiered campaigns always come back false here: configuring tiers locks their mode in Draft.
+ */
+export const getCloseOptions = async (
+  campaignId: string,
+): Promise<{ totalParticipants: number; canCancel: boolean }> => {
+  const c = getReadOnlyContract()
+  if (!c) throw new Error('Contract not initialized')
+  const id = parseInt(campaignId, 10)
+  const data = await c.getCampaign(id)
+  const totalParticipants = Number(data.totalParticipants)
+  if (totalParticipants !== 0 || !contract) return { totalParticipants, canCancel: false }
+  try {
+    const signer = await getSigner()
+    await (contract.connect(signer) as Contract).cancelCampaign.staticCall(id)
+    return { totalParticipants, canCancel: true }
+  } catch {
+    return { totalParticipants, canCancel: false }
+  }
+}
+
+/** Host-only cancelCampaign. ERC20 escrow is refunded to the host in this same tx; escrowed
+ * NFTs are NOT transferred — they become withdrawable immediately (no 30-day grace). Errors
+ * propagate for the caller to map (mapContractRevertToMessage). */
+export const cancelCampaignOnChain = async (campaignId: string): Promise<string> => {
+  if (!contract) throw new Error('Contract not initialized')
+  const signer = await getSigner()
+  const tx = await (contract.connect(signer) as Contract).cancelCampaign(parseInt(campaignId, 10))
+  const receipt = await tx.wait()
+  return receipt?.hash
+}
+
 // ---------------------------------------------------------------------------
 // P1 — Draft creation flow (FR-H2..H6). Replaces the removed single-tx
 // createCampaignWithTasksAndReward with the actual v0.6.0 multi-step Draft sequence:
@@ -2514,6 +2534,22 @@ const ERC20_MIN_ABI = [
   'function allowance(address owner, address spender) view returns (uint256)',
   'function approve(address spender, uint256 amount) returns (bool)',
 ]
+
+/**
+ * Timestamp (unix seconds) of the latest block on the TARGET chain — the clock
+ * createCampaign's start-time check actually uses. Read through the read-only RPC provider, not
+ * the wallet's: a wallet on the wrong network would otherwise hand back another chain's clock.
+ * Throws rather than falling back to Date.now(), so the caller can't silently submit a start
+ * time computed against a clock the contract doesn't use.
+ */
+export const getLatestBlockTimestamp = async (): Promise<number> => {
+  const runner = getReadOnlyContract()?.runner
+  const rpc = runner?.provider
+  if (!rpc) throw new Error('Could not reach the network to read the current block time.')
+  const block = await rpc.getBlock('latest')
+  if (!block) throw new Error('Could not read the latest block.')
+  return block.timestamp
+}
 
 /** Read a reward token's decimals/symbol so funding amounts are converted correctly. */
 export const getERC20TokenInfo = async (
@@ -2595,7 +2631,7 @@ export const createDraftCampaignWithTasks = async (params: {
     return campaignId.toString()
   } catch (error: any) {
     console.error('Error creating draft campaign:', error)
-    const reason = error.reason || error.message || 'An unknown error occurred.'
+    const reason = mapContractRevertToMessage(error)
     toast({
       variant: 'destructive',
       title: 'Campaign Creation Failed',
@@ -2652,7 +2688,7 @@ export const configureAndFundERC20Reward = async (
     return { decimals: info.decimals, amountWei }
   } catch (error: any) {
     console.error('Error configuring/funding ERC20 reward:', error)
-    const reason = error.reason || error.message || 'An unknown error occurred.'
+    const reason = mapContractRevertToMessage(error)
     toast({
       variant: 'destructive',
       title: 'Funding Failed',
@@ -2675,7 +2711,7 @@ export const setCampaignMaxParticipantsOnChain = async (
     await tx.wait()
   } catch (error: any) {
     console.error('Error setting max participants:', error)
-    const reason = error.reason || error.message || 'An unknown error occurred.'
+    const reason = mapContractRevertToMessage(error)
     toast({
       variant: 'destructive',
       title: 'Failed to Set Participant Cap',
@@ -2830,6 +2866,55 @@ export const mapContractRevertToMessage = (error: any): string => {
   }
   if (has('Web3Campaigns__BatchTooLarge')) {
     return 'Too many items in one transaction — try a smaller batch.'
+  }
+  // --- Campaign creation / Draft configuration (wizard) ---
+  // Misnamed on-chain: fires when the start time is at or before the block it was mined in,
+  // i.e. the start already passed — not that it "hasn't started yet".
+  if (has('Web3Campaigns__CampaignStartTimeNotYetStarted')) {
+    return 'The start time passed before the transaction confirmed. Choose a later start time and try again.'
+  }
+  if (has('Web3Campaigns__InvalidCampaignDuration')) {
+    return 'Campaigns must run between 1 hour and 365 days.'
+  }
+  if (has('Rate limit: too many actions')) {
+    return 'You can create one campaign every 5 minutes. Wait a few minutes and try again.'
+  }
+  if (has('Invalid name length')) {
+    return 'Campaign titles must be between 1 and 200 characters.'
+  }
+  if (has('Too many tasks per campaign')) {
+    return 'A campaign can have at most 20 tasks.'
+  }
+  if (has('Web3Campaigns__CampaignAlreadyStarted')) {
+    return 'This can only be changed while the campaign is still in Draft.'
+  }
+  if (has('Web3Campaigns__CampaignAlreadyEnded')) {
+    return 'This campaign has already ended, so it can no longer be funded.'
+  }
+  if (has('Web3Campaigns__InvalidTokenAddress')) {
+    return 'That token address is not valid for this reward.'
+  }
+  if (has('Web3Campaigns__InvalidAmount')) {
+    return 'The amount must be greater than zero.'
+  }
+  if (has('Web3Campaigns__FeeExceedsAmount')) {
+    return 'The funding amount is too small to cover the protocol fee.'
+  }
+  if (has('Web3Campaigns__NoFundsReceived')) {
+    return 'No tokens were received. Check your token balance and approval, then try again.'
+  }
+  if (has('Web3Campaigns__InvalidParticipantLimit')) {
+    return 'That participant cap is not allowed.'
+  }
+  if (has('Web3Campaigns__ArrayLengthMismatch')) {
+    return 'Token IDs and amounts must have the same number of entries.'
+  }
+  // --- Cancel ---
+  if (has('Web3Campaigns__CampaignHasParticipants')) {
+    return 'Someone has participated in this campaign, so it can no longer be cancelled.'
+  }
+  if (has('Web3Campaigns__CampaignNotCancellable')) {
+    return 'This campaign can no longer be cancelled — its reward settlement is already committed.'
   }
   if (has('EnforcedPause') || has('paused')) {
     return 'The platform is temporarily paused for maintenance. Please try again shortly.'
