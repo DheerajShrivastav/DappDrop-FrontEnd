@@ -94,6 +94,7 @@ import {
   depositERC721Rewards,
   depositERC1155Rewards,
   getLatestBlockTimestamp,
+  getCampaignById,
   type DraftTaskInput,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
@@ -387,6 +388,10 @@ export default function CreateCampaignPage() {
   // re-run createDraftCampaignWithTasks (which would create a SECOND on-chain campaign and
   // orphan the first, half-configured one).
   const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null)
+  // The endTime actually submitted on-chain. Kept separate from the `dates` form value, which is
+  // derived from "now" and would drift if read after creation — the go-live expiry warning must
+  // compare against the real on-chain end, not a re-derived one.
+  const [submittedEndDate, setSubmittedEndDate] = useState<Date | null>(null)
   const [pendingFunded, setPendingFunded] = useState(false)
   const [pendingTiersSet, setPendingTiersSet] = useState(false)
   const [pendingDeposited, setPendingDeposited] = useState(false)
@@ -457,20 +462,38 @@ export default function CreateCampaignPage() {
   const scoreTiersWatched = form.watch('reward.scoreTiers')
   const taskPointsWatched = form.watch('reward.taskPoints')
   const humanityGatedWatched = form.watch('humanityGated')
+  // (3) Safety net: if the go-live step is reached without the submitted end in state, read the
+  // real endTime from chain rather than re-deriving it from the schedule.
+  useEffect(() => {
+    if (wizardPhase !== 'created' || !createdCampaignId || submittedEndDate) return
+    let cancelled = false
+    getCampaignById(createdCampaignId)
+      .then((c) => {
+        if (!cancelled && c) setSubmittedEndDate(c.endDate)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [wizardPhase, createdCampaignId, submittedEndDate])
+
   const applySchedule = (next: ScheduleState) => {
     setSchedule(next)
     form.setValue('dates', scheduleToDates(next, new Date()), { shouldValidate: true, shouldDirty: true })
   }
   // "As soon as it's created" and preset durations are relative to NOW, so `dates` goes stale
   // while the tab sits open. Re-derive every minute; Next and submit re-derive again anyway.
+  // Stops once the campaign exists: its start/end are then fixed on-chain, and re-deriving would
+  // make `dates` describe a campaign that was never submitted.
   useEffect(() => {
+    if (campaignCreated) return
     const t = setInterval(() => {
       form.setValue('dates', scheduleToDates(schedule, new Date()), {
         shouldValidate: Boolean(form.formState.errors.dates),
       })
     }, 60_000)
     return () => clearInterval(t)
-  }, [schedule, form])
+  }, [schedule, form, campaignCreated])
   const tasks = form.watch('tasks')
 
   // Keep reward.taskPoints aligned 1:1 with the tasks array (index i = tasks[i]'s points) as
@@ -545,7 +568,8 @@ export default function CreateCampaignPage() {
         }
         // Re-derive from the Schedule input against CHAIN time: "as soon as it's created" and
         // preset durations are relative to now, and `data.dates` was derived from the local clock
-        // whenever it last refreshed. Written back so the go-live step sees the submitted end.
+        // whenever it last refreshed. (The go-live step reads submittedEndDate, set below once
+        // the campaign exists — not this form value.)
         const submittedDates = scheduleToDates(schedule, new Date(chainNow * 1000))
         form.setValue('dates', submittedDates)
         const timing = resolveCampaignTiming({
@@ -589,6 +613,7 @@ export default function CreateCampaignPage() {
         // any later step in this same submit succeeds.
         setPendingCampaignId(campaignId)
         setCampaignCreated(true)
+        setSubmittedEndDate(new Date(timing.endTime * 1000))
       }
 
       if (data.reward.type === 'ERC20' && !pendingFunded) {
@@ -906,7 +931,7 @@ export default function CreateCampaignPage() {
       | (keyof CampaignFormValues)[]
       | `tasks.${number}.${'description' | 'type'}`[]
       | `reward.${'type' | 'tokenAddress' | 'amount' | 'name'}`[] = []
-    if (step === 1) {
+    if (step === 1 && !campaignCreated) {
       form.setValue('dates', scheduleToDates(schedule, new Date()))
     }
     if (step === 1)
@@ -2812,7 +2837,7 @@ export default function CreateCampaignPage() {
               {step === 4 && wizardPhase === 'created' && createdCampaignId && (
                 <GoLiveChecklist
                   campaignId={createdCampaignId}
-                  endDate={form.getValues('dates')?.to}
+                  endDate={submittedEndDate ?? undefined}
                   isOpening={isOpening}
                   onOpen={async () => {
                     setIsOpening(true)
