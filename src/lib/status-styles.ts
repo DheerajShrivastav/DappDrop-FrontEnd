@@ -26,6 +26,7 @@ export const STATUS_BUCKET_BY_LIFECYCLE: Record<LifecycleState, StatusBucket> = 
   overdue_fallback: 'pending',
   claims_open: 'claimable',
   closed_claimable: 'claimable',
+  closed_no_claimants: 'closed',
   swept: 'closed',
   cancelled: 'cancelled',
 }

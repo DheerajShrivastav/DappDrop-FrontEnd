@@ -51,6 +51,7 @@ import { CampaignHero } from './_components/campaign-hero'
 import { CampaignSidebar } from './_components/campaign-sidebar'
 import { TaskList } from './_components/task-list'
 import { CampaignLifecycleBanner } from './_components/campaign-lifecycle-banner'
+import { hasEndTimePassed, EXPIRED_OPEN_WARNING } from '@/lib/campaign-timing'
 import { MerkleSettlementPanel } from './_components/merkle-settlement-panel'
 import { ClaimPanel } from './_components/claim-panel'
 import { TieredClaimPanel } from './_components/tiered-claim-panel'
@@ -984,7 +985,9 @@ export default function CampaignDetailsPage() {
             {isHostOfCampaign && <NFTSettlementPanel campaign={campaign} />}
 
             {/* Host resolution flow for reported concerns + the close-campaign guard (P4 Part 4) */}
-            {isHostOfCampaign && <DisputeReportsPanel campaign={campaign} />}
+            {isHostOfCampaign && (
+              <DisputeReportsPanel campaign={campaign} onStatusChange={() => fetchAllCampaignData(true)} />
+            )}
 
             {/* Host-only: funnel/completion/claim-rate analytics + CSV export (P3 CP3) */}
             {isHostOfCampaign && <CampaignFunnelAnalytics campaign={campaign} />}
@@ -1068,6 +1071,15 @@ export default function CampaignDetailsPage() {
                 ? 'This will make your campaign live and allow participants to join and complete tasks. This action cannot be undone.'
                 : 'This will close your campaign and stop accepting new participants. Completed tasks will remain recorded. This action cannot be undone.'}
             </AlertDialogDescription>
+            {/* openCampaign has no on-chain timing check, so an expired Draft opens fine — and
+                is immediately endable by anyone. Say so before the host signs. */}
+            {campaignActionToConfirm === 'launch' &&
+              campaign &&
+              hasEndTimePassed(campaign.endDate) && (
+                <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm font-medium text-destructive">
+                  {EXPIRED_OPEN_WARNING}
+                </p>
+              )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isUpdatingCampaign}>

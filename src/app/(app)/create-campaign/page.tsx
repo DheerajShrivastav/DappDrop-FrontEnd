@@ -5,9 +5,44 @@ import { useRouter } from 'next/navigation'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { addDays, format, setHours, setMinutes } from 'date-fns'
 import {
-  Calendar as CalendarIcon,
+  campaignDatesSchema,
+  resolveCampaignTiming,
+  campaignTimingMessage,
+  hasEndTimePassed,
+  EXPIRED_OPEN_WARNING,
+} from '@/lib/campaign-timing'
+import { OpenExpiredCampaignDialog } from '@/components/open-expired-campaign-dialog'
+import { CampaignScheduleField } from '@/components/campaign-schedule-field'
+import { OptionCards } from '@/components/option-cards'
+import { RewardTokenStatus, tokenVerdict } from '@/components/reward-token-status'
+import { NftTokenTable } from '@/components/nft-token-table'
+import { TierSummary, type TierFooter } from '@/components/tier-summary'
+import { useRewardTokenCheck } from '@/hooks/use-reward-token-check'
+import {
+  MAX_TIERS,
+  formatTokenAmount,
+  isPositiveDecimalString,
+  nextRankTier,
+  nftRowsFromStrings,
+  nftRowsProblem,
+  nftRowsToStrings,
+  parseTokenAmount,
+  rankTierProblem,
+  rankTiersMaxPayout,
+  scoreTierProblem,
+  scoreTiersMaxPerWallet,
+  sortRankTiers,
+  sortScoreTiers,
+  type NftRow,
+} from '@/lib/reward-plan'
+import {
+  defaultScheduleState,
+  scheduleSummary,
+  scheduleToDates,
+  type ScheduleState,
+} from '@/lib/campaign-schedule'
+import {
   Loader2,
   Plus,
   ShieldCheck,
@@ -46,12 +81,6 @@ import {
   CardDescription,
 } from '@/components/ui/card'
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -86,6 +115,9 @@ import {
   getERC20TokenInfo,
   depositERC721Rewards,
   depositERC1155Rewards,
+  getLatestBlockTimestamp,
+  getCampaignById,
+  quoteProtocolFee,
   type DraftTaskInput,
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
@@ -94,7 +126,7 @@ import {
   parseCampaignGenerationError,
   type GenerationStage,
 } from '@/ai/flows/generate-campaign.errors'
-import { AlertCircle, Wifi, Clock, RefreshCw } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Wifi, Clock, RefreshCw } from 'lucide-react'
 import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
@@ -220,15 +252,7 @@ const campaignSchema = z.object({
   description: z
     .string()
     .min(50, 'Detailed description must be at least 50 characters long.'),
-  dates: z
-    .object({
-      from: z.date({ required_error: 'Start date is required.' }),
-      to: z.date({ required_error: 'End date is required.' }),
-    })
-    .refine((data) => data.to > data.from, {
-      message: 'End date must be after the start date.',
-      path: ['to'],
-    }),
+  dates: campaignDatesSchema,
   imageUrl: z.string().url('Please enter a valid image URL.'),
   // Per-campaign sybil-gating toggle (docs/HUMANITY_GATING.md). No contract field — an
   // off-chain policy flag consumed by the allocation pipeline at tree-build time.
@@ -250,7 +274,16 @@ const campaignSchema = z.object({
           (val) => isAddress(val),
           'Please enter a valid Ethereum address.',
         ),
-      amount: z.string().min(1, 'Amount is required for ERC20 tokens.'),
+      // .trim() changes the PARSED value, so submit's parseUnits never sees " 42 " (it throws on
+      // whitespace — after createCampaign has already mined).
+      amount: z
+        .string()
+        .trim()
+        .min(1, 'Enter the total reward pool.')
+        .refine(
+          isPositiveDecimalString,
+          'Enter an amount greater than 0 using digits and an optional decimal point, e.g. 1000 or 12.5.',
+        ),
       name: z.string().optional(),
       // On-chain tiered settlement (P3 CP1, docs/REWARD_SYSTEM.md "ERC20 on-chain tiered
       // settlement"). MERKLE (default) is the existing P1 off-chain-computed flow, unchanged.
@@ -262,7 +295,7 @@ const campaignSchema = z.object({
           z.object({
             startRank: z.coerce.number().int().min(1),
             endRank: z.coerce.number().int().min(1),
-            amount: z.string().min(1),
+            amount: z.string().trim(),
           }),
         )
         .optional(),
@@ -270,7 +303,7 @@ const campaignSchema = z.object({
         .array(
           z.object({
             minScore: z.coerce.number().int().min(0),
-            amount: z.string().min(1),
+            amount: z.string().trim(),
           }),
         )
         .optional(),
@@ -303,40 +336,23 @@ const campaignSchema = z.object({
   ]),
 }).superRefine((data, ctx) => {
   if (data.reward.type === 'ERC721') {
-    const ids = parseIdList(data.reward.tokenIds)
-    if (ids.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter at least one token ID.', path: ['reward', 'tokenIds'] })
-    }
-    if (data.reward.nftStandard === 'ERC1155') {
-      const amounts = parseIdList(data.reward.tokenAmounts || '')
-      if (amounts.length !== ids.length) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Provide exactly ${ids.length} amount(s), one per token ID, in the same order.`,
-          path: ['reward', 'tokenAmounts'],
-        })
-      }
-    }
+    const problem = nftRowsProblem(
+      nftRowsFromStrings(data.reward.tokenIds, data.reward.tokenAmounts),
+      data.reward.nftStandard,
+    )
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem, path: ['reward', 'tokenIds'] })
     return
   }
   if (data.reward.type !== 'ERC20') return
+  // Mirrors OnChainRewardLib's tier validation. Tiers are configured AFTER createCampaign and
+  // funding, so anything the contract would reject must be caught here, not on-chain.
   if (data.reward.settlementMode === 'RANK_TIERED') {
-    if (!data.reward.rankTiers || data.reward.rankTiers.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Add at least one rank tier.',
-        path: ['reward', 'rankTiers'],
-      })
-    }
+    const problem = rankTierProblem(data.reward.rankTiers || [])
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem, path: ['reward', 'rankTiers'] })
   }
   if (data.reward.settlementMode === 'SCORE_TIERED') {
-    if (!data.reward.scoreTiers || data.reward.scoreTiers.length === 0) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Add at least one score tier.',
-        path: ['reward', 'scoreTiers'],
-      })
-    }
+    const problem = scoreTierProblem(data.reward.scoreTiers || [])
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem, path: ['reward', 'scoreTiers'] })
     const totalPoints = (data.reward.taskPoints || []).reduce((s, p) => s + (p || 0), 0)
     if (totalPoints === 0) {
       ctx.addIssue({
@@ -387,6 +403,10 @@ export default function CreateCampaignPage() {
   // re-run createDraftCampaignWithTasks (which would create a SECOND on-chain campaign and
   // orphan the first, half-configured one).
   const [pendingCampaignId, setPendingCampaignId] = useState<string | null>(null)
+  // The endTime actually submitted on-chain. Kept separate from the `dates` form value, which is
+  // derived from "now" and would drift if read after creation — the go-live expiry warning must
+  // compare against the real on-chain end, not a re-derived one.
+  const [submittedEndDate, setSubmittedEndDate] = useState<Date | null>(null)
   const [pendingFunded, setPendingFunded] = useState(false)
   const [pendingTiersSet, setPendingTiersSet] = useState(false)
   const [pendingDeposited, setPendingDeposited] = useState(false)
@@ -399,16 +419,17 @@ export default function CreateCampaignPage() {
   const uploadedImageUrlRef = useRef<string | null>(null)
   const campaignCreatedRef = useRef(false)
 
+  // The Schedule field's input model. `dates` (what the schema validates and submit sends) is
+  // always DERIVED from this via scheduleToDates — never edited directly — so the field, the
+  // Review step and submit can't disagree. See src/lib/campaign-schedule.ts.
+  const [schedule, setSchedule] = useState<ScheduleState>(() => defaultScheduleState())
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignSchema),
     defaultValues: {
       title: '',
       shortDescription: '',
       description: '',
-      dates: {
-        from: new Date(),
-        to: addDays(new Date(), 1),
-      },
+      dates: scheduleToDates(schedule, new Date()),
       imageUrl: `https://placehold.co/600x400`,
       humanityGated: false,
       maxParticipants: '',
@@ -456,8 +477,147 @@ export default function CreateCampaignPage() {
   const scoreTiersWatched = form.watch('reward.scoreTiers')
   const taskPointsWatched = form.watch('reward.taskPoints')
   const humanityGatedWatched = form.watch('humanityGated')
-  const dates = form.watch('dates')
+  // (3) Safety net: if the go-live step is reached without the submitted end in state, read the
+  // real endTime from chain rather than re-deriving it from the schedule.
+  useEffect(() => {
+    if (wizardPhase !== 'created' || !createdCampaignId || submittedEndDate) return
+    let cancelled = false
+    getCampaignById(createdCampaignId)
+      .then((c) => {
+        if (!cancelled && c) setSubmittedEndDate(c.endDate)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [wizardPhase, createdCampaignId, submittedEndDate])
+
+  const applySchedule = (next: ScheduleState) => {
+    setSchedule(next)
+    form.setValue('dates', scheduleToDates(next, new Date()), { shouldValidate: true, shouldDirty: true })
+  }
+  // "As soon as it's created" and preset durations are relative to NOW, so `dates` goes stale
+  // while the tab sits open. Re-derive every minute; Next and submit re-derive again anyway.
+  // Stops once the campaign exists: its start/end are then fixed on-chain, and re-deriving would
+  // make `dates` describe a campaign that was never submitted.
+  useEffect(() => {
+    if (campaignCreated) return
+    const t = setInterval(() => {
+      form.setValue('dates', scheduleToDates(schedule, new Date()), {
+        shouldValidate: Boolean(form.formState.errors.dates),
+      })
+    }, 60_000)
+    return () => clearInterval(t)
+  }, [schedule, form, campaignCreated])
   const tasks = form.watch('tasks')
+
+  // --- Rewards step: token pre-flight, real symbol, tier totals, fee quote ---------------------
+  const rewardTokenAddress = form.watch('reward.tokenAddress')
+  const rewardAmount = form.watch('reward.amount')
+  const nftStandard: 'ERC721' | 'ERC1155' = form.watch('reward.nftStandard') ?? 'ERC721'
+  const [nftRows, setNftRows] = useState<NftRow[]>([{ id: '', qty: '1' }])
+  const applyNftRows = (rows: NftRow[]) => {
+    setNftRows(rows)
+    const { tokenIds, tokenAmounts } = nftRowsToStrings(rows)
+    const revalidate = Boolean((form.formState.errors.reward as any)?.tokenIds)
+    form.setValue('reward.tokenIds', tokenIds, { shouldDirty: true, shouldValidate: revalidate })
+    form.setValue('reward.tokenAmounts', tokenAmounts, { shouldDirty: true, shouldValidate: revalidate })
+  }
+  const tokenCheck = useRewardTokenCheck({
+    tokenAddress: rewardType === 'None' ? undefined : rewardTokenAddress,
+    owner: address,
+    kind: rewardType === 'ERC20' ? 'ERC20' : rewardType === 'ERC721' ? nftStandard : null,
+    items: rewardType === 'ERC721' ? nftRows : undefined,
+  })
+  const tokenStatus =
+    rewardType === 'None'
+      ? null
+      : tokenVerdict(tokenCheck, {
+          kind: rewardType === 'ERC20' ? 'ERC20' : nftStandard,
+          chainId: config.chainId,
+          amount: rewardType === 'ERC20' ? rewardAmount : undefined,
+          connected: Boolean(address),
+        })
+  const rewardToken =
+    rewardType === 'ERC20' && tokenCheck.status === 'done' && tokenCheck.result.kind === 'erc20'
+      ? tokenCheck.result
+      : null
+  const tokenSymbol = rewardToken?.symbol ?? 'tokens'
+  const fmtToken = (v: bigint) => `${formatTokenAmount(v, rewardToken?.decimals ?? 18)} ${tokenSymbol}`
+
+  const poolParsed = rewardToken && rewardAmount ? parseTokenAmount(rewardAmount, rewardToken.decimals) : null
+  const poolGross = poolParsed?.ok ? poolParsed.value : null
+  // The real fee from the registered fee module (quoteProtocolFee), never a hardcoded 0.
+  const [feeQuote, setFeeQuote] = useState<{ gross: bigint; fee: bigint | null } | null>(null)
+  useEffect(() => {
+    if (poolGross === null) {
+      setFeeQuote(null)
+      return
+    }
+    let cancelled = false
+    const gross = poolGross
+    const t = setTimeout(() => {
+      quoteProtocolFee(gross).then((fee) => {
+        if (!cancelled) setFeeQuote({ gross, fee })
+      })
+    }, 400)
+    return () => {
+      cancelled = true
+      clearTimeout(t)
+    }
+  }, [poolGross])
+  // undefined = still loading; null = couldn't read it.
+  const fee = feeQuote && poolGross !== null && feeQuote.gross === poolGross ? feeQuote.fee : undefined
+  const poolNet = poolGross !== null && typeof fee === 'bigint' ? poolGross - fee : null
+
+  const funding = ((): { gross: string; fee: string; net: string; note: string | null } => {
+    if (poolGross === null) {
+      return { gross: `${rewardAmount || '0'} ${tokenSymbol}`, fee: '—', net: '—', note: 'Enter a valid token and amount to see the breakdown.' }
+    }
+    if (fee === undefined) return { gross: fmtToken(poolGross), fee: 'Calculating…', net: '…', note: null }
+    if (fee === null) {
+      return feeEnabled
+        ? { gross: fmtToken(poolGross), fee: 'Couldn’t read', net: 'Unknown', note: 'The fee couldn’t be read right now. Check the amounts in your wallet before signing.' }
+        : { gross: fmtToken(poolGross), fee: 'None', net: fmtToken(poolGross), note: null }
+    }
+    return {
+      gross: fmtToken(poolGross),
+      fee: fee === BigInt(0) ? 'None' : fmtToken(fee),
+      net: fmtToken(poolGross - fee),
+      note: fee > BigInt(0) ? 'The platform fee is taken from the pool when it’s funded.' : null,
+    }
+  })()
+
+  const rankPayoutFooter = ((): TierFooter => {
+    if (!rewardToken || !rankTiersWatched?.length || rankTierProblem(rankTiersWatched)) return null
+    const max = rankTiersMaxPayout(rankTiersWatched, rewardToken.decimals)
+    if (max === null) return null
+    const pool = poolNet ?? poolGross
+    if (pool === null) return { tone: 'muted', text: `Tiers pay out up to ${fmtToken(max)} in total.` }
+    if (max > pool) {
+      return {
+        tone: 'warn',
+        text: `Tiers can pay out up to ${fmtToken(max)}, but only ${fmtToken(pool)} will be escrowed. If every tier fills, the last wallets to claim won’t be paid.`,
+      }
+    }
+    return { tone: 'muted', text: `Tiers pay out up to ${fmtToken(max)} of the ${fmtToken(pool)} escrowed.` }
+  })()
+
+  const scorePayoutFooter = ((): TierFooter => {
+    if (!rewardToken || !scoreTiersWatched?.length || scoreTierProblem(scoreTiersWatched)) return null
+    const maxPer = scoreTiersMaxPerWallet(scoreTiersWatched, rewardToken.decimals)
+    if (!maxPer) return null
+    const pool = poolNet ?? poolGross
+    if (pool === null) return { tone: 'muted', text: `Each wallet gets at most ${fmtToken(maxPer)}.` }
+    const covers = pool / maxPer
+    if (covers === BigInt(0)) {
+      return { tone: 'warn', text: `The pool can’t cover even one wallet at the top tier (${fmtToken(maxPer)}).` }
+    }
+    return {
+      tone: 'muted',
+      text: `Each wallet gets at most ${fmtToken(maxPer)}. The pool covers ${covers.toString()} wallet${covers === BigInt(1) ? '' : 's'} even if all of them reach the top tier.`,
+    }
+  })()
 
   // Keep reward.taskPoints aligned 1:1 with the tasks array (index i = tasks[i]'s points) as
   // tasks are added/removed, only while SCORE_TIERED is actually selected (no-op otherwise).
@@ -512,12 +672,43 @@ export default function CreateCampaignPage() {
     let campaignId: string | null = pendingCampaignId
     try {
       if (!campaignId) {
-        // Contract requires strictly-future start times; nudge a "now" default forward
-        // rather than let the tx revert on a stale default.
-        const now = Math.floor(Date.now() / 1000)
-        const userStart = Math.floor(data.dates.from.getTime() / 1000)
-        const startTime = userStart <= now ? now + 60 : userStart
-        const endTime = Math.floor(data.dates.to.getTime() / 1000)
+        // The contract checks startTime against the block the tx is MINED in. Resolve against
+        // the latest block's timestamp (not Date.now() — a skewed local clock is exactly how a
+        // "future" start ends up in the chain's past), moving any start closer than
+        // START_BUFFER_SEC out. Then re-check the duration with that effective start: moving the
+        // start later can push a campaign under 1 hour, and that must stop here, before any tx,
+        // rather than revert on-chain.
+        let chainNow: number
+        try {
+          chainNow = await getLatestBlockTimestamp()
+        } catch {
+          toast({
+            variant: 'destructive',
+            title: 'Could not check the network time',
+            description: 'We couldn’t read the current block time, so nothing was submitted. Check your connection and try again.',
+          })
+          return
+        }
+        // Re-derive from the Schedule input against CHAIN time: "as soon as it's created" and
+        // preset durations are relative to now, and `data.dates` was derived from the local clock
+        // whenever it last refreshed. (The go-live step reads submittedEndDate, set below once
+        // the campaign exists — not this form value.)
+        const submittedDates = scheduleToDates(schedule, new Date(chainNow * 1000))
+        form.setValue('dates', submittedDates)
+        const timing = resolveCampaignTiming({
+          pickedStart: Math.floor(submittedDates.from.getTime() / 1000),
+          end: Math.floor(submittedDates.to.getTime() / 1000),
+          chainNow,
+        })
+        const timingError = campaignTimingMessage(timing)
+        if (timingError) {
+          toast({ variant: 'destructive', title: 'Adjust the campaign dates', description: timingError })
+          // Send the host back to where the dates live and surface the same message inline.
+          setStep(1)
+          form.setError('dates', { type: 'custom', message: timingError })
+          return
+        }
+        const { startTime, endTime } = timing
 
         const draftTasks: DraftTaskInput[] = data.tasks.map((t) => ({
           type: t.type,
@@ -545,6 +736,7 @@ export default function CreateCampaignPage() {
         // any later step in this same submit succeeds.
         setPendingCampaignId(campaignId)
         setCampaignCreated(true)
+        setSubmittedEndDate(new Date(timing.endTime * 1000))
       }
 
       if (data.reward.type === 'ERC20' && !pendingFunded) {
@@ -566,9 +758,9 @@ export default function CreateCampaignPage() {
         const tokenInfo = await getERC20TokenInfo(data.reward.tokenAddress)
         const decimals = tokenInfo?.decimals ?? 18
         if (data.reward.settlementMode === 'RANK_TIERED') {
-          await configureRankTiers(campaignId, data.reward.rankTiers || [], decimals)
+          await configureRankTiers(campaignId, sortRankTiers(data.reward.rankTiers || []), decimals)
         } else {
-          await configureScoreTiers(campaignId, data.reward.scoreTiers || [], decimals)
+          await configureScoreTiers(campaignId, sortScoreTiers(data.reward.scoreTiers || []), decimals)
           // Points align 1:1 with the ORIGINAL tasks array by index — the auto-injected
           // HUMANITY_VERIFICATION task (if any) is appended after it and correctly gets no
           // points entry (a gating check shouldn't contribute to score).
@@ -862,6 +1054,9 @@ export default function CreateCampaignPage() {
       | (keyof CampaignFormValues)[]
       | `tasks.${number}.${'description' | 'type'}`[]
       | `reward.${'type' | 'tokenAddress' | 'amount' | 'name'}`[] = []
+    if (step === 1 && !campaignCreated) {
+      form.setValue('dates', scheduleToDates(schedule, new Date()))
+    }
     if (step === 1)
       fieldsToValidate = [
         'title',
@@ -871,10 +1066,23 @@ export default function CreateCampaignPage() {
         'imageUrl',
       ]
     if (step === 2) fieldsToValidate = ['tasks']
-    if (step === 3) fieldsToValidate = ['reward']
+    if (step === 3) fieldsToValidate = ['reward', 'maxParticipants']
 
     const isValid = await form.trigger(fieldsToValidate as any)
-    if (isValid) setStep((s) => s + 1)
+    if (!isValid) return
+    // The token pre-flight lives outside the schema (it's async, on-chain). Only definite
+    // negatives stop the host — each one would otherwise revert AFTER createCampaign has mined.
+    if (step === 3 && rewardType !== 'None') {
+      if (tokenCheck.status === 'checking') {
+        toast({ title: 'Still checking the token', description: 'Give it a second, then continue.' })
+        return
+      }
+      if (tokenStatus?.blocking) {
+        toast({ variant: 'destructive', title: 'Fix the reward before continuing', description: tokenStatus.blocking })
+        return
+      }
+    }
+    setStep((s) => s + 1)
   }
 
   const prevStep = () => setStep((s) => s - 1)
@@ -1310,196 +1518,15 @@ export default function CreateCampaignPage() {
                   <FormField
                     control={form.control}
                     name="dates"
-                    render={({ field }) => (
+                    render={() => (
                       <FormItem className="flex flex-col">
-                        <FormLabel>Campaign Duration</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={'outline'}
-                                className={cn(
-                                  'w-full justify-start text-left font-normal',
-                                  !field.value?.from && 'text-muted-foreground',
-                                )}
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {field.value?.from ? (
-                                  field.value.to ? (
-                                    <>
-                                      {format(
-                                        field.value.from,
-                                        'LLL dd, y HH:mm',
-                                      )}{' '}
-                                      -{' '}
-                                      {format(
-                                        field.value.to,
-                                        'LLL dd, y HH:mm',
-                                      )}
-                                    </>
-                                  ) : (
-                                    format(field.value.from, 'LLL dd, y HH:mm')
-                                  )
-                                ) : (
-                                  <span>Pick or type a date range</span>
-                                )}
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="range"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              initialFocus
-                              numberOfMonths={2}
-                            />
-                            <div className="p-4 border-t grid grid-cols-1 lg:grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <Label htmlFor="start-date">Start (date · hh · mm)</Label>
-                                <div className="flex gap-2">
-                                  {/* Typed date, inline with the time fields so the
-                                      whole timestamp is editable in one row. Keeps the calendar
-                                      above as the click-to-pick path — the two write the same
-                                      form value, so neither is authoritative. */}
-                                  <Input
-                                    type="date"
-                                    id="from-date"
-                                    className="w-[9.5rem]"
-                                    value={dates?.from ? format(dates.from, 'yyyy-MM-dd') : ''}
-                                    onChange={(e) => {
-                                      const [y, m, d] = e.target.value.split('-').map(Number)
-                                      // Ignore a partially-typed value rather than wiping the field.
-                                      if (!y || !m || !d) return
-                                      // Change only the calendar date; the chosen time is preserved
-                                      // (new Date(value) would silently reset it to midnight).
-                                      const next = new Date(dates?.from ?? new Date())
-                                      next.setFullYear(y, m - 1, d)
-                                      field.onChange({ ...dates, from: next })
-                                    }}
-                                  />
-                                  <Input
-                                    type="number"
-                                    id="start-time-h"
-                                    min="0"
-                                    max="23"
-                                    className="w-16"
-                                    placeholder="HH"
-                                    value={dates?.from?.getHours() ?? 0}
-                                    onChange={(e) => {
-                                      const newHour = parseInt(
-                                        e.target.value,
-                                        10,
-                                      )
-                                      if (!isNaN(newHour))
-                                        field.onChange({
-                                          ...dates,
-                                          from: setHours(
-                                            dates.from ?? new Date(),
-                                            newHour,
-                                          ),
-                                        })
-                                    }}
-                                  />
-                                  <Input
-                                    type="number"
-                                    id="start-time-m"
-                                    min="0"
-                                    max="59"
-                                    className="w-16"
-                                    placeholder="MM"
-                                    value={dates?.from?.getMinutes() ?? 0}
-                                    onChange={(e) => {
-                                      const newMin = parseInt(
-                                        e.target.value,
-                                        10,
-                                      )
-                                      if (!isNaN(newMin))
-                                        field.onChange({
-                                          ...dates,
-                                          from: setMinutes(
-                                            dates.from ?? new Date(),
-                                            newMin,
-                                          ),
-                                        })
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                              <div className="space-y-2">
-                                <Label htmlFor="end-date">End (date · hh · mm)</Label>
-                                <div className="flex gap-2">
-                                  {/* Typed date, inline with the time fields so the
-                                      whole timestamp is editable in one row. Keeps the calendar
-                                      above as the click-to-pick path — the two write the same
-                                      form value, so neither is authoritative. */}
-                                  <Input
-                                    type="date"
-                                    id="to-date"
-                                    className="w-[9.5rem]"
-                                    value={dates?.to ? format(dates.to, 'yyyy-MM-dd') : ''}
-                                    onChange={(e) => {
-                                      const [y, m, d] = e.target.value.split('-').map(Number)
-                                      // Ignore a partially-typed value rather than wiping the field.
-                                      if (!y || !m || !d) return
-                                      // Change only the calendar date; the chosen time is preserved
-                                      // (new Date(value) would silently reset it to midnight).
-                                      const next = new Date(dates?.to ?? new Date())
-                                      next.setFullYear(y, m - 1, d)
-                                      field.onChange({ ...dates, to: next })
-                                    }}
-                                  />
-                                  <Input
-                                    type="number"
-                                    id="end-time-h"
-                                    min="0"
-                                    max="23"
-                                    className="w-16"
-                                    placeholder="HH"
-                                    value={dates?.to?.getHours() ?? 0}
-                                    onChange={(e) => {
-                                      const newHour = parseInt(
-                                        e.target.value,
-                                        10,
-                                      )
-                                      if (!isNaN(newHour))
-                                        field.onChange({
-                                          ...dates,
-                                          to: setHours(
-                                            dates.to ?? new Date(),
-                                            newHour,
-                                          ),
-                                        })
-                                    }}
-                                  />
-                                  <Input
-                                    type="number"
-                                    id="end-time-m"
-                                    min="0"
-                                    max="59"
-                                    className="w-16"
-                                    placeholder="MM"
-                                    value={dates?.to?.getMinutes() ?? 0}
-                                    onChange={(e) => {
-                                      const newMin = parseInt(
-                                        e.target.value,
-                                        10,
-                                      )
-                                      if (!isNaN(newMin))
-                                        field.onChange({
-                                          ...dates,
-                                          to: setMinutes(
-                                            dates.to ?? new Date(),
-                                            newMin,
-                                          ),
-                                        })
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
+                        <FormLabel>Schedule</FormLabel>
+                        <CampaignScheduleField value={schedule} onChange={applySchedule} />
+                        <FormDescription>
+                          Times are in your local time zone. Campaigns run between 1 hour and 365
+                          days, and the start and end can&apos;t be changed after creation.
+                        </FormDescription>
+                        {/* The schema's issue sits on `dates` itself (no path) so this renders it. */}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -2347,51 +2374,69 @@ export default function CreateCampaignPage() {
                     name="reward.type"
                     render={({ field }) => (
                       <FormItem className="space-y-3">
-                        <FormLabel>Reward Type</FormLabel>
+                        <FormLabel>Reward type</FormLabel>
                         <FormControl>
-                          <RadioGroup
-                            onValueChange={field.onChange}
-                            defaultValue={field.value}
-                            className="flex flex-col space-y-1"
-                          >
-                            <FormItem className="flex items-center space-x-3 space-y-0">
-                              <FormControl>
-                                <RadioGroupItem value="ERC20" />
-                              </FormControl>
-                              <FormLabel className="font-normal">
-                                ERC20 Token (Fungible)
-                              </FormLabel>
-                            </FormItem>
-                            <FormItem className="flex items-center space-x-3 space-y-0">
-                              <FormControl>
-                                <RadioGroupItem value="ERC721" />
-                              </FormControl>
-                              <FormLabel className="font-normal">NFT (ERC721 / ERC1155)</FormLabel>
-                            </FormItem>
-                            <FormItem className="flex items-center space-x-3 space-y-0">
-                              <FormControl>
-                                <RadioGroupItem value="None" disabled />
-                              </FormControl>
-                              <FormLabel className="font-normal text-muted-foreground">
-                                Other (Text description) — coming in a later phase
-                              </FormLabel>
-                            </FormItem>
-                          </RadioGroup>
+                          <OptionCards
+                            ariaLabel="Reward type"
+                            value={field.value}
+                            onChange={field.onChange}
+                            columns={3}
+                            options={[
+                              { value: 'ERC20', title: 'Token pool', description: 'An ERC20 token, escrowed now and paid out after the campaign ends.' },
+                              { value: 'ERC721', title: 'NFTs', description: 'ERC721 or ERC1155 items, one per qualifying wallet.' },
+                              { value: 'None', title: 'Something else', description: 'A text reward, like a Discord role.', hint: 'Coming in a later phase', disabled: true },
+                            ]}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                  {rewardType === 'ERC721' && (
+                    <FormField
+                      control={form.control}
+                      name="reward.nftStandard"
+                      render={({ field }) => (
+                        <FormItem className="space-y-3">
+                          <FormLabel>NFT standard</FormLabel>
+                          <FormControl>
+                            <OptionCards
+                              ariaLabel="NFT standard"
+                              value={field.value ?? 'ERC721'}
+                              onChange={field.onChange}
+                              columns={2}
+                              options={[
+                                { value: 'ERC721', title: 'ERC721', description: 'Each token ID is one unique item.' },
+                                { value: 'ERC1155', title: 'ERC1155', description: 'Each token ID can have a quantity.' },
+                              ]}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  )}
                   {rewardType !== 'None' && (
                     <FormField
                       control={form.control}
                       name="reward.tokenAddress"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Token Contract Address</FormLabel>
+                          <FormLabel>
+                            {rewardType === 'ERC20' ? 'Token contract address' : 'NFT contract address'}
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="0x..." {...field} />
+                            <Input
+                              placeholder="0x…"
+                              className="font-mono"
+                              autoComplete="off"
+                              spellCheck={false}
+                              {...field}
+                              value={field.value === '0x' ? '' : field.value}
+                            />
                           </FormControl>
+                          {/* Pre-flight: is it a contract on this network, the right kind, and do
+                              you hold enough — before any transaction (see tokenVerdict). */}
+                          <RewardTokenStatus verdict={tokenStatus} />
                           <FormMessage />
                         </FormItem>
                       )}
@@ -2403,19 +2448,30 @@ export default function CreateCampaignPage() {
                       name="reward.amount"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Total Reward Pool</FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              placeholder="10000"
-                              {...field}
-                            />
-                          </FormControl>
+                          <FormLabel>Total reward pool</FormLabel>
+                          <div className="relative">
+                            <FormControl>
+                              {/* Text + inputMode, not type="number": a number box changes value
+                                  when the page is scrolled over it and accepts "1e5". */}
+                              <Input
+                                inputMode="decimal"
+                                autoComplete="off"
+                                placeholder="10000"
+                                className={cn('font-mono', rewardToken && 'pr-20')}
+                                {...field}
+                              />
+                            </FormControl>
+                            {rewardToken && (
+                              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted-foreground">
+                                {rewardToken.symbol}
+                              </span>
+                            )}
+                          </div>
                           <FormDescription>
-                            The total token pool escrowed on-chain. After the campaign ends,
-                            it is split equally among every wallet that completed all tasks
-                            (equal-split policy — the default for this phase). Individual
-                            wallet amounts are computed then, not now.
+                            The total escrowed on-chain when you create the campaign.
+                            {settlementMode === 'MERKLE'
+                              ? ' After it ends, it’s split equally among every wallet that completed all tasks.'
+                              : ' Paid out by the tiers below.'}
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
@@ -2428,71 +2484,64 @@ export default function CreateCampaignPage() {
                       name="reward.settlementMode"
                       render={({ field }) => (
                         <FormItem className="space-y-3">
-                          <FormLabel>Settlement mode</FormLabel>
+                          <FormLabel>How the pool is paid out</FormLabel>
                           <FormControl>
-                            <RadioGroup
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                              className="flex flex-col space-y-1"
-                            >
-                              <FormItem className="flex items-center space-x-3 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value="MERKLE" />
-                                </FormControl>
-                                <FormLabel className="font-normal">
-                                  Merkle allocation — off-chain computed, 24h review window
-                                  before claims open (default)
-                                </FormLabel>
-                              </FormItem>
-                              <FormItem className="flex items-center space-x-3 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value="RANK_TIERED" />
-                                </FormControl>
-                                <FormLabel className="font-normal">
-                                  Rank-tiered — reward by completion order, computed entirely
-                                  on-chain, no dispute window
-                                </FormLabel>
-                              </FormItem>
-                              <FormItem className="flex items-center space-x-3 space-y-0">
-                                <FormControl>
-                                  <RadioGroupItem value="SCORE_TIERED" />
-                                </FormControl>
-                                <FormLabel className="font-normal">
-                                  Score-tiered — reward by task-point score, computed entirely
-                                  on-chain, no dispute window
-                                </FormLabel>
-                              </FormItem>
-                            </RadioGroup>
+                            <OptionCards
+                              ariaLabel="Settlement mode"
+                              value={field.value ?? 'MERKLE'}
+                              onChange={field.onChange}
+                              options={[
+                                {
+                                  value: 'MERKLE',
+                                  title: 'Equal split',
+                                  description:
+                                    'Everyone who completes every task gets the same share. Allocations are published after the campaign ends, with a 24-hour review window before claims open.',
+                                  hint: 'Best for: simple, fair drops',
+                                },
+                                {
+                                  value: 'RANK_TIERED',
+                                  title: 'By finishing order',
+                                  description:
+                                    'Pay by who finishes first — e.g. the first 10 wallets get 100 each. Worked out on-chain; claims open as soon as the campaign ends.',
+                                  hint: 'Best for: races and early-bird rewards',
+                                },
+                                {
+                                  value: 'SCORE_TIERED',
+                                  title: 'By points',
+                                  description:
+                                    'Each task is worth points; wallets are paid by the tier their score reaches. Worked out on-chain; claims open as soon as the campaign ends.',
+                                  hint: 'Best for: rewarding deeper engagement',
+                                },
+                              ]}
+                            />
                           </FormControl>
-                          <FormDescription>
-                            Tiered modes settle purely from on-chain completion state — no
-                            host-published root, no dispute window, and the campaign still
-                            settles completely even if you disappear after it ends.
-                          </FormDescription>
                         </FormItem>
                       )}
                     />
                   )}
                   {rewardType === 'ERC20' && settlementMode === 'RANK_TIERED' && (
                     <div className="space-y-3 rounded-lg border p-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-sm">Rank tiers</h4>
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-sm font-medium">Rank tiers</h4>
+                          <p className="text-xs text-muted-foreground">
+                            Rank 1 is the first wallet to complete every task. Up to {MAX_TIERS} tiers.
+                          </p>
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() =>
-                            appendRankTier({ startRank: 1, endRank: 1, amount: '' })
-                          }
+                          disabled={(rankTiersWatched?.length ?? 0) >= MAX_TIERS}
+                          // Continues right after the highest rank already covered, so tiers never
+                          // overlap by default (setRankTiers rejects overlaps).
+                          onClick={() => appendRankTier(nextRankTier(rankTiersWatched || []))}
                         >
-                          <Plus className="h-3.5 w-3.5 mr-1" /> Add tier
+                          <Plus className="mr-1 h-3.5 w-3.5" /> Add tier
                         </Button>
                       </div>
                       {rankTierFields.map((f, i) => (
-                        <div
-                          key={f.id}
-                          className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end"
-                        >
+                        <div key={f.id} className="grid grid-cols-[1fr_1fr_1.4fr_auto] items-end gap-2">
                           <FormField
                             control={form.control}
                             name={`reward.rankTiers.${i}.startRank`}
@@ -2500,7 +2549,7 @@ export default function CreateCampaignPage() {
                               <FormItem>
                                 <FormLabel className="text-xs">From rank</FormLabel>
                                 <FormControl>
-                                  <Input type="number" min={1} {...field} />
+                                  <Input inputMode="numeric" className="font-mono" {...field} />
                                 </FormControl>
                               </FormItem>
                             )}
@@ -2512,7 +2561,7 @@ export default function CreateCampaignPage() {
                               <FormItem>
                                 <FormLabel className="text-xs">To rank</FormLabel>
                                 <FormControl>
-                                  <Input type="number" min={1} {...field} />
+                                  <Input inputMode="numeric" className="font-mono" {...field} />
                                 </FormControl>
                               </FormItem>
                             )}
@@ -2522,9 +2571,11 @@ export default function CreateCampaignPage() {
                             name={`reward.rankTiers.${i}.amount`}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-xs">Amount / wallet</FormLabel>
+                                <FormLabel className="text-xs">
+                                  {rewardToken ? `${rewardToken.symbol} each` : 'Amount each'}
+                                </FormLabel>
                                 <FormControl>
-                                  <Input placeholder="100" {...field} />
+                                  <Input inputMode="decimal" placeholder="100" className="font-mono" {...field} />
                                 </FormControl>
                               </FormItem>
                             )}
@@ -2533,53 +2584,59 @@ export default function CreateCampaignPage() {
                             type="button"
                             variant="ghost"
                             size="icon"
+                            aria-label={`Remove tier ${i + 1}`}
                             onClick={() => removeRankTier(i)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       ))}
-                      {(form.formState.errors.reward as any)?.rankTiers?.message && (
-                        <p className="text-sm font-medium text-destructive">
-                          {(form.formState.errors.reward as any).rankTiers.message}
-                        </p>
-                      )}
-                      {rankTiersWatched && rankTiersWatched.length > 0 && (
-                        <div className="mt-3 rounded-md bg-secondary/40 p-3 text-sm space-y-1">
-                          <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">
-                            Payout preview
-                          </p>
-                          {rankTiersWatched.map((t, i) => (
-                            <div key={i} className="flex justify-between">
-                              <span>
-                                Rank {t.startRank}–{t.endRank}
-                              </span>
-                              <span>{t.amount || '0'} tokens each</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      <TierSummary
+                        problem={rankTiersWatched?.length ? rankTierProblem(rankTiersWatched) : null}
+                        schemaMessage={(form.formState.errors.reward as any)?.rankTiers?.message}
+                        rows={sortRankTiers(rankTiersWatched || []).map((t) => ({
+                          label:
+                            Number(t.startRank) === Number(t.endRank)
+                              ? `Rank ${t.startRank}`
+                              : `Ranks ${t.startRank}–${t.endRank}`,
+                          value: `${t.amount || '0'} ${tokenSymbol} each`,
+                        }))}
+                        footer={rankPayoutFooter}
+                      />
                     </div>
                   )}
                   {rewardType === 'ERC20' && settlementMode === 'SCORE_TIERED' && (
                     <div className="space-y-4">
                       <div className="space-y-3 rounded-lg border p-4">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-medium text-sm">Score tiers</h4>
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <h4 className="text-sm font-medium">Score tiers</h4>
+                            <p className="text-xs text-muted-foreground">
+                              A wallet is paid by the highest tier its score reaches. Any order is fine.
+                            </p>
+                          </div>
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => appendScoreTier({ minScore: 0, amount: '' })}
+                            disabled={(scoreTiersWatched?.length ?? 0) >= MAX_TIERS}
+                            onClick={() =>
+                              appendScoreTier({
+                                // A fresh minimum above every existing one, so two tiers never
+                                // start out with the same threshold (setScoreTiers rejects that).
+                                minScore: (scoreTiersWatched || []).reduce(
+                                  (m, t) => Math.max(m, Number(t.minScore) + 1 || 0),
+                                  0,
+                                ),
+                                amount: '',
+                              })
+                            }
                           >
-                            <Plus className="h-3.5 w-3.5 mr-1" /> Add tier
+                            <Plus className="mr-1 h-3.5 w-3.5" /> Add tier
                           </Button>
                         </div>
                         {scoreTierFields.map((f, i) => (
-                          <div
-                            key={f.id}
-                            className="grid grid-cols-[1fr_1fr_auto] gap-2 items-end"
-                          >
+                          <div key={f.id} className="grid grid-cols-[1fr_1.4fr_auto] items-end gap-2">
                             <FormField
                               control={form.control}
                               name={`reward.scoreTiers.${i}.minScore`}
@@ -2587,7 +2644,7 @@ export default function CreateCampaignPage() {
                                 <FormItem>
                                   <FormLabel className="text-xs">Minimum score</FormLabel>
                                   <FormControl>
-                                    <Input type="number" min={0} {...field} />
+                                    <Input inputMode="numeric" className="font-mono" {...field} />
                                   </FormControl>
                                 </FormItem>
                               )}
@@ -2597,9 +2654,11 @@ export default function CreateCampaignPage() {
                               name={`reward.scoreTiers.${i}.amount`}
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-xs">Amount / wallet</FormLabel>
+                                  <FormLabel className="text-xs">
+                                    {rewardToken ? `${rewardToken.symbol} per wallet` : 'Amount per wallet'}
+                                  </FormLabel>
                                   <FormControl>
-                                    <Input placeholder="100" {...field} />
+                                    <Input inputMode="decimal" placeholder="100" className="font-mono" {...field} />
                                   </FormControl>
                                 </FormItem>
                               )}
@@ -2608,40 +2667,32 @@ export default function CreateCampaignPage() {
                               type="button"
                               variant="ghost"
                               size="icon"
+                              aria-label={`Remove tier ${i + 1}`}
                               onClick={() => removeScoreTier(i)}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         ))}
-                        {(form.formState.errors.reward as any)?.scoreTiers?.message && (
-                          <p className="text-sm font-medium text-destructive">
-                            {(form.formState.errors.reward as any).scoreTiers.message}
-                          </p>
-                        )}
-                        {scoreTiersWatched && scoreTiersWatched.length > 0 && (
-                          <div className="mt-3 rounded-md bg-secondary/40 p-3 text-sm space-y-1">
-                            <p className="font-medium text-xs text-muted-foreground uppercase tracking-wide">
-                              Payout preview
-                            </p>
-                            {scoreTiersWatched.map((t, i) => (
-                              <div key={i} className="flex justify-between">
-                                <span>Score ≥ {t.minScore}</span>
-                                <span>{t.amount || '0'} tokens</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                        <TierSummary
+                          problem={scoreTiersWatched?.length ? scoreTierProblem(scoreTiersWatched) : null}
+                          schemaMessage={(form.formState.errors.reward as any)?.scoreTiers?.message}
+                          rows={sortScoreTiers(scoreTiersWatched || []).map((t) => ({
+                            label: `Score ${t.minScore}+`,
+                            value: `${t.amount || '0'} ${tokenSymbol}`,
+                          }))}
+                          footer={scorePayoutFooter}
+                        />
                       </div>
                       <div className="space-y-3 rounded-lg border p-4">
-                        <h4 className="font-medium text-sm">Points per task</h4>
+                        <h4 className="text-sm font-medium">Points per task</h4>
                         <FormDescription>
-                          Assign how many points each task contributes to a participant&apos;s
-                          score. A task not given any points doesn&apos;t affect scoring.
+                          How many points each task adds to a wallet&apos;s score. A task with 0 points
+                          doesn&apos;t affect scoring.
                         </FormDescription>
                         {tasks.map((t, i) => (
                           <div key={i} className="flex items-center justify-between gap-3">
-                            <span className="text-sm text-muted-foreground truncate">
+                            <span className="min-w-0 truncate text-sm text-muted-foreground">
                               [{TASK_TYPE_OPTIONS.find((o) => o.value === t.type)?.label}]{' '}
                               {t.description || '(no description yet)'}
                             </span>
@@ -2651,7 +2702,7 @@ export default function CreateCampaignPage() {
                               render={({ field }) => (
                                 <FormItem>
                                   <FormControl>
-                                    <Input type="number" min={0} className="w-24" {...field} />
+                                    <Input inputMode="numeric" className="w-20 font-mono" aria-label={`Points for task ${i + 1}`} {...field} />
                                   </FormControl>
                                 </FormItem>
                               )}
@@ -2683,86 +2734,21 @@ export default function CreateCampaignPage() {
                       </Alert>
                     )}
                   {rewardType === 'ERC721' && (
-                    <>
-                      <FormField
-                        control={form.control}
-                        name="reward.nftStandard"
-                        render={({ field }) => (
-                          <FormItem className="space-y-3">
-                            <FormLabel>NFT standard</FormLabel>
-                            <FormControl>
-                              <RadioGroup
-                                onValueChange={field.onChange}
-                                defaultValue={field.value}
-                                className="flex flex-col space-y-1"
-                              >
-                                <FormItem className="flex items-center space-x-3 space-y-0">
-                                  <FormControl>
-                                    <RadioGroupItem value="ERC721" />
-                                  </FormControl>
-                                  <FormLabel className="font-normal">
-                                    ERC721 — one unique item per token ID
-                                  </FormLabel>
-                                </FormItem>
-                                <FormItem className="flex items-center space-x-3 space-y-0">
-                                  <FormControl>
-                                    <RadioGroupItem value="ERC1155" />
-                                  </FormControl>
-                                  <FormLabel className="font-normal">
-                                    ERC1155 — a quantity per token ID
-                                  </FormLabel>
-                                </FormItem>
-                              </RadioGroup>
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="reward.tokenIds"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Token IDs to deposit</FormLabel>
-                            <FormControl>
-                              <Textarea
-                                placeholder={'1\n2\n3\n(comma or newline separated)'}
-                                rows={4}
-                                {...field}
-                              />
-                            </FormControl>
-                            <FormDescription>
-                              One qualifying wallet gets one item, assigned in this order after
-                              the campaign ends — more than 100 IDs are deposited in automatic
-                              batches.
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      {form.watch('reward.nftStandard') === 'ERC1155' && (
-                        <FormField
-                          control={form.control}
-                          name="reward.tokenAmounts"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Amount per token ID</FormLabel>
-                              <FormControl>
-                                <Textarea
-                                  placeholder={'10\n5\n1\n(same order/count as Token IDs above)'}
-                                  rows={4}
-                                  {...field}
-                                />
-                              </FormControl>
-                              <FormDescription>
-                                Each entry is one indivisible item awarded to a single winner —
-                                one token ID&apos;s balance is not split across multiple wallets.
-                              </FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
+                    <FormField
+                      control={form.control}
+                      name="reward.tokenIds"
+                      render={() => (
+                        <FormItem>
+                          <FormLabel>Tokens to deposit</FormLabel>
+                          <NftTokenTable rows={nftRows} onChange={applyNftRows} standard={nftStandard} />
+                          <FormDescription>
+                            Each row is one prize for one qualifying wallet. More than 100 are
+                            deposited in automatic batches.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
                       )}
-                    </>
+                    />
                   )}
                   {rewardType === 'None' && (
                     <FormField
@@ -2787,11 +2773,12 @@ export default function CreateCampaignPage() {
                     name="maxParticipants"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Participant Cap (optional)</FormLabel>
+                        <FormLabel>Participant cap (optional)</FormLabel>
                         <FormControl>
                           <Input
-                            type="number"
+                            inputMode="numeric"
                             placeholder="Leave blank for unlimited"
+                            className="font-mono"
                             {...field}
                           />
                         </FormControl>
@@ -2821,7 +2808,7 @@ export default function CreateCampaignPage() {
                     {rewardType === 'ERC20' ? (
                       <div className="text-sm">
                         <strong>Reward pool:</strong>{' '}
-                        {form.getValues('reward.amount')} tokens from{' '}
+                        {form.getValues('reward.amount')} {tokenSymbol} from{' '}
                         <code className="text-xs bg-muted p-1 rounded">
                           {form.getValues('reward.tokenAddress')}
                         </code>
@@ -2858,6 +2845,15 @@ export default function CreateCampaignPage() {
                         wallet{humanityGatedWatched ? ' — Humanity-verified wallets only' : ''}.
                       </div>
                     )}
+                    <div className="text-sm">
+                      <strong>Schedule:</strong> {scheduleSummary(schedule, new Date()).primary}
+                      <p className="text-muted-foreground">
+                        {scheduleSummary(schedule, new Date()).utc}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Start and end times can&apos;t be changed after the campaign is created.
+                      </p>
+                    </div>
                     {form.getValues('maxParticipants') && (
                       <div className="text-sm">
                         <strong>Participant cap:</strong>{' '}
@@ -2886,26 +2882,19 @@ export default function CreateCampaignPage() {
                   {rewardType === 'ERC20' ? (
                     <div className="rounded-lg border p-4 space-y-2">
                       <h3 className="font-medium">Funding breakdown</h3>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          Gross debit
-                        </span>
-                        <span>
-                          {form.getValues('reward.amount') || '0'} tokens
-                        </span>
+                      <div className="flex justify-between gap-4 text-sm">
+                        <span className="text-muted-foreground">Taken from your wallet</span>
+                        <span className="font-mono">{funding.gross}</span>
                       </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          Protocol fee {feeEnabled ? '' : '(disabled on this deployment)'}
-                        </span>
-                        <span>0 tokens</span>
+                      <div className="flex justify-between gap-4 text-sm">
+                        <span className="text-muted-foreground">Protocol fee</span>
+                        <span className="font-mono">{funding.fee}</span>
                       </div>
-                      <div className="flex justify-between text-sm font-medium border-t pt-2">
-                        <span>Net escrowed</span>
-                        <span>
-                          {form.getValues('reward.amount') || '0'} tokens
-                        </span>
+                      <div className="flex justify-between gap-4 border-t pt-2 text-sm font-medium">
+                        <span>Escrowed for rewards</span>
+                        <span className="font-mono">{funding.net}</span>
                       </div>
+                      {funding.note && <p className="text-xs text-muted-foreground">{funding.note}</p>}
                     </div>
                   ) : (
                     <div className="rounded-lg border p-4 space-y-2">
@@ -2937,6 +2926,7 @@ export default function CreateCampaignPage() {
               {step === 4 && wizardPhase === 'created' && createdCampaignId && (
                 <GoLiveChecklist
                   campaignId={createdCampaignId}
+                  endDate={submittedEndDate ?? undefined}
                   isOpening={isOpening}
                   onOpen={async () => {
                     setIsOpening(true)
@@ -2994,15 +2984,28 @@ export default function CreateCampaignPage() {
  * completed Draft can sit indefinitely (FR-H7) via "I'll open it later". */
 function GoLiveChecklist({
   campaignId,
+  endDate,
   isOpening,
   onOpen,
   onLater,
 }: {
   campaignId: string
+  /** The end time submitted on-chain (the wizard's `dates.to`). */
+  endDate?: Date
   isOpening: boolean
   onOpen: () => void
   onLater: () => void
 }) {
+  // Re-evaluated every 30s: a host can sit on this screen past the end time (the minimum
+  // campaign is only 1 hour), and the checklist must not keep claiming the times are fine.
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000)
+    return () => clearInterval(t)
+  }, [])
+  const [confirmExpiredOpen, setConfirmExpiredOpen] = useState(false)
+  const endPassed = endDate ? hasEndTimePassed(endDate, now) : false
+
   return (
     <section className="space-y-6 animate-in fade-in-50">
       <h2 className="text-xl font-semibold border-b pb-2">Go live</h2>
@@ -3021,11 +3024,38 @@ function GoLiveChecklist({
             funded
           </li>
           <li className="flex items-center gap-2">
-            <Check className="h-4 w-4 text-status-claimable-fg" /> Start/end times valid
+            {endPassed ? (
+              <>
+                <AlertTriangle className="h-4 w-4 text-destructive" /> End time has passed
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4 text-status-claimable-fg" /> Start/end times valid
+              </>
+            )}
           </li>
         </ul>
+        {endPassed && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>End time has passed</AlertTitle>
+            <AlertDescription>{EXPIRED_OPEN_WARNING}</AlertDescription>
+          </Alert>
+        )}
+        <OpenExpiredCampaignDialog
+          open={confirmExpiredOpen}
+          onOpenChange={setConfirmExpiredOpen}
+          onConfirm={onOpen}
+        />
         <div className="flex gap-3 pt-2">
-          <Button onClick={onOpen} disabled={isOpening}>
+          <Button
+            onClick={() => {
+              // Re-check at click time, not just render time — the interval can be up to 30s stale.
+              if (endDate && hasEndTimePassed(endDate)) setConfirmExpiredOpen(true)
+              else onOpen()
+            }}
+            disabled={isOpening}
+          >
             {isOpening && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Open Campaign
           </Button>

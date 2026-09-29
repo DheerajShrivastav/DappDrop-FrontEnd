@@ -19,7 +19,12 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import type { Campaign } from '@/lib/types'
-import { closeCampaignOnChain, mapContractRevertToMessage } from '@/lib/web3-service'
+import {
+  cancelCampaignOnChain,
+  closeCampaignOnChain,
+  getCloseOptions,
+  mapContractRevertToMessage,
+} from '@/lib/web3-service'
 
 type Report = {
   id: string
@@ -48,7 +53,14 @@ type Report = {
  * Re-proposing/republishing itself is NOT duplicated here — that flow already lives in each
  * settlement panel; this section is where the host reviews WHY they might want to.
  */
-export function DisputeReportsPanel({ campaign }: { campaign: Campaign }) {
+export function DisputeReportsPanel({
+  campaign,
+  onStatusChange,
+}: {
+  campaign: Campaign
+  /** Called after a successful close/cancel so the page re-reads the new status. */
+  onStatusChange?: () => void
+}) {
   const { toast } = useToast()
   const [reports, setReports] = useState<Report[]>([])
   const [priorRootReports, setPriorRootReports] = useState<Report[]>([])
@@ -58,6 +70,12 @@ export function DisputeReportsPanel({ campaign }: { campaign: Campaign }) {
   const [isResolving, setIsResolving] = useState<string | null>(null)
   const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  // Fetched fresh from chain each time the close dialog opens — see getCloseOptions.
+  const [closeOptions, setCloseOptions] = useState<
+    { totalParticipants: number; canCancel: boolean } | null
+  >(null)
+  const [isLoadingCloseOptions, setIsLoadingCloseOptions] = useState(false)
 
   const fetchReports = useCallback(async () => {
     setIsLoading(true)
@@ -98,12 +116,55 @@ export function DisputeReportsPanel({ campaign }: { campaign: Campaign }) {
     }
   }
 
+  useEffect(() => {
+    if (!isCloseConfirmOpen) return
+    let cancelled = false
+    setCloseOptions(null)
+    setIsLoadingCloseOptions(true)
+    getCloseOptions(campaign.id)
+      .then((o) => {
+        if (!cancelled) setCloseOptions(o)
+      })
+      // A failed read just means no zero-participant warning/cancel offer; closing still works.
+      .catch(() => {
+        if (!cancelled) setCloseOptions(null)
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingCloseOptions(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [isCloseConfirmOpen, campaign.id])
+
+  const isNFT = campaign.settlement?.mode === 'NFT' || campaign.reward.type === 'ERC721'
+
+  const handleCancelInstead = async () => {
+    setIsCancelling(true)
+    try {
+      const txHash = await cancelCampaignOnChain(campaign.id)
+      toast({
+        title: 'Campaign cancelled',
+        description: isNFT
+          ? `Your NFTs can be withdrawn now. Tx: ${txHash}`
+          : `The escrowed tokens were refunded to you. Tx: ${txHash}`,
+      })
+      setIsCloseConfirmOpen(false)
+      onStatusChange?.()
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Failed to cancel campaign', description: mapContractRevertToMessage(e) })
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
   const handleClose = async () => {
     setIsClosing(true)
     try {
       const txHash = await closeCampaignOnChain(campaign.id)
       toast({ title: 'Campaign closed', description: `Tx: ${txHash}` })
       setIsCloseConfirmOpen(false)
+      onStatusChange?.()
     } catch (e: any) {
       toast({ variant: 'destructive', title: 'Failed to close campaign', description: mapContractRevertToMessage(e) })
     } finally {
@@ -233,9 +294,42 @@ export function DisputeReportsPanel({ campaign }: { campaign: Campaign }) {
                     : ''}
                 </AlertDialogDescription>
               </AlertDialogHeader>
+              {isLoadingCloseOptions && (
+                <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Checking participation on-chain…
+                </p>
+              )}
+              {closeOptions?.totalParticipants === 0 && (
+                <div className="space-y-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+                  <p className="font-medium text-destructive">
+                    No one participated. Closing locks the escrowed rewards for 30 days before you can
+                    withdraw them.
+                  </p>
+                  {closeOptions.canCancel && (
+                    <>
+                      <p>
+                        {isNFT
+                          ? 'Cancel instead and your NFTs become withdrawable right away, with no 30-day wait.'
+                          : 'Cancel instead and the escrowed tokens are refunded to you immediately, in the same transaction.'}
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCancelInstead}
+                        disabled={isCancelling || isClosing}
+                      >
+                        {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Cancel campaign instead
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
               <AlertDialogFooter>
-                <AlertDialogCancel disabled={isClosing}>Cancel</AlertDialogCancel>
-                <AlertDialogAction disabled={isClosing} onClick={handleClose}>
+                {/* "Back", not "Cancel": next to "Cancel campaign instead", a bare "Cancel"
+                    reads as the destructive on-chain action rather than dismissing the dialog. */}
+                <AlertDialogCancel disabled={isClosing || isCancelling}>Back</AlertDialogCancel>
+                <AlertDialogAction disabled={isClosing || isCancelling} onClick={handleClose}>
                   {isClosing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Close Campaign'}
                 </AlertDialogAction>
               </AlertDialogFooter>
