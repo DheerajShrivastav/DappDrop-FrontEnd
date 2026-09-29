@@ -21,6 +21,7 @@ import { Button } from './ui/button'
 import { openCampaign, endCampaign, isPaused } from '@/lib/web3-service'
 import { getLifecycleState, settlementModeLabel } from '@/lib/campaign-lifecycle'
 import { getStatusStyle } from '@/lib/status-styles'
+import { hasEndTimePassed, EXPIRED_OPEN_WARNING } from '@/lib/campaign-timing'
 import {
     AlertDialog,
     AlertDialogAction,
@@ -235,6 +236,12 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
                                 ' Participants will no longer be able to join, but can start claiming rewards if they completed the tasks.'}
                             This cannot be undone.
                         </AlertDialogDescription>
+                        {/* Same EXPIRED_OPEN_WARNING copy as the wizard's go-live step and the campaign page. */}
+                        {actionToConfirm === 'open' && hasEndTimePassed(campaign.endDate) && (
+                            <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm font-medium text-destructive">
+                                {EXPIRED_OPEN_WARNING}
+                            </p>
+                        )}
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
