@@ -55,6 +55,7 @@ import {
   UserPlus,
   ExternalLink,
   Bot,
+  Link2,
 } from 'lucide-react'
 
 import config from '@/app/config'
@@ -244,6 +245,18 @@ const taskSchema = z
     }
   })
 
+/** The form's "no cover image" value: satisfies the URL rule, and renders as the empty dropzone. */
+const PLACEHOLDER_IMAGE_URL = 'https://placehold.co/600x400'
+
+function isHttpUrl(value: string | undefined): value is string {
+  if (!value) return false
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol)
+  } catch {
+    return false
+  }
+}
+
 const campaignSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters long.'),
   shortDescription: z
@@ -430,7 +443,7 @@ export default function CreateCampaignPage() {
       shortDescription: '',
       description: '',
       dates: scheduleToDates(schedule, new Date()),
-      imageUrl: `https://placehold.co/600x400`,
+      imageUrl: PLACEHOLDER_IMAGE_URL,
       humanityGated: false,
       maxParticipants: '',
       tasks: [
@@ -543,7 +556,10 @@ export default function CreateCampaignPage() {
       ? tokenCheck.result
       : null
   const tokenSymbol = rewardToken?.symbol ?? 'tokens'
-  const fmtToken = (v: bigint) => `${formatTokenAmount(v, rewardToken?.decimals ?? 18)} ${tokenSymbol}`
+  // No decimals fallback: every caller already requires rewardToken; if one ever doesn't, show a
+  // dash rather than a number scaled by a guessed 18.
+  const fmtToken = (v: bigint) =>
+    rewardToken ? `${formatTokenAmount(v, rewardToken.decimals)} ${tokenSymbol}` : '—'
 
   const poolParsed = rewardToken && rewardAmount ? parseTokenAmount(rewardAmount, rewardToken.decimals) : null
   const poolGross = poolParsed?.ok ? poolParsed.value : null
@@ -670,6 +686,8 @@ export default function CreateCampaignPage() {
     // wizard session, or a retry after e.g. a rejected funding tx would create a second,
     // independent campaign and orphan the first, half-configured one.
     let campaignId: string | null = pendingCampaignId
+    // Decimals the funding step read on-chain in THIS submit (it throws rather than guess).
+    let fundedDecimals: number | undefined
     try {
       if (!campaignId) {
         // The contract checks startTime against the block the tx is MINED in. Resolve against
@@ -741,11 +759,12 @@ export default function CreateCampaignPage() {
 
       if (data.reward.type === 'ERC20' && !pendingFunded) {
         setCreationProgress('Configuring and funding the reward pool…')
-        await configureAndFundERC20Reward(
+        const funded = await configureAndFundERC20Reward(
           campaignId,
           data.reward.tokenAddress,
           data.reward.amount,
         )
+        fundedDecimals = funded.decimals
         setPendingFunded(true)
       }
 
@@ -755,8 +774,25 @@ export default function CreateCampaignPage() {
             ? 'Configuring rank tiers…'
             : 'Configuring score tiers and task points…',
         )
-        const tokenInfo = await getERC20TokenInfo(data.reward.tokenAddress)
-        const decimals = tokenInfo?.decimals ?? 18
+        // Decimals scale every tier amount, so they're never guessed: a failed read used to fall
+        // back to 18, silently mis-scaling a 6-decimal token's tiers by 10^12. Use a value already
+        // read for this exact token (this submit's funding step, then the Rewards-step
+        // pre-flight), else read it now; if nothing is available, stop before any tier tx. The
+        // pre-flight matters on a retry, where funding is skipped and this is the only read.
+        const decimals =
+          fundedDecimals ??
+          rewardToken?.decimals ??
+          (await getERC20TokenInfo(data.reward.tokenAddress))?.decimals
+        if (decimals === undefined) {
+          setCreationProgress(null)
+          toast({
+            variant: 'destructive',
+            title: 'Couldn’t read the token’s decimals',
+            description:
+              'Your campaign is created and funded, but its reward tiers weren’t set. Check your connection and click Create again to finish — the steps already done are skipped.',
+          })
+          return
+        }
         if (data.reward.settlementMode === 'RANK_TIERED') {
           await configureRankTiers(campaignId, sortRankTiers(data.reward.rankTiers || []), decimals)
         } else {
@@ -829,7 +865,7 @@ export default function CreateCampaignPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            imageUrl: data.imageUrl || 'https://placehold.co/600x400',
+            imageUrl: data.imageUrl || PLACEHOLDER_IMAGE_URL,
             signature: signer.signature,
             message: signer.message,
             shortDescription: data.shortDescription || '',
@@ -963,7 +999,7 @@ export default function CreateCampaignPage() {
       if (
         !campaignId &&
         uploadedImageUrl &&
-        uploadedImageUrl !== 'https://placehold.co/600x400'
+        uploadedImageUrl !== PLACEHOLDER_IMAGE_URL
       ) {
         cleanupOrphanedImage(uploadedImageUrl)
       }
@@ -1003,7 +1039,7 @@ export default function CreateCampaignPage() {
       const imageUrl = uploadedImageUrlRef.current || form.getValues('imageUrl')
       if (
         imageUrl &&
-        imageUrl !== 'https://placehold.co/600x400' &&
+        imageUrl !== PLACEHOLDER_IMAGE_URL &&
         imageUrl.includes('utfs.io')
       ) {
         // Only cleanup if it's an UploadThing URL (not external URL)
@@ -1190,10 +1226,27 @@ export default function CreateCampaignPage() {
   }
 
   const steps = [
-    { id: 1, name: 'Details' },
-    { id: 2, name: 'Tasks' },
-    { id: 3, name: 'Rewards' },
-    { id: 4, name: 'Review' },
+    {
+      id: 1,
+      name: 'Details',
+      description:
+        'What participants see first: the name, the pitch, when it runs and a cover image.',
+    },
+    {
+      id: 2,
+      name: 'Tasks',
+      description: 'The actions participants complete to become eligible for rewards.',
+    },
+    {
+      id: 3,
+      name: 'Rewards',
+      description: 'What eligible participants receive and how it is distributed.',
+    },
+    {
+      id: 4,
+      name: 'Review',
+      description: 'Check everything before the campaign is created on-chain.',
+    },
   ]
 
   if (role !== 'host') {
@@ -1254,32 +1307,52 @@ export default function CreateCampaignPage() {
         </CardHeader>
         <CardContent>
           {step > 0 && (
-            <div className="mb-8 flex justify-center">
-              <ol className="flex items-center w-full max-w-2xl">
-                {steps.map((s, index) => (
-                  <li
-                    key={s.id}
-                    className={cn('flex w-full items-center', {
-                      "after:content-[''] after:w-full after:h-1 after:border-b after:border-border after:border-4 after:inline-block":
-                        index !== steps.length - 1,
-                    })}
-                  >
-                    <span
-                      className={cn(
-                        'flex items-center justify-center w-10 h-10 rounded-full lg:h-12 lg:w-12 shrink-0 font-bold',
-                        step > s.id
-                          ? 'bg-primary text-primary-foreground'
-                          : step === s.id
-                            ? 'bg-primary/20 border-2 border-primary text-primary'
-                            : 'bg-secondary',
-                      )}
+            <nav aria-label="Progress" className="mx-auto mb-10 max-w-2xl">
+              <ol className="flex items-start">
+                {steps.map((s, index) => {
+                  const state =
+                    step > s.id ? 'complete' : step === s.id ? 'current' : 'upcoming'
+                  return (
+                    <li
+                      key={s.id}
+                      aria-current={state === 'current' ? 'step' : undefined}
+                      className="relative flex flex-1 flex-col items-center"
                     >
-                      {step > s.id ? <Check className="w-6 h-6" /> : s.id}
-                    </span>
-                  </li>
-                ))}
+                      {/* Connector from the previous step's circle to this one. */}
+                      {index > 0 && (
+                        <div
+                          aria-hidden
+                          className={cn(
+                            'absolute left-[-50%] right-1/2 top-4 h-0.5 -translate-y-1/2 transition-colors',
+                            step >= s.id ? 'bg-primary' : 'bg-border',
+                          )}
+                        />
+                      )}
+                      <span
+                        className={cn(
+                          'relative z-10 flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-colors',
+                          state === 'complete' && 'bg-primary text-primary-foreground',
+                          state === 'current' &&
+                            'border-2 border-primary bg-background text-primary ring-4 ring-primary/15',
+                          state === 'upcoming' &&
+                            'border-2 border-border bg-background text-muted-foreground',
+                        )}
+                      >
+                        {state === 'complete' ? <Check className="h-4 w-4" /> : s.id}
+                      </span>
+                      <span
+                        className={cn(
+                          'mt-2 text-xs font-medium sm:text-sm',
+                          state === 'upcoming' ? 'text-muted-foreground' : 'text-foreground',
+                        )}
+                      >
+                        {s.name}
+                      </span>
+                    </li>
+                  )
+                })}
               </ol>
-            </div>
+            </nav>
           )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
@@ -1463,18 +1536,16 @@ export default function CreateCampaignPage() {
               )}
               {step === 1 && (
                 <section className="space-y-6 animate-in fade-in-50">
-                  <h2 className="text-xl font-semibold border-b pb-2">
-                    {steps[0].name}
-                  </h2>
+                  <StepHeader title="Campaign details" description={steps[0].description} />
                   <FormField
                     control={form.control}
                     name="title"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Campaign Title</FormLabel>
+                        <FormLabel>Campaign title</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="E.g., Awesome Project Token Launch"
+                            placeholder="e.g. Awesome Project Token Launch"
                             {...field}
                           />
                         </FormControl>
@@ -1487,13 +1558,20 @@ export default function CreateCampaignPage() {
                     name="shortDescription"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Short Description</FormLabel>
+                        <FormLabel>Short description</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="A brief, catchy description for the campaign card."
+                            placeholder="One or two sentences that make people want to join."
+                            rows={2}
+                            className="resize-none"
                             {...field}
                           />
                         </FormControl>
+                        <FieldHint
+                          hint="Shown on the campaign card in the explore list."
+                          length={field.value?.length ?? 0}
+                          min={10}
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1503,14 +1581,19 @@ export default function CreateCampaignPage() {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Detailed Description</FormLabel>
+                        <FormLabel>Detailed description</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="Explain your campaign in detail for the main page."
-                            rows={5}
+                            placeholder="Explain the project, why people should take part, and what they get for it."
+                            rows={6}
                             {...field}
                           />
                         </FormControl>
+                        <FieldHint
+                          hint="Shown on the campaign page."
+                          length={field.value?.length ?? 0}
+                          min={50}
+                        />
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1536,41 +1619,54 @@ export default function CreateCampaignPage() {
                     name="imageUrl"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Campaign Image</FormLabel>
-                        <FormControl>
-                          <Input
-                            placeholder="https://example.com/image.png"
-                            {...field}
-                            value={uploadedImageUrl || field.value}
-                            onChange={(e) => {
-                              field.onChange(e)
-                              setUploadedImageUrl(null)
-                            }}
-                          />
-                        </FormControl>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <FormLabel>Cover image</FormLabel>
+                          <span className="text-xs text-muted-foreground">Optional</span>
+                        </div>
+                        {/* The placeholder is the form's "no image" value, so it renders as
+                            the empty dropzone rather than as a preview of a stock image. */}
+                        <CampaignImageUpload
+                          value={
+                            uploadedImageUrl ||
+                            (field.value !== PLACEHOLDER_IMAGE_URL && isHttpUrl(field.value)
+                              ? field.value
+                              : null)
+                          }
+                          onUploadComplete={(url) => {
+                            setUploadedImageUrl(url)
+                            form.setValue('imageUrl', url, { shouldValidate: true })
+                          }}
+                          onRemove={() => {
+                            setUploadedImageUrl(null)
+                            form.setValue('imageUrl', PLACEHOLDER_IMAGE_URL, {
+                              shouldValidate: true,
+                            })
+                          }}
+                        />
+                        <div className="relative">
+                          <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <FormControl>
+                            <Input
+                              placeholder="Or paste an image URL"
+                              className="pl-9"
+                              {...field}
+                              value={
+                                uploadedImageUrl ||
+                                (field.value === PLACEHOLDER_IMAGE_URL ? '' : field.value)
+                              }
+                              onChange={(e) => {
+                                // Clearing the input means "no image", not an invalid URL.
+                                field.onChange(e.target.value.trim() || PLACEHOLDER_IMAGE_URL)
+                                setUploadedImageUrl(null)
+                              }}
+                            />
+                          </FormControl>
+                        </div>
                         <FormDescription>
-                          Enter an image URL or upload an image below.
+                          Shown on the campaign card and page. You can change it after the
+                          campaign is created.
                         </FormDescription>
                         <FormMessage />
-
-                        {/* Image Upload Section */}
-                        <div className="mt-4 p-4 border rounded-lg bg-muted/50">
-                          <p className="text-sm text-muted-foreground mb-3">
-                            Or upload an image (max 4MB):
-                          </p>
-                          <CampaignImageUpload
-                            onUploadComplete={(url) => {
-                              setUploadedImageUrl(url)
-                              form.setValue('imageUrl', url)
-                            }}
-                          />
-                          {uploadedImageUrl && (
-                            <div className="mt-3 p-2 bg-status-claimable-bg border border-status-claimable-border rounded text-sm text-status-claimable-fg">
-                              ✓ Image uploaded. You can change it after campaign
-                              creation.
-                            </div>
-                          )}
-                        </div>
                       </FormItem>
                     )}
                   />
@@ -1578,22 +1674,43 @@ export default function CreateCampaignPage() {
                     control={form.control}
                     name="humanityGated"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-lg border p-4">
-                        <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                          <FormLabel>Humanity-verified participants only</FormLabel>
-                          <FormDescription>
-                            When enabled, the reward allocation is built only from wallets
-                            that have completed Humanity Protocol verification — unverified
-                            wallets get no allocation leaf and mathematically cannot claim
-                            (tree-build filtering, not an on-chain check).
-                          </FormDescription>
-                        </div>
+                      <FormItem className="space-y-0">
+                        <FormLabel
+                          className={cn(
+                            'flex cursor-pointer items-start gap-4 rounded-lg border p-4 font-normal transition-colors',
+                            field.value
+                              ? 'border-primary bg-primary/5'
+                              : 'hover:border-foreground/20 hover:bg-muted/40',
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors',
+                              field.value
+                                ? 'bg-primary text-primary-foreground'
+                                : 'bg-muted text-muted-foreground',
+                            )}
+                          >
+                            <ShieldCheck className="h-5 w-5" />
+                          </span>
+                          <span className="flex-1 space-y-1">
+                            <span className="block text-sm font-medium leading-none">
+                              Verified humans only
+                            </span>
+                            <span className="block text-sm leading-relaxed text-muted-foreground">
+                              Only wallets verified with Humanity Protocol can claim rewards.
+                              Unverified wallets are left out when the reward list is built,
+                              so bots and duplicate wallets can&apos;t claim.
+                            </span>
+                          </span>
+                          <FormControl>
+                            <Checkbox
+                              className="mt-0.5"
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </FormLabel>
                       </FormItem>
                     )}
                   />
@@ -1602,9 +1719,7 @@ export default function CreateCampaignPage() {
 
               {step === 2 && (
                 <section className="space-y-6 animate-in fade-in-50">
-                  <h2 className="text-xl font-semibold border-b pb-2">
-                    {steps[1].name}
-                  </h2>
+                  <StepHeader title="Tasks" description={steps[1].description} />
 
                   {/* Discord Bot Warning - Show if Discord tasks exist but bot URL is not configured */}
                   {tasks.some((task) => task.type === 'JOIN_DISCORD') &&
@@ -2356,9 +2471,7 @@ export default function CreateCampaignPage() {
 
               {step === 3 && (
                 <section className="space-y-6 animate-in fade-in-50">
-                  <h2 className="text-xl font-semibold border-b pb-2">
-                    {steps[2].name}
-                  </h2>
+                  <StepHeader title="Rewards" description={steps[2].description} />
                   <Alert>
                     <Info className="h-4 w-4" />
                     <AlertTitle>On-chain rewards: ERC20 or NFT</AlertTitle>
@@ -2795,9 +2908,7 @@ export default function CreateCampaignPage() {
 
               {step === 4 && wizardPhase === 'form' && (
                 <section className="space-y-6 animate-in fade-in-50">
-                  <h2 className="text-xl font-semibold border-b pb-2">
-                    {steps[3].name} &amp; Create
-                  </h2>
+                  <StepHeader title="Review &amp; create" description={steps[3].description} />
                   <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-6">
                     <h3 className="font-semibold text-lg">
                       {form.getValues('title')}
@@ -2944,20 +3055,25 @@ export default function CreateCampaignPage() {
               )}
 
               {step > 0 && wizardPhase === 'form' && (
-                <div className="flex justify-between pt-4 mt-8 border-t">
+                <div className="mt-8 flex items-center justify-between gap-4 border-t pt-6">
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="ghost"
                     onClick={prevStep}
                     disabled={step === 1}
+                    className={cn(step === 1 && 'invisible')}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
-                    Previous
+                    Back
                   </Button>
+
+                  <span className="text-sm tabular-nums text-muted-foreground">
+                    Step {step} of {steps.length}
+                  </span>
 
                   {step < 4 ? (
                     <Button type="button" onClick={nextStep}>
-                      Next
+                      Continue
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   ) : (
@@ -2974,6 +3090,27 @@ export default function CreateCampaignPage() {
           </Form>
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+function StepHeader({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="space-y-1 border-b pb-4">
+      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
+  )
+}
+
+/** Helper text on the left, a live character count on the right until the minimum is met. */
+function FieldHint({ hint, length, min }: { hint: string; length: number; min: number }) {
+  return (
+    <div className="flex items-start justify-between gap-4 text-sm text-muted-foreground">
+      <p>{hint}</p>
+      <p className={cn('shrink-0 tabular-nums', length >= min && 'text-status-claimable-fg')}>
+        {length < min ? `${length}/${min} min` : `${length} characters`}
+      </p>
     </div>
   )
 }
