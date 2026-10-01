@@ -7,6 +7,7 @@ export type GenerationErrorCategory =
   | 'validation'
   | 'network'
   | 'config'
+  | 'timeout'
   | 'unknown'
 
 /**
@@ -82,6 +83,19 @@ export function wrapAIError(
   const message: string = err?.message ?? String(raw)
   const statusCode: number | undefined =
     err?.statusCode ?? err?.lastError?.statusCode ?? err?.data?.error?.code
+
+  // 0) Our own time limit (AbortSignal.timeout on the call). Checked first: an abort can also
+  //    surface with network-ish wording ("ETIMEDOUT"), but the right advice is different.
+  if (isTimeoutError(raw)) {
+    return new CampaignGenerationError({
+      stage,
+      category: 'timeout',
+      userMessage:
+        'The AI took too long to respond. Try again, or create the campaign manually.',
+      retryable: true,
+      cause: raw,
+    })
+  }
 
   // 1) Rate-limit / overloaded (429, 503)
   if (
@@ -179,4 +193,13 @@ export function wrapAIError(
     retryable: true,
     cause: raw,
   })
+}
+
+/** True for an AbortSignal.timeout() firing, however the SDK/fetch chose to wrap it. */
+export function isTimeoutError(raw: unknown): boolean {
+  const err = raw as any
+  const names = [err?.name, err?.cause?.name, err?.lastError?.name]
+  if (names.includes('TimeoutError') || names.includes('AbortError')) return true
+  const message: string = err?.message ?? ''
+  return /aborted due to timeout|operation was aborted|signal timed out/i.test(message)
 }

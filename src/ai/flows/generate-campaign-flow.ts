@@ -1,5 +1,4 @@
 'use server'
-'use server'
 /**
  * @fileOverview Multi-agent pipeline for generating Web3 airdrop campaigns.
  *
@@ -8,10 +7,22 @@
  * - Planner: Analyzes the project and decides campaign strategy
  * - Generator: Creates campaign content based on the plan
  * - Validator: Checks quality, hallucinations, and consistency; can fix or retry
+ *
+ * Time-bounded (AI_CALL_TIMEOUT_MS per call, AI_PIPELINE_BUDGET_MS overall). Planner and
+ * generator are REQUIRED — their failure is an error the user sees. Everything after the first
+ * draft exists is BEST-EFFORT: a validator/regeneration failure, a timeout, or a spent budget
+ * returns the best draft so far instead of an error or another round.
  */
 
 import { generateObject } from 'ai'
-import { model, MAX_VALIDATION_RETRIES } from '@/ai/config'
+import {
+  AI_CALL_TIMEOUT_MS,
+  AI_PIPELINE_BUDGET_MS,
+  GEMINI_MODEL_ID,
+  MAX_VALIDATION_RETRIES,
+  model,
+  thinkingOptions,
+} from '@/ai/config'
 import {
   GenerateCampaignInputSchema,
   type GenerateCampaignInput,
@@ -51,36 +62,44 @@ export async function generateCampaign(
     })
   }
 
-  // Step 1: Plan
-  const plan = await runPlanner(trimmedInput)
+  const started = Date.now()
+  const deadline = started + AI_PIPELINE_BUDGET_MS
+  const left = () => deadline - Date.now()
+  const elapsed = () => `${((Date.now() - started) / 1000).toFixed(1)}s`
+  // One abort signal per call: never longer than the per-call cap, and for best-effort calls
+  // never past the pipeline deadline either.
+  const callSignal = (capMs = AI_CALL_TIMEOUT_MS) =>
+    AbortSignal.timeout(Math.max(1_000, Math.min(AI_CALL_TIMEOUT_MS, capMs)))
+  const log = (event: string) => console.info(`[ai/generate] ${event} at ${elapsed()} (${GEMINI_MODEL_ID})`)
 
-  // Step 2: Generate
-  let draft = await runGenerator(trimmedInput, plan)
+  // ── Required: no draft without these, so their failures surface as errors.
+  const plan = await runPlanner(trimmedInput, callSignal())
+  log('plan ready')
+  let draft = await runGenerator(trimmedInput, plan, undefined, callSignal())
+  log('draft ready')
 
-  // Step 3: Validate (with retry loop)
+  // ── Best-effort from here: a draft exists, so nothing below may become an error.
   for (let attempt = 0; attempt <= MAX_VALIDATION_RETRIES; attempt++) {
+    if (left() < MIN_VALIDATE_MS) {
+      log('time budget spent; returning the draft unreviewed')
+      return sanitizeOutput(draft)
+    }
+
     let validation: ValidationResult
     try {
-      validation = await runValidator(trimmedInput, draft)
+      validation = await runValidator(trimmedInput, draft, callSignal(left()))
     } catch (valError) {
-      // If validation fails on the last attempt, return the draft as-is
-      // rather than failing the entire generation
-      if (attempt === MAX_VALIDATION_RETRIES) {
-        console.warn(
-          'Campaign generation: validator failed on final attempt, returning unvalidated draft.',
-          valError,
-        )
-        return sanitizeOutput(draft)
-      }
-      // Otherwise, skip validation and try regenerating
+      // Previously this `continue`d — which re-ran the validator on the SAME draft (the comment
+      // claimed it regenerated), so a flaky or truncated validator response multiplied latency.
       console.warn(
-        `Campaign generation: validator failed on attempt ${attempt + 1}, retrying...`,
+        `[ai/generate] validator failed on attempt ${attempt + 1} at ${elapsed()}; returning the current draft.`,
         valError,
       )
-      continue
+      return sanitizeOutput(draft)
     }
 
     if (validation.approved) {
+      log(`approved (score ${validation.overallScore})`)
       return applyFixes(draft, validation)
     }
 
@@ -89,10 +108,14 @@ export async function generateCampaign(
     }
 
     if (attempt === MAX_VALIDATION_RETRIES) {
-      console.warn(
-        'Campaign generation: max validation retries reached, returning best effort.',
-        { issues: validation.issues },
-      )
+      console.warn('[ai/generate] max validation rounds reached, returning best effort.', {
+        issues: validation.issues,
+      })
+      return sanitizeOutput(draft)
+    }
+
+    if (left() < MIN_REGENERATE_MS) {
+      log('not enough time left for another round; returning the fixed draft')
       return sanitizeOutput(draft)
     }
 
@@ -100,19 +123,37 @@ export async function generateCampaign(
       .map((i) => `[${i.severity}] ${i.field}: ${i.issue} → ${i.fix}`)
       .join('\n')
 
-    draft = await runGenerator(trimmedInput, plan, feedback)
+    try {
+      draft = await runGenerator(trimmedInput, plan, feedback, callSignal(left()))
+      log(`regenerated (round ${attempt + 1})`)
+    } catch (genError) {
+      // `draft` still holds the previous (already fixed) version — return that.
+      console.warn(`[ai/generate] regeneration failed at ${elapsed()}; returning the previous draft.`, genError)
+      return sanitizeOutput(draft)
+    }
   }
 
   return sanitizeOutput(draft)
 }
 
+// A best-effort round only starts if it can plausibly finish inside the budget.
+const MIN_VALIDATE_MS = 8_000
+const MIN_REGENERATE_MS = 15_000 // regenerate + the validation that follows it
+
 // ── Agent 1: Planner ─────────────────────────────────────────────────────────
 
-async function runPlanner(projectDescription: string): Promise<CampaignPlan> {
+async function runPlanner(
+  projectDescription: string,
+  abortSignal: AbortSignal,
+): Promise<CampaignPlan> {
   try {
     const { object } = await generateObject({
       model,
       schema: CampaignPlanSchema,
+      abortSignal,
+      maxRetries: 1, // one quick retry for a transient 503; the signal bounds both attempts
+      maxOutputTokens: 4096,
+      providerOptions: thinkingOptions('low'),
       system: `You are a Web3 campaign strategist. Analyze the given project description and create a strategic plan for an airdrop campaign.
 
 Your job is ONLY to analyze and plan — do NOT write the campaign content yet.
@@ -142,7 +183,8 @@ ${projectDescription}`,
 async function runGenerator(
   projectDescription: string,
   plan: CampaignPlan,
-  validatorFeedback?: string,
+  validatorFeedback: string | undefined,
+  abortSignal: AbortSignal,
 ): Promise<GenerateCampaignOutput> {
   const feedbackSection = validatorFeedback
     ? `\n\nPREVIOUS ATTEMPT FEEDBACK (fix these issues):\n${validatorFeedback}`
@@ -152,6 +194,10 @@ async function runGenerator(
     const { object } = await generateObject({
       model,
       schema: GenerateCampaignOutputSchema,
+      abortSignal,
+      maxRetries: 1,
+      maxOutputTokens: 4096,
+      providerOptions: thinkingOptions('low'),
       system: `You are an expert Web3 marketing copywriter. Generate campaign content based on the strategic plan provided.
 
 STRICT RULES:
@@ -203,11 +249,19 @@ Generate the campaign content now.`,
 async function runValidator(
   projectDescription: string,
   campaign: GenerateCampaignOutput,
+  abortSignal: AbortSignal,
 ): Promise<ValidationResult> {
   try {
     const { object } = await generateObject({
       model,
       schema: ValidationResultSchema,
+      abortSignal,
+      // Best-effort: a failure returns the draft, so retrying only adds latency.
+      maxRetries: 0,
+      // Bounded so a long `fixes` payload can't run on until the JSON is cut off (the
+      // production "could not parse the response" failure). Concision is asked for below.
+      maxOutputTokens: 2048,
+      providerOptions: thinkingOptions('low'),
       system: `You are a quality assurance agent for Web3 airdrop campaigns. Your job is to validate a generated campaign against the original project description.
 
 CHECK FOR:
@@ -226,7 +280,16 @@ SCORING:
 
 When you find issues, provide DIRECT FIXES in the "fixes" field — don't just describe the problem, provide the corrected content.
 
-If the campaign is good (score ≥ 5), set approved=true even if you have suggestions.`,
+If the campaign is good (score ≥ 5), set approved=true even if you have suggestions.
+
+VAGUE INPUT: if the project description is brief or generic, generic-but-reasonable copy is
+acceptable. Flag hallucination only when the campaign invents SPECIFIC facts that aren't in the
+description (names, numbers, chains, partners, launch dates) — not for reasonable framing.
+
+KEEP THE RESPONSE SHORT:
+- At most 5 issues, one sentence each for "issue" and "fix".
+- In "fixes", include ONLY the fields you are actually changing. Omit unchanged fields entirely;
+  never repeat text that stays the same. If nothing needs changing, omit "fixes" altogether.`,
       prompt: `ORIGINAL PROJECT DESCRIPTION:
 ${projectDescription}
 

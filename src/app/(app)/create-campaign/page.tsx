@@ -123,15 +123,34 @@ import {
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
-import {
-  parseCampaignGenerationError,
-  type GenerationStage,
-} from '@/ai/flows/generate-campaign.errors'
+import { parseCampaignGenerationError } from '@/ai/flows/generate-campaign.errors'
 import { AlertCircle, AlertTriangle, Wifi, Clock, RefreshCw } from 'lucide-react'
+import {
+  Coins,
+  Lock,
+  ListChecks,
+  MessageCircle,
+  Repeat2,
+  Send,
+  Wallet,
+  type LucideIcon,
+} from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import {
+  CopyableAddress,
+  ReviewRow,
+  ReviewSection,
+  SetupChecklist,
+  ToggleCard,
+} from './_components/wizard-ui'
 import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
+
+/** Stop waiting for "Generate with AI" after this long. Above the server's worst case (~70s
+ * pipeline budget, src/ai/config.ts) so it only fires for a stuck or dropped request. */
+const CLIENT_GENERATION_GIVE_UP_MS = 90_000
 
 /** Comma- or newline-separated list of numeric IDs -> trimmed, non-empty strings. */
 function parseIdList(raw: string): string[] {
@@ -379,21 +398,26 @@ const campaignSchema = z.object({
 
 type CampaignFormValues = z.infer<typeof campaignSchema>
 
-const TASK_TYPE_OPTIONS: { value: TaskType; label: string }[] = [
-  { value: 'SOCIAL_FOLLOW', label: 'Social Follow' },
-  { value: 'JOIN_DISCORD', label: 'Join Discord' },
-  { value: 'JOIN_TELEGRAM', label: 'Join Telegram' },
-  { value: 'RETWEET', label: 'Retweet Post' },
-  { value: 'ONCHAIN_TX', label: 'On-chain Action (Beta)' },
-  { value: 'HUMANITY_VERIFICATION', label: 'Humanity Protocol Verification' },
+const TASK_TYPE_OPTIONS: { value: TaskType; label: string; icon: LucideIcon }[] = [
+  { value: 'SOCIAL_FOLLOW', label: 'Social Follow', icon: UserPlus },
+  { value: 'JOIN_DISCORD', label: 'Join Discord', icon: MessageCircle },
+  { value: 'JOIN_TELEGRAM', label: 'Join Telegram', icon: Send },
+  { value: 'RETWEET', label: 'Retweet Post', icon: Repeat2 },
+  { value: 'ONCHAIN_TX', label: 'On-chain Action (Beta)', icon: Wallet },
+  { value: 'HUMANITY_VERIFICATION', label: 'Humanity Protocol Verification', icon: ShieldCheck },
 ]
 
 export default function CreateCampaignPage() {
   const [step, setStep] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generationStage, setGenerationStage] =
-    useState<GenerationStage | null>(null)
+  // Real elapsed time instead of fake stage timers: the client can't see which stage the
+  // server is in, and a "Reviewing quality…" that never moves read as a hang.
+  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null)
+  const [generationNow, setGenerationNow] = useState(() => Date.now())
+  // Bumped on every start, cancel, skip and give-up. A response only applies if its id is still
+  // current — so a late result can never overwrite a form the host has moved on from.
+  const generationIdRef = useRef(0)
   const [generationError, setGenerationError] = useState<{
     message: string
     retryable: boolean
@@ -424,6 +448,12 @@ export default function CreateCampaignPage() {
   const [pendingTiersSet, setPendingTiersSet] = useState(false)
   const [pendingDeposited, setPendingDeposited] = useState(false)
   const [pendingCapSet, setPendingCapSet] = useState(false)
+  // What was actually escrowed, captured when funding/deposit succeeds. A retry must configure
+  // tiers against THIS token and its decimals, never against whatever the form holds by then.
+  const [fundedReward, setFundedReward] = useState<{
+    tokenAddress: string
+    decimals?: number
+  } | null>(null)
   const [feeEnabled, setFeeEnabled] = useState(false)
   const [isOpening, setIsOpening] = useState(false)
   const router = useRouter()
@@ -556,6 +586,18 @@ export default function CreateCampaignPage() {
       ? tokenCheck.result
       : null
   const tokenSymbol = rewardToken?.symbol ?? 'tokens'
+  // Reward locks after a partial create (see fundedReward). The payout method locks as soon as
+  // the campaign exists: the required Humanity task is injected at creation based on it.
+  const rewardLocked = pendingFunded || pendingDeposited
+  const settlementLocked = campaignCreated
+  const tiersEditable = rewardType === 'ERC20' && settlementMode !== 'MERKLE' && !pendingTiersSet
+  const minStep = !campaignCreated ? 1 : !rewardLocked || tiersEditable ? 3 : 4
+  const payoutLabel =
+    settlementMode === 'RANK_TIERED'
+      ? 'By finishing order'
+      : settlementMode === 'SCORE_TIERED'
+        ? 'By points'
+        : 'Equal split'
   // No decimals fallback: every caller already requires rewardToken; if one ever doesn't, show a
   // dash rather than a number scaled by a guessed 18.
   const fmtToken = (v: bigint) =>
@@ -688,6 +730,19 @@ export default function CreateCampaignPage() {
     let campaignId: string | null = pendingCampaignId
     // Decimals the funding step read on-chain in THIS submit (it throws rather than guess).
     let fundedDecimals: number | undefined
+    // The Rewards inputs are locked once funded, so this only trips if that lock is bypassed —
+    // but configuring tiers for a different token than the escrowed one must never happen.
+    if (
+      fundedReward &&
+      fundedReward.tokenAddress.toLowerCase() !== (data.reward.tokenAddress || '').toLowerCase()
+    ) {
+      toast({
+        variant: 'destructive',
+        title: 'Reward doesn’t match what was funded',
+        description: `This campaign was funded with ${fundedReward.tokenAddress}, so its reward can’t switch to a different token. Nothing was sent.`,
+      })
+      return
+    }
     try {
       if (!campaignId) {
         // The contract checks startTime against the block the tx is MINED in. Resolve against
@@ -765,6 +820,7 @@ export default function CreateCampaignPage() {
           data.reward.amount,
         )
         fundedDecimals = funded.decimals
+        setFundedReward({ tokenAddress: data.reward.tokenAddress, decimals: funded.decimals })
         setPendingFunded(true)
       }
 
@@ -781,6 +837,7 @@ export default function CreateCampaignPage() {
         // pre-flight matters on a retry, where funding is skipped and this is the only read.
         const decimals =
           fundedDecimals ??
+          fundedReward?.decimals ??
           rewardToken?.decimals ??
           (await getERC20TokenInfo(data.reward.tokenAddress))?.decimals
         if (decimals === undefined) {
@@ -843,6 +900,7 @@ export default function CreateCampaignPage() {
         } catch (e) {
           console.warn('Failed to record NFT deposits (non-fatal, tokens are already escrowed on-chain):', e)
         }
+        setFundedReward({ tokenAddress: data.reward.tokenAddress })
         setPendingDeposited(true)
       }
 
@@ -1108,7 +1166,9 @@ export default function CreateCampaignPage() {
     if (!isValid) return
     // The token pre-flight lives outside the schema (it's async, on-chain). Only definite
     // negatives stop the host — each one would otherwise revert AFTER createCampaign has mined.
-    if (step === 3 && rewardType !== 'None') {
+    // Skipped once funded: the token is fixed by then, and the balance check would wrongly fail
+    // because the pool has already left the host's wallet.
+    if (step === 3 && rewardType !== 'None' && !rewardLocked) {
       if (tokenCheck.status === 'checking') {
         toast({ title: 'Still checking the token', description: 'Give it a second, then continue.' })
         return
@@ -1121,7 +1181,9 @@ export default function CreateCampaignPage() {
     setStep((s) => s + 1)
   }
 
-  const prevStep = () => setStep((s) => s - 1)
+  // Back never returns to a step whose values are already on-chain: Details/Schedule/Tasks once
+  // the campaign exists, and Rewards once it's funded — unless tier rows are still unset there.
+  const prevStep = () => setStep((s) => Math.max(minStep, s - 1))
 
   const handleGenerate = async () => {
     if (!aiPrompt) {
@@ -1141,19 +1203,30 @@ export default function CreateCampaignPage() {
       })
       return
     }
+    const myId = ++generationIdRef.current
+    const isCurrent = () => generationIdRef.current === myId
     setIsGenerating(true)
     setGenerationError(null)
-    setGenerationStage('planning')
-    // Hoist timer IDs so the finally block can always clear them
-    let stageTimer1: ReturnType<typeof setTimeout> | undefined
-    let stageTimer2: ReturnType<typeof setTimeout> | undefined
-    try {
-      // The server action handles all stages internally.
-      // We simulate stage transitions based on typical timing.
-      stageTimer1 = setTimeout(() => setGenerationStage('generating'), 8000)
-      stageTimer2 = setTimeout(() => setGenerationStage('validating'), 25000)
+    setGenerationStartedAt(Date.now())
+    setGenerationNow(Date.now())
 
+    // Client-side give-up. The server budget (AI_PIPELINE_BUDGET_MS, ~70s worst case) should
+    // always answer first; this only fires if the request itself is stuck or was dropped.
+    const giveUp = setTimeout(() => {
+      if (!isCurrent()) return
+      generationIdRef.current++ // ignore whatever arrives later
+      setIsGenerating(false)
+      setGenerationStartedAt(null)
+      setGenerationError({
+        message: 'This is taking longer than usual. Try again, or create the campaign manually.',
+        retryable: true,
+        category: 'timeout',
+      })
+    }, CLIENT_GENERATION_GIVE_UP_MS)
+
+    try {
       const result = await generateCampaign(aiPrompt)
+      if (!isCurrent()) return // cancelled, skipped or given up — don't touch the form
 
       const currentValues = form.getValues()
       form.reset({
@@ -1170,6 +1243,7 @@ export default function CreateCampaignPage() {
       })
       setStep(1)
     } catch (e: any) {
+      if (!isCurrent()) return
       console.error('Error generating campaign:', e)
 
       let errorTitle = 'Generation Failed'
@@ -1186,6 +1260,9 @@ export default function CreateCampaignPage() {
         switch (parsed.category) {
           case 'rate_limit':
             errorTitle = '⏳ AI Service Busy'
+            break
+          case 'timeout':
+            errorTitle = '⏳ Took Too Long'
             break
           case 'config':
             errorTitle = '🔑 Configuration Error'
@@ -1218,12 +1295,28 @@ export default function CreateCampaignPage() {
         duration: 8000,
       })
     } finally {
-      clearTimeout(stageTimer1)
-      clearTimeout(stageTimer2)
-      setIsGenerating(false)
-      setGenerationStage(null)
+      clearTimeout(giveUp)
+      if (isCurrent()) {
+        setIsGenerating(false)
+        setGenerationStartedAt(null)
+      }
     }
   }
+
+  /** Stop waiting. The server call can't be aborted mid-flight, but its result is ignored. */
+  const cancelGeneration = () => {
+    generationIdRef.current++
+    setIsGenerating(false)
+    setGenerationStartedAt(null)
+  }
+
+  useEffect(() => {
+    if (!isGenerating) return
+    const t = setInterval(() => setGenerationNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [isGenerating])
+  const generationSeconds =
+    generationStartedAt === null ? 0 : Math.max(0, Math.floor((generationNow - generationStartedAt) / 1000))
 
   const steps = [
     {
@@ -1394,79 +1487,31 @@ export default function CreateCampaignPage() {
                       </p>
                     </div>
 
-                    {/* Generation stage progress */}
-                    {isGenerating && generationStage && (
-                      <div className="mt-4 p-4 rounded-lg bg-card border animate-in fade-in-50">
+                    {/* Honest progress: elapsed time, not a guessed stage. */}
+                    {isGenerating && (
+                      <div
+                        className="mt-4 rounded-lg border bg-card p-4 animate-in fade-in-50"
+                        role="status"
+                        aria-live="polite"
+                      >
                         <div className="flex items-center gap-3">
-                          <div className="relative">
-                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                          </div>
-                          <div className="flex-1">
+                          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />
+                          <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium">
-                              {generationStage === 'planning' &&
-                                '🧠 Analyzing your project...'}
-                              {generationStage === 'generating' &&
-                                '✍️ Writing campaign content...'}
-                              {generationStage === 'validating' &&
-                                '🔍 Reviewing quality...'}
+                              Drafting your campaign…{' '}
+                              <span className="tabular-nums text-muted-foreground">
+                                {generationSeconds}s
+                              </span>
                             </p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {generationStage === 'planning' &&
-                                'Deciding campaign strategy, target audience, and task types'}
-                              {generationStage === 'generating' &&
-                                'Crafting title, description, and tasks based on the plan'}
-                              {generationStage === 'validating' &&
-                                'Checking for quality, accuracy, and consistency'}
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {generationSeconds < 45
+                                ? 'Planning, writing and checking it — usually 10–40 seconds.'
+                                : 'Still working — the AI service is slower than usual right now.'}
                             </p>
                           </div>
-                        </div>
-                        {/* Stage dots */}
-                        <div className="flex items-center gap-2 mt-3">
-                          {(
-                            ['planning', 'generating', 'validating'] as const
-                          ).map((stage, idx) => (
-                            <React.Fragment key={stage}>
-                              <div
-                                className={cn(
-                                  'h-2 w-2 rounded-full transition-colors duration-300',
-                                  generationStage === stage
-                                    ? 'bg-primary animate-pulse'
-                                    : [
-                                      'planning',
-                                      'generating',
-                                      'validating',
-                                    ].indexOf(generationStage!) > idx
-                                      ? 'bg-primary'
-                                      : 'bg-muted',
-                                )}
-                              />
-                              {idx < 2 && (
-                                <div
-                                  className={cn(
-                                    'h-0.5 flex-1 rounded transition-colors duration-300',
-                                    [
-                                      'planning',
-                                      'generating',
-                                      'validating',
-                                    ].indexOf(generationStage!) > idx
-                                      ? 'bg-primary'
-                                      : 'bg-muted',
-                                  )}
-                                />
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </div>
-                        <div className="flex justify-between mt-1">
-                          <span className="text-[10px] text-muted-foreground">
-                            Plan
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            Generate
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            Validate
-                          </span>
+                          <Button type="button" variant="ghost" size="sm" onClick={cancelGeneration}>
+                            Cancel
+                          </Button>
                         </div>
                       </div>
                     )}
@@ -1476,13 +1521,13 @@ export default function CreateCampaignPage() {
                       <div className="mt-4 p-4 rounded-lg border border-destructive/50 bg-destructive/5 animate-in fade-in-50">
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5">
-                            {generationError.category === 'rate_limit' && (
+                            {['rate_limit', 'timeout'].includes(generationError.category) && (
                               <Clock className="h-5 w-5 text-muted-foreground" />
                             )}
                             {generationError.category === 'network' && (
                               <Wifi className="h-5 w-5 text-destructive" />
                             )}
-                            {!['rate_limit', 'network'].includes(
+                            {!['rate_limit', 'timeout', 'network'].includes(
                               generationError.category,
                             ) && (
                                 <AlertCircle className="h-5 w-5 text-destructive" />
@@ -1513,8 +1558,13 @@ export default function CreateCampaignPage() {
                       <Button
                         type="button"
                         variant="ghost"
-                        onClick={() => setStep(1)}
-                        disabled={isGenerating}
+                        // Always available: a slow AI response must never trap the host here.
+                        // Skipping mid-generation stops waiting so the late result can't
+                        // overwrite what they type.
+                        onClick={() => {
+                          if (isGenerating) cancelGeneration()
+                          setStep(1)
+                        }}
                       >
                         Skip &amp; Create Manually
                       </Button>
@@ -1726,12 +1776,10 @@ export default function CreateCampaignPage() {
                     !config.discordBotInviteUrl && (
                       <Alert variant="destructive">
                         <Bot className="h-4 w-4" />
-                        <AlertTitle>Discord Bot Not Configured</AlertTitle>
+                        <AlertTitle>Discord verification won&apos;t work yet</AlertTitle>
                         <AlertDescription>
-                          You have Discord join tasks but the bot invite URL is
-                          not configured. Discord verification will not work
-                          until the bot is properly set up. Please contact
-                          support to configure the Discord bot.
+                          The DappDrop Discord bot isn&apos;t set up, so Discord join tasks
+                          can&apos;t be verified. Contact support.
                         </AlertDescription>
                       </Alert>
                     )}
@@ -1741,27 +1789,52 @@ export default function CreateCampaignPage() {
                     !config.telegramBotUsername && (
                       <Alert variant="destructive">
                         <Bot className="h-4 w-4" />
-                        <AlertTitle>Telegram Bot Not Configured</AlertTitle>
+                        <AlertTitle>Telegram verification won&apos;t work yet</AlertTitle>
                         <AlertDescription>
-                          You have Telegram join tasks but the bot username is
-                          not configured. Telegram verification will not work
-                          until the bot is properly set up. Please contact
-                          support to configure the Telegram bot.
+                          The DappDrop Telegram bot isn&apos;t set up, so Telegram join tasks
+                          can&apos;t be verified. Contact support.
                         </AlertDescription>
                       </Alert>
                     )}
 
-                  {fields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="flex flex-col gap-4 p-4 border rounded-md"
-                    >
-                      <div className="flex gap-4 items-start">
+                  {fields.map((field, index) => {
+                    const typeOption = TASK_TYPE_OPTIONS.find(
+                      (o) => o.value === tasks[index]?.type,
+                    )
+                    const TypeIcon = typeOption?.icon ?? ListChecks
+                    return (
+                    <div key={field.id} className="overflow-hidden rounded-lg border bg-card">
+                      <div className="flex items-center justify-between gap-3 border-b bg-muted/30 px-4 py-2">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border bg-background text-muted-foreground">
+                            <TypeIcon className="h-4 w-4" />
+                          </span>
+                          <span className="shrink-0 text-sm font-medium">Task {index + 1}</span>
+                          {typeOption && (
+                            <span className="truncate text-sm text-muted-foreground">
+                              {typeOption.label}
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => remove(index)}
+                          disabled={fields.length <= 1}
+                          aria-label={`Remove task ${index + 1}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <div className="space-y-4 p-4">
+                      <div className="grid gap-4 sm:grid-cols-[minmax(0,15rem)_1fr]">
                         <FormField
                           control={form.control}
                           name={`tasks.${index}.type`}
                           render={({ field }) => (
-                            <FormItem className="w-1/3">
+                            <FormItem>
                               <FormLabel>Type</FormLabel>
                               <Select
                                 onValueChange={field.onChange}
@@ -1778,7 +1851,10 @@ export default function CreateCampaignPage() {
                                       key={opt.value}
                                       value={opt.value}
                                     >
-                                      {opt.label}
+                                      <span className="flex min-w-0 items-center gap-2">
+                                        <opt.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                        <span className="truncate">{opt.label}</span>
+                                      </span>
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -1791,11 +1867,11 @@ export default function CreateCampaignPage() {
                           control={form.control}
                           name={`tasks.${index}.description`}
                           render={({ field }) => (
-                            <FormItem className="flex-1">
-                              <FormLabel>Description</FormLabel>
+                            <FormItem>
+                              <FormLabel>What participants do</FormLabel>
                               <FormControl>
                                 <Input
-                                  placeholder={`E.g., Follow @project on X`}
+                                  placeholder="e.g. Follow @project on X"
                                   {...field}
                                 />
                               </FormControl>
@@ -1803,17 +1879,6 @@ export default function CreateCampaignPage() {
                             </FormItem>
                           )}
                         />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="mt-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => remove(index)}
-                          disabled={fields.length <= 1}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Remove Task</span>
-                        </Button>
                       </div>
 
                       {tasks[index].type === 'JOIN_DISCORD' && (
@@ -1823,7 +1888,7 @@ export default function CreateCampaignPage() {
                             name={`tasks.${index}.verificationData`}
                             render={({ field }) => (
                               <FormItem className="flex-1">
-                                <FormLabel>Discord Server ID</FormLabel>
+                                <FormLabel>Discord server ID</FormLabel>
                                 <FormControl>
                                   <Input
                                     placeholder="e.g., 1024849645714206720"
@@ -1857,7 +1922,7 @@ export default function CreateCampaignPage() {
                             name={`tasks.${index}.discordInviteLink`}
                             render={({ field }) => (
                               <FormItem className="flex-1">
-                                <FormLabel>Discord Invite Link</FormLabel>
+                                <FormLabel>Discord invite link</FormLabel>
                                 <FormControl>
                                   <Input
                                     placeholder="e.g., https://discord.gg/yourcode or just 'yourcode'"
@@ -1874,53 +1939,21 @@ export default function CreateCampaignPage() {
                             )}
                           />
 
-                          {/* Discord Bot Setup Instructions */}
-                          <div className="p-4 bg-secondary/40 border border-border rounded-lg space-y-3">
-                            <div className="flex items-center gap-2 text-foreground">
-                              <Bot className="h-5 w-5" />
-                              <h4 className="font-semibold">
-                                Required: Add DappDrop Bot to Your Server
-                              </h4>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              To enable automatic verification of Discord join
-                              tasks, you must add our bot to your Discord
-                              server.
-                            </p>
-                            <div className="flex flex-col gap-2">
-                              {config.discordBotInviteUrl ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-fit bg-background border-border text-foreground hover:bg-secondary"
-                                  onClick={() =>
-                                    window.open(
-                                      config.discordBotInviteUrl!,
-                                      '_blank',
-                                    )
-                                  }
-                                >
-                                  <ExternalLink className="h-4 w-4 mr-2" />
-                                  Add DappDrop Bot to Server
-                                </Button>
-                              ) : (
-                                <p className="text-sm text-muted-foreground font-medium">
-                                  Discord bot invite URL not configured. Please
-                                  contact support.
-                                </p>
-                              )}
-                              <div className="text-xs text-muted-foreground space-y-1">
-                                <p>
-                                  <strong>Required Permissions:</strong>
-                                </p>
-                                <ul className="list-disc list-inside ml-2 space-y-0.5">
-                                  <li>View Server Members</li>
-                                  <li>Read Message History</li>
-                                </ul>
-                              </div>
-                            </div>
-                          </div>
+                          <SetupChecklist
+                            icon={Bot}
+                            title="Required: add the DappDrop bot to your server"
+                            steps={[
+                              'Open the invite below and pick your server.',
+                              'Keep the "View Server Members" and "Read Message History" permissions ticked.',
+                              'Authorize. Join tasks are then verified automatically.',
+                            ]}
+                            action={
+                              config.discordBotInviteUrl
+                                ? { label: 'Add DappDrop bot to server', href: config.discordBotInviteUrl }
+                                : undefined
+                            }
+                            missingActionText="The Discord bot invite link isn't configured. Contact support."
+                          />
                         </div>
                       )}
 
@@ -1931,7 +1964,7 @@ export default function CreateCampaignPage() {
                             name={`tasks.${index}.verificationData`}
                             render={({ field }) => (
                               <FormItem className="flex-1">
-                                <FormLabel>Telegram Channel/Group ID</FormLabel>
+                                <FormLabel>Telegram channel or group ID</FormLabel>
                                 <FormControl>
                                   <Input
                                     placeholder="e.g., @yourchannel or -100123456789"
@@ -1975,7 +2008,7 @@ export default function CreateCampaignPage() {
                             name={`tasks.${index}.telegramInviteLink`}
                             render={({ field }) => (
                               <FormItem className="flex-1">
-                                <FormLabel>Telegram Invite Link</FormLabel>
+                                <FormLabel>Telegram invite link</FormLabel>
                                 <FormControl>
                                   <Input
                                     placeholder="e.g., https://t.me/yourchannel or https://t.me/+invitecode"
@@ -1992,102 +2025,66 @@ export default function CreateCampaignPage() {
                             )}
                           />
 
-                          {/* Telegram Bot Setup Instructions */}
-                          <div className="p-4 bg-secondary/40 border border-border rounded-lg space-y-3">
-                            <div className="flex items-center gap-2 text-foreground">
-                              <Bot className="h-5 w-5" />
-                              <h4 className="font-semibold">
-                                Required: Add DappDrop Bot to Your Channel/Group
-                              </h4>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              To enable automatic verification of Telegram join
-                              tasks, you must add our bot to your Telegram
-                              channel/group.
-                            </p>
-                            <div className="flex flex-col gap-2">
-                              {config.telegramBotUsername ? (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-fit bg-background border-border text-foreground hover:bg-secondary"
-                                  onClick={() =>
-                                    window.open(
-                                      `https://t.me/${config.telegramBotUsername}`,
-                                      '_blank',
-                                    )
+                          <SetupChecklist
+                            icon={Bot}
+                            title="Required: add the DappDrop bot to your channel or group"
+                            steps={[
+                              <>
+                                Add{' '}
+                                <span className="font-medium text-foreground">
+                                  @{config.telegramBotUsername || 'the DappDrop bot'}
+                                </span>{' '}
+                                to your channel or group.
+                              </>,
+                              'For a channel, make it an admin. In a group it can be a regular member.',
+                              'Make sure it can read messages and, for groups, see the member list.',
+                            ]}
+                            action={
+                              config.telegramBotUsername
+                                ? {
+                                    label: `Open @${config.telegramBotUsername}`,
+                                    href: `https://t.me/${config.telegramBotUsername}`,
                                   }
-                                >
-                                  <ExternalLink className="h-4 w-4 mr-2" />
-                                  Add @{config.telegramBotUsername} to
-                                  Channel/Group
-                                </Button>
-                              ) : (
-                                <p className="text-sm text-muted-foreground font-medium">
-                                  Telegram bot username not configured. Please
-                                  contact support.
-                                </p>
-                              )}
-                              <div className="text-xs text-muted-foreground space-y-1">
-                                <p>
-                                  <strong>Required Permissions:</strong>
-                                </p>
-                                <ul className="list-disc list-inside ml-2 space-y-0.5">
-                                  <li>Read Messages</li>
-                                  <li>See Members List (for groups)</li>
-                                </ul>
-                                <p className="mt-2">
-                                  <strong>Note:</strong> For channels, make sure
-                                  the bot is added as an admin. For groups, it
-                                  can be a regular member.
-                                </p>
-                              </div>
-                            </div>
-                          </div>
+                                : undefined
+                            }
+                            missingActionText="The Telegram bot username isn't configured. Contact support."
+                          />
                         </div>
                       )}
 
                       {tasks[index].type === 'ONCHAIN_TX' && (
                         <div className="space-y-4">
-                          {/* Beta Notice */}
-                          <div className="flex items-center gap-2 p-3 bg-secondary/40 border border-border rounded-lg">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-foreground text-background">
-                              BETA
-                            </span>
+                          <div className="flex items-start gap-3 rounded-lg border bg-muted/30 px-3 py-2.5">
+                            <Badge variant="secondary" className="mt-px shrink-0">
+                              Beta
+                            </Badge>
                             <p className="text-sm text-muted-foreground">
-                              On-chain actions (x402 Payment Protocol) are
-                              currently in beta. Features may change.
+                              On-chain actions (x402 Payment Protocol) are in beta and may change.
                             </p>
                           </div>
                           <FormField
                             control={form.control}
                             name={`tasks.${index}.paymentRequired`}
                             render={({ field }) => (
-                              <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
-                                <FormControl>
-                                  <Checkbox
-                                    checked={field.value}
-                                    onCheckedChange={field.onChange}
-                                  />
-                                </FormControl>
-                                <div className="space-y-1 leading-none">
-                                  <FormLabel>Payment Required</FormLabel>
-                                  <FormDescription>
-                                    Check this box if this task requires a
-                                    crypto payment to complete
-                                  </FormDescription>
-                                </div>
+                              <FormItem>
+                                <ToggleCard
+                                  icon={Coins}
+                                  title="Require a payment"
+                                  description="Participants complete this task by sending a crypto payment, then submitting the transaction hash."
+                                  checked={!!field.value}
+                                  onCheckedChange={field.onChange}
+                                />
                               </FormItem>
                             )}
                           />
 
                           {tasks[index].paymentRequired && (
                             <TooltipProvider>
-                              <div className="space-y-3 p-5 bg-secondary/40 border border-border rounded-xl shadow-sm">
-                                <div className="flex items-center justify-between mb-1">
-                                  <h4 className="font-semibold text-foreground flex items-center gap-2">
-                                    💰 Payment Configuration
+                              <div className="space-y-4 rounded-lg border p-4">
+                                <div className="flex items-center justify-between">
+                                  <h4 className="flex items-center gap-2 text-sm font-medium">
+                                    <Coins className="h-4 w-4 text-muted-foreground" />
+                                    Payment details
                                   </h4>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
@@ -2114,8 +2111,8 @@ export default function CreateCampaignPage() {
                                   name={`tasks.${index}.paymentRecipient`}
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-sm font-medium text-foreground">
-                                        Recipient Wallet
+                                      <FormLabel>
+                                        Recipient wallet
                                       </FormLabel>
                                       <FormControl>
                                         <Input
@@ -2130,13 +2127,13 @@ export default function CreateCampaignPage() {
                                   )}
                                 />
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid gap-4 sm:grid-cols-2">
                                   <FormField
                                     control={form.control}
                                     name={`tasks.${index}.network`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-foreground">
+                                        <FormLabel>
                                           Network
                                         </FormLabel>
                                         <Select
@@ -2167,16 +2164,16 @@ export default function CreateCampaignPage() {
                                           </FormControl>
                                           <SelectContent>
                                             <SelectItem value="ethereum">
-                                              🔷 Ethereum
+                                              Ethereum
                                             </SelectItem>
                                             <SelectItem value="base">
-                                              🔵 Base
+                                              Base
                                             </SelectItem>
                                             <SelectItem value="polygon">
-                                              🟣 Polygon
+                                              Polygon
                                             </SelectItem>
                                             <SelectItem value="sepolia">
-                                              🧪 Sepolia
+                                              Sepolia (testnet)
                                             </SelectItem>
                                           </SelectContent>
                                         </Select>
@@ -2190,7 +2187,7 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.tokenSymbol`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-foreground">
+                                        <FormLabel>
                                           Token
                                         </FormLabel>
                                         <FormControl>
@@ -2212,8 +2209,8 @@ export default function CreateCampaignPage() {
                                   name={`tasks.${index}.tokenAddress`}
                                   render={({ field }) => (
                                     <FormItem>
-                                      <FormLabel className="text-sm font-medium text-foreground flex items-center gap-2">
-                                        Token Contract
+                                      <FormLabel className="flex items-center gap-2">
+                                        Token contract
                                         <Tooltip>
                                           <TooltipTrigger asChild>
                                             <span className="text-xs text-muted-foreground cursor-help">
@@ -2242,22 +2239,22 @@ export default function CreateCampaignPage() {
                                   )}
                                 />
 
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid gap-4 sm:grid-cols-2">
                                   <FormField
                                     control={form.control}
                                     name={`tasks.${index}.amount`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-foreground flex items-center gap-1">
-                                          Amount (ETH)
+                                        <FormLabel className="flex items-center gap-1">
+                                          Amount
                                           <Tooltip>
                                             <TooltipTrigger asChild>
                                               <Info className="h-3 w-3 text-muted-foreground cursor-help" />
                                             </TooltipTrigger>
                                             <TooltipContent>
                                               <p className="text-sm">
-                                                Enter amount in ETH (e.g., 0.001
-                                                ETH)
+                                                In whole units of the token above, e.g.
+                                                0.001
                                               </p>
                                             </TooltipContent>
                                           </Tooltip>
@@ -2297,8 +2294,8 @@ export default function CreateCampaignPage() {
                                     name={`tasks.${index}.amountDisplay`}
                                     render={({ field }) => (
                                       <FormItem>
-                                        <FormLabel className="text-sm font-medium text-foreground flex items-center gap-1">
-                                          Display Format
+                                        <FormLabel className="flex items-center gap-1">
+                                          Shown to participants as
                                           <Tooltip>
                                             <TooltipTrigger asChild>
                                               <Info className="h-3 w-3 text-muted-foreground cursor-help" />
@@ -2324,13 +2321,10 @@ export default function CreateCampaignPage() {
                                   />
                                 </div>
 
-                                <div className="flex items-center gap-2 pt-1 text-xs text-muted-foreground bg-secondary px-3 py-2 rounded-md border border-border">
-                                  <ShieldCheck className="h-3.5 w-3.5 flex-shrink-0" />
-                                  <span>
-                                    Payments verified automatically via
-                                    blockchain scan
-                                  </span>
-                                </div>
+                                <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                                  Payments are verified automatically by scanning the chain.
+                                </p>
                               </div>
                             </TooltipProvider>
                           )}
@@ -2339,11 +2333,11 @@ export default function CreateCampaignPage() {
 
                       {tasks[index].type === 'HUMANITY_VERIFICATION' && (
                         <div className="space-y-4">
-                          <div className="p-4 bg-secondary/50 border border-border rounded-lg space-y-3">
-                            <div className="flex items-center gap-2 text-foreground">
-                              <ShieldCheck className="h-5 w-5" />
-                              <h4 className="font-semibold">
-                                Verification Presets
+                          <div className="space-y-3 rounded-lg border p-4">
+                            <div className="flex items-center gap-2">
+                              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                              <h4 className="text-sm font-medium">
+                                Verification checks
                               </h4>
                             </div>
                             <p className="text-sm text-muted-foreground">
@@ -2381,7 +2375,7 @@ export default function CreateCampaignPage() {
                                 return (
                                   <FormItem className="space-y-3">
                                     <FormLabel>
-                                      Required Checks ({selected.length}{' '}
+                                      Required checks ({selected.length}{' '}
                                       selected)
                                     </FormLabel>
                                     {categories.map((cat) => {
@@ -2404,10 +2398,12 @@ export default function CreateCampaignPage() {
                                               return (
                                                 <label
                                                   key={p.preset}
-                                                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${isChecked
-                                                    ? 'border-foreground/40 bg-secondary/50 ring-1 ring-foreground/20'
-                                                    : 'border-border hover:border-foreground/20 hover:bg-secondary/50'
-                                                    }`}
+                                                  className={cn(
+                                                    'flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors',
+                                                    isChecked
+                                                      ? 'border-primary bg-primary/5'
+                                                      : 'hover:border-foreground/20 hover:bg-muted/40',
+                                                  )}
                                                 >
                                                   <Checkbox
                                                     checked={isChecked}
@@ -2448,12 +2444,14 @@ export default function CreateCampaignPage() {
                           </div>
                         </div>
                       )}
+                      </div>
                     </div>
-                  ))}
+                    )
+                  })}
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
+                    className="h-11 w-full border-dashed text-muted-foreground hover:text-foreground"
                     onClick={() =>
                       append({
                         type: 'SOCIAL_FOLLOW',
@@ -2464,7 +2462,10 @@ export default function CreateCampaignPage() {
                       })
                     }
                   >
-                    <Plus className="mr-2 h-4 w-4" /> Add Task
+                    <Plus className="mr-2 h-4 w-4" /> Add task
+                    <span className="ml-1.5 text-muted-foreground">
+                      · {fields.length} so far
+                    </span>
                   </Button>
                 </section>
               )}
@@ -2472,22 +2473,52 @@ export default function CreateCampaignPage() {
               {step === 3 && (
                 <section className="space-y-6 animate-in fade-in-50">
                   <StepHeader title="Rewards" description={steps[2].description} />
-                  <Alert>
-                    <Info className="h-4 w-4" />
-                    <AlertTitle>On-chain rewards: ERC20 or NFT</AlertTitle>
-                    <AlertDescription>
-                      Whichever you pick is escrowed now and distributed after the campaign
-                      ends, to wallets that completed every task — an ERC20 pool split
-                      equally, or one NFT per qualifying wallet. Off-chain (text) rewards
-                      are still to come.
-                    </AlertDescription>
-                  </Alert>
+                  {rewardLocked ? (
+                    <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+                      <div className="flex items-start gap-3">
+                        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Funded on-chain</p>
+                          <p className="text-sm text-muted-foreground">
+                            The reward can&apos;t be changed now.
+                            {tiersEditable
+                              ? ' You can still fix the tiers below, then finish setup on the Review step.'
+                              : ' Finish setup on the Review step.'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2 border-t pt-3">
+                        <ReviewRow label={rewardType === 'ERC20' ? 'Pool' : 'Items'}>
+                          <span className="font-medium tabular-nums">
+                            {rewardType === 'ERC20'
+                              ? `${Number.isFinite(Number(rewardAmount)) ? Number(rewardAmount).toLocaleString(undefined, { maximumFractionDigits: 18 }) : rewardAmount} ${tokenSymbol}`
+                              : `${parseIdList(form.getValues('reward.tokenIds') || '').length} × ${nftStandard}`}
+                          </span>
+                        </ReviewRow>
+                        <ReviewRow label={rewardType === 'ERC20' ? 'Token' : 'Collection'}>
+                          <CopyableAddress address={fundedReward?.tokenAddress ?? rewardTokenAddress ?? ''} />
+                        </ReviewRow>
+                        {rewardType === 'ERC20' && (
+                          <ReviewRow label="Payout">
+                            {payoutLabel}
+                          </ReviewRow>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
                   <FormField
                     control={form.control}
                     name="reward.type"
                     render={({ field }) => (
                       <FormItem className="space-y-3">
-                        <FormLabel>Reward type</FormLabel>
+                        <div className="space-y-1">
+                          <FormLabel>Reward type</FormLabel>
+                          <FormDescription>
+                            Rewards are escrowed when the campaign is created and paid out after it
+                            ends.
+                          </FormDescription>
+                        </div>
                         <FormControl>
                           <OptionCards
                             ariaLabel="Reward type"
@@ -2591,7 +2622,23 @@ export default function CreateCampaignPage() {
                       )}
                     />
                   )}
-                  {rewardType === 'ERC20' && (
+                    </>
+                  )}
+                  {!rewardLocked && settlementLocked && rewardType === 'ERC20' && (
+                    <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
+                      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="space-y-1 text-sm">
+                        <p>
+                          <span className="font-medium">Payout: </span>
+                          {payoutLabel}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Set when the campaign was created on-chain, so it can&apos;t be changed now.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {rewardType === 'ERC20' && !settlementLocked && (
                     <FormField
                       control={form.control}
                       name="reward.settlementMode"
@@ -2632,7 +2679,7 @@ export default function CreateCampaignPage() {
                       )}
                     />
                   )}
-                  {rewardType === 'ERC20' && settlementMode === 'RANK_TIERED' && (
+                  {rewardType === 'ERC20' && settlementMode === 'RANK_TIERED' && !pendingTiersSet && (
                     <div className="space-y-3 rounded-lg border p-4">
                       <div className="flex items-center justify-between gap-2">
                         <div>
@@ -2653,14 +2700,27 @@ export default function CreateCampaignPage() {
                           <Plus className="mr-1 h-3.5 w-3.5" /> Add tier
                         </Button>
                       </div>
+                      {rankTierFields.length > 0 && (
+                        <div
+                          aria-hidden
+                          className="hidden grid-cols-[1fr_1fr_1.4fr_2.5rem] gap-2 text-xs font-medium text-muted-foreground sm:grid"
+                        >
+                          <span>From rank</span>
+                          <span>To rank</span>
+                          <span>{rewardToken ? `${rewardToken.symbol} each` : 'Amount each'}</span>
+                        </div>
+                      )}
                       {rankTierFields.map((f, i) => (
-                        <div key={f.id} className="grid grid-cols-[1fr_1fr_1.4fr_auto] items-end gap-2">
+                        <div
+                          key={f.id}
+                          className="grid grid-cols-2 items-end gap-2 border-b pb-3 last:border-b-0 last:pb-0 sm:grid-cols-[1fr_1fr_1.4fr_2.5rem] sm:border-b-0 sm:pb-0"
+                        >
                           <FormField
                             control={form.control}
                             name={`reward.rankTiers.${i}.startRank`}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-xs">From rank</FormLabel>
+                                <FormLabel className="text-xs sm:sr-only">From rank</FormLabel>
                                 <FormControl>
                                   <Input inputMode="numeric" className="font-mono" {...field} />
                                 </FormControl>
@@ -2672,7 +2732,7 @@ export default function CreateCampaignPage() {
                             name={`reward.rankTiers.${i}.endRank`}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-xs">To rank</FormLabel>
+                                <FormLabel className="text-xs sm:sr-only">To rank</FormLabel>
                                 <FormControl>
                                   <Input inputMode="numeric" className="font-mono" {...field} />
                                 </FormControl>
@@ -2684,7 +2744,7 @@ export default function CreateCampaignPage() {
                             name={`reward.rankTiers.${i}.amount`}
                             render={({ field }) => (
                               <FormItem>
-                                <FormLabel className="text-xs">
+                                <FormLabel className="text-xs sm:sr-only">
                                   {rewardToken ? `${rewardToken.symbol} each` : 'Amount each'}
                                 </FormLabel>
                                 <FormControl>
@@ -2698,6 +2758,7 @@ export default function CreateCampaignPage() {
                             variant="ghost"
                             size="icon"
                             aria-label={`Remove tier ${i + 1}`}
+                            className="justify-self-end text-muted-foreground hover:text-destructive"
                             onClick={() => removeRankTier(i)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -2718,7 +2779,7 @@ export default function CreateCampaignPage() {
                       />
                     </div>
                   )}
-                  {rewardType === 'ERC20' && settlementMode === 'SCORE_TIERED' && (
+                  {rewardType === 'ERC20' && settlementMode === 'SCORE_TIERED' && !pendingTiersSet && (
                     <div className="space-y-4">
                       <div className="space-y-3 rounded-lg border p-4">
                         <div className="flex items-center justify-between gap-2">
@@ -2748,14 +2809,23 @@ export default function CreateCampaignPage() {
                             <Plus className="mr-1 h-3.5 w-3.5" /> Add tier
                           </Button>
                         </div>
+                        {scoreTierFields.length > 0 && (
+                          <div
+                            aria-hidden
+                            className="hidden grid-cols-[1fr_1.4fr_2.5rem] gap-2 text-xs font-medium text-muted-foreground sm:grid"
+                          >
+                            <span>Minimum score</span>
+                            <span>{rewardToken ? `${rewardToken.symbol} per wallet` : 'Amount per wallet'}</span>
+                          </div>
+                        )}
                         {scoreTierFields.map((f, i) => (
-                          <div key={f.id} className="grid grid-cols-[1fr_1.4fr_auto] items-end gap-2">
+                          <div key={f.id} className="grid grid-cols-[1fr_1fr_2.5rem] items-end gap-2 sm:grid-cols-[1fr_1.4fr_2.5rem]">
                             <FormField
                               control={form.control}
                               name={`reward.scoreTiers.${i}.minScore`}
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-xs">Minimum score</FormLabel>
+                                  <FormLabel className="text-xs sm:sr-only">Minimum score</FormLabel>
                                   <FormControl>
                                     <Input inputMode="numeric" className="font-mono" {...field} />
                                   </FormControl>
@@ -2767,7 +2837,7 @@ export default function CreateCampaignPage() {
                               name={`reward.scoreTiers.${i}.amount`}
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-xs">
+                                  <FormLabel className="text-xs sm:sr-only">
                                     {rewardToken ? `${rewardToken.symbol} per wallet` : 'Amount per wallet'}
                                   </FormLabel>
                                   <FormControl>
@@ -2781,6 +2851,7 @@ export default function CreateCampaignPage() {
                               variant="ghost"
                               size="icon"
                               aria-label={`Remove tier ${i + 1}`}
+                              className="text-muted-foreground hover:text-destructive"
                               onClick={() => removeScoreTier(i)}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -2846,7 +2917,7 @@ export default function CreateCampaignPage() {
                         </AlertDescription>
                       </Alert>
                     )}
-                  {rewardType === 'ERC721' && (
+                  {rewardType === 'ERC721' && !rewardLocked && (
                     <FormField
                       control={form.control}
                       name="reward.tokenIds"
@@ -2869,7 +2940,7 @@ export default function CreateCampaignPage() {
                       name="reward.name"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Reward Description</FormLabel>
+                          <FormLabel>Reward description</FormLabel>
                           <FormControl>
                             <Input
                               placeholder="e.g., A special role in our Discord"
@@ -2909,128 +2980,200 @@ export default function CreateCampaignPage() {
               {step === 4 && wizardPhase === 'form' && (
                 <section className="space-y-6 animate-in fade-in-50">
                   <StepHeader title="Review &amp; create" description={steps[3].description} />
-                  <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-6">
-                    <h3 className="font-semibold text-lg">
-                      {form.getValues('title')}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      {form.getValues('shortDescription')}
-                    </p>
-                    {rewardType === 'ERC20' ? (
-                      <div className="text-sm">
-                        <strong>Reward pool:</strong>{' '}
-                        {form.getValues('reward.amount')} {tokenSymbol} from{' '}
-                        <code className="text-xs bg-muted p-1 rounded">
-                          {form.getValues('reward.tokenAddress')}
-                        </code>
-                      </div>
-                    ) : (
-                      <div className="text-sm">
-                        <strong>Reward:</strong>{' '}
-                        {parseIdList(form.getValues('reward.tokenIds') || '').length}{' '}
-                        {form.getValues('reward.nftStandard')} item(s) from{' '}
-                        <code className="text-xs bg-muted p-1 rounded">
-                          {form.getValues('reward.tokenAddress')}
-                        </code>
-                      </div>
-                    )}
-                    {rewardType === 'ERC20' && (
-                      <div className="text-sm">
-                        <strong>Settlement:</strong>{' '}
-                        {settlementMode === 'RANK_TIERED'
-                          ? `Rank-tiered — on-chain, no dispute window (${(rankTiersWatched || []).length} tier(s) configured)`
+                  {(() => {
+                    const v = form.getValues()
+                    const coverUrl =
+                      v.imageUrl && v.imageUrl !== PLACEHOLDER_IMAGE_URL ? v.imageUrl : null
+                    // reward is a union by type; path reads keep each field typed regardless.
+                    const rewardAmount = form.getValues('reward.amount')
+                    const rewardTokenAddress = form.getValues('reward.tokenAddress') || ''
+                    const nftStd = form.getValues('reward.nftStandard') ?? 'ERC721'
+                    const nftCount = parseIdList(form.getValues('reward.tokenIds') || '').length
+                    const summary = scheduleSummary(schedule, new Date())
+                    // Once the campaign exists on-chain its details and tasks are fixed, so only
+                    // the reward (configured in later transactions) can still be edited.
+                    const editable = !campaignCreated
+                    const payout =
+                      rewardType === 'ERC721'
+                        ? 'One item per qualifying wallet'
+                        : settlementMode === 'RANK_TIERED'
+                          ? `By finishing order · ${(rankTiersWatched || []).length} tier(s)`
                           : settlementMode === 'SCORE_TIERED'
-                            ? `Score-tiered — on-chain, no dispute window (${(scoreTiersWatched || []).length} tier(s) configured)`
-                            : 'Merkle allocation — equal split among wallets that complete every task'}
-                        {humanityGatedWatched
-                          ? settlementMode === 'MERKLE'
-                            ? ' — Humanity-verified wallets only'
-                            : ' — a required Humanity Verification task was added'
-                          : ''}
-                        .
-                      </div>
-                    )}
-                    {rewardType === 'ERC721' && (
-                      <div className="text-sm">
-                        <strong>Settlement:</strong> Merkle allocation — one item per qualifying
-                        wallet{humanityGatedWatched ? ' — Humanity-verified wallets only' : ''}.
-                      </div>
-                    )}
-                    <div className="text-sm">
-                      <strong>Schedule:</strong> {scheduleSummary(schedule, new Date()).primary}
-                      <p className="text-muted-foreground">
-                        {scheduleSummary(schedule, new Date()).utc}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Start and end times can&apos;t be changed after the campaign is created.
-                      </p>
-                    </div>
-                    {form.getValues('maxParticipants') && (
-                      <div className="text-sm">
-                        <strong>Participant cap:</strong>{' '}
-                        {form.getValues('maxParticipants')}
-                      </div>
-                    )}
-                    <div className="text-sm">
-                      <strong>Tasks:</strong>
-                      <ul className="list-disc pl-5 mt-1 space-y-1">
-                        {form.getValues('tasks').map((task, i) => (
-                          <li key={i}>
-                            [
-                            {
-                              TASK_TYPE_OPTIONS.find(
-                                (t) => t.value === task.type,
-                              )?.label
-                            }
-                            ] {task.description}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+                            ? `By points · ${(scoreTiersWatched || []).length} tier(s)`
+                            : 'Equal split among wallets that complete every task'
+                    const humanityNote = humanityGatedWatched
+                      ? rewardType === 'ERC20' && settlementMode !== 'MERKLE'
+                        ? 'A required Humanity verification task is added'
+                        : 'Humanity-verified wallets only'
+                      : null
+                    // `done` mirrors the resume flags onSubmit skips on a retry.
+                    const txSteps = [
+                      { label: 'Create the campaign and add its tasks', done: campaignCreated },
+                      {
+                        label:
+                          rewardType === 'ERC20'
+                            ? `Set the reward token, approve ${tokenSymbol} if needed, and fund the pool`
+                            : `Deposit ${nftCount} ${nftStd} item(s), approving the collection first if needed`,
+                        done: rewardLocked,
+                      },
+                      rewardType === 'ERC20' && settlementMode === 'RANK_TIERED'
+                        ? { label: 'Set the rank tiers', done: pendingTiersSet }
+                        : null,
+                      rewardType === 'ERC20' && settlementMode === 'SCORE_TIERED'
+                        ? { label: 'Set the score tiers and task points', done: pendingTiersSet }
+                        : null,
+                      v.maxParticipants ? { label: 'Set the participant cap', done: pendingCapSet } : null,
+                      { label: 'Sign a message to save the image and descriptions (no gas)', done: false },
+                    ].filter((x): x is { label: string; done: boolean } => !!x)
 
-                  {/* FR-H5: itemize the funding transaction before the host signs it. */}
-                  {rewardType === 'ERC20' ? (
-                    <div className="rounded-lg border p-4 space-y-2">
-                      <h3 className="font-medium">Funding breakdown</h3>
-                      <div className="flex justify-between gap-4 text-sm">
-                        <span className="text-muted-foreground">Taken from your wallet</span>
-                        <span className="font-mono">{funding.gross}</span>
-                      </div>
-                      <div className="flex justify-between gap-4 text-sm">
-                        <span className="text-muted-foreground">Protocol fee</span>
-                        <span className="font-mono">{funding.fee}</span>
-                      </div>
-                      <div className="flex justify-between gap-4 border-t pt-2 text-sm font-medium">
-                        <span>Escrowed for rewards</span>
-                        <span className="font-mono">{funding.net}</span>
-                      </div>
-                      {funding.note && <p className="text-xs text-muted-foreground">{funding.note}</p>}
-                    </div>
-                  ) : (
-                    <div className="rounded-lg border p-4 space-y-2">
-                      <h3 className="font-medium">NFTs to deposit</h3>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">{form.getValues('reward.nftStandard')} items</span>
-                        <span>{parseIdList(form.getValues('reward.tokenIds') || '').length}</span>
-                      </div>
-                    </div>
-                  )}
+                    return (
+                      <>
+                        <div className="divide-y overflow-hidden rounded-lg border bg-card">
+                          <ReviewSection title="Campaign" onEdit={editable ? () => setStep(1) : undefined}>
+                            <div className="flex gap-4">
+                              <div className="aspect-video w-28 shrink-0 overflow-hidden rounded-md border bg-muted sm:w-36">
+                                {coverUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={coverUrl} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                                    No image
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0 space-y-1">
+                                <p className="font-semibold leading-snug">{v.title}</p>
+                                <p className="text-sm text-muted-foreground">{v.shortDescription}</p>
+                                {v.humanityGated && (
+                                  <Badge variant="secondary" className="mt-1 gap-1">
+                                    <ShieldCheck className="h-3 w-3" /> Verified humans only
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </ReviewSection>
 
-                  <Alert>
-                    <Info className="h-4 w-4" />
-                    <AlertTitle>What happens when you click Create</AlertTitle>
-                    <AlertDescription>
-                      This runs several wallet transactions in sequence: create
-                      the campaign, add its tasks, configure the reward token,
-                      approve and fund the pool
-                      {form.getValues('maxParticipants')
-                        ? ', and set the participant cap'
-                        : ''}
-                      . The campaign is created in Draft — you open it live in
-                      a separate, final step.
-                    </AlertDescription>
-                  </Alert>
+                          <ReviewSection title="Schedule" onEdit={editable ? () => setStep(1) : undefined}>
+                            <div className="space-y-1 text-sm">
+                              <p>{summary.primary}</p>
+                              <p className="text-muted-foreground">{summary.utc}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Start and end times can&apos;t be changed after the campaign is created.
+                              </p>
+                            </div>
+                          </ReviewSection>
+
+                          <ReviewSection title="Reward" onEdit={minStep <= 3 ? () => setStep(3) : undefined}>
+                            <div className="space-y-2">
+                              <ReviewRow label={rewardType === 'ERC20' ? 'Pool' : 'Items'}>
+                                <span className="font-medium tabular-nums">
+                                  {rewardType === 'ERC20'
+                                    ? `${Number.isFinite(Number(rewardAmount)) ? Number(rewardAmount).toLocaleString(undefined, { maximumFractionDigits: 18 }) : rewardAmount} ${tokenSymbol}`
+                                    : `${nftCount} × ${nftStd}`}
+                                </span>
+                              </ReviewRow>
+                              <ReviewRow label={rewardType === 'ERC20' ? 'Token' : 'Collection'}>
+                                <CopyableAddress address={rewardTokenAddress} />
+                              </ReviewRow>
+                              <ReviewRow label="Payout">{payout}</ReviewRow>
+                              {humanityNote && <ReviewRow label="Eligibility">{humanityNote}</ReviewRow>}
+                              {v.maxParticipants && (
+                                <ReviewRow label="Participant cap">
+                                  <span className="tabular-nums">
+                                    {Number(v.maxParticipants).toLocaleString()} wallets
+                                  </span>
+                                </ReviewRow>
+                              )}
+                            </div>
+                          </ReviewSection>
+
+                          <ReviewSection
+                            title={`Tasks (${v.tasks.length})`}
+                            onEdit={editable ? () => setStep(2) : undefined}
+                          >
+                            <ol className="space-y-2">
+                              {v.tasks.map((task, i) => {
+                                const opt = TASK_TYPE_OPTIONS.find((t) => t.value === task.type)
+                                const Icon = opt?.icon ?? ListChecks
+                                return (
+                                  <li key={i} className="flex items-start gap-3 text-sm">
+                                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums">
+                                      {i + 1}
+                                    </span>
+                                    <span className="min-w-0 flex-1">{task.description}</span>
+                                    <Badge variant="outline" className="shrink-0 gap-1 font-normal">
+                                      <Icon className="h-3 w-3" />
+                                      {opt?.label}
+                                    </Badge>
+                                  </li>
+                                )
+                              })}
+                            </ol>
+                          </ReviewSection>
+                        </div>
+
+                        {/* FR-H5: itemize the funding transaction before the host signs it. */}
+                        {rewardType === 'ERC20' ? (
+                          <div className="space-y-2 rounded-lg border p-4">
+                            <h3 className="text-sm font-medium">Funding breakdown</h3>
+                            <div className="flex justify-between gap-4 text-sm">
+                              <span className="text-muted-foreground">Taken from your wallet</span>
+                              <span className="text-right tabular-nums">{funding.gross}</span>
+                            </div>
+                            <div className="flex justify-between gap-4 text-sm">
+                              <span className="text-muted-foreground">Protocol fee</span>
+                              <span className="text-right tabular-nums">{funding.fee}</span>
+                            </div>
+                            <div className="flex justify-between gap-4 border-t pt-2 text-sm font-semibold">
+                              <span>Escrowed for rewards</span>
+                              <span className="text-right tabular-nums">{funding.net}</span>
+                            </div>
+                            {funding.note && (
+                              <p className="text-xs text-muted-foreground">{funding.note}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2 rounded-lg border p-4">
+                            <h3 className="text-sm font-medium">NFTs to deposit</h3>
+                            <div className="flex justify-between gap-4 text-sm font-semibold">
+                              <span>{nftStd} items</span>
+                              <span className="tabular-nums">{nftCount}</span>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+                          <div className="flex items-center gap-2">
+                            <Info className="h-4 w-4 text-muted-foreground" />
+                            <h3 className="text-sm font-medium">What happens when you click Create</h3>
+                          </div>
+                          <ol className="space-y-2">
+                            {txSteps.map((t, i) => (
+                              <li key={i} className="flex gap-3 text-sm">
+                                <span
+                                  className={cn(
+                                    'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs font-medium tabular-nums',
+                                    t.done ? 'border-primary bg-primary text-primary-foreground' : 'bg-background',
+                                  )}
+                                >
+                                  {t.done ? <Check className="h-3 w-3" /> : i + 1}
+                                </span>
+                                <span className={cn(t.done && 'text-muted-foreground')}>
+                                  {t.label}
+                                  {t.done && <span className="ml-1.5 text-xs">· Done</span>}
+                                </span>
+                              </li>
+                            ))}
+                          </ol>
+                          <p className="text-xs text-muted-foreground">
+                            Your wallet asks you to confirm each step. If one fails, click Create
+                            again and the finished steps are skipped. The campaign is created as a
+                            Draft; you open it to participants in a separate, final step.
+                          </p>
+                        </div>
+                      </>
+                    )
+                  })()}
                 </section>
               )}
 
@@ -3060,8 +3203,8 @@ export default function CreateCampaignPage() {
                     type="button"
                     variant="ghost"
                     onClick={prevStep}
-                    disabled={step === 1}
-                    className={cn(step === 1 && 'invisible')}
+                    disabled={step <= minStep}
+                    className={cn(step <= minStep && 'invisible')}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
@@ -3081,7 +3224,7 @@ export default function CreateCampaignPage() {
                       {isLoading && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      {creationProgress || 'Create Campaign'}
+                      {creationProgress || (campaignCreated ? 'Finish setup' : 'Create Campaign')}
                     </Button>
                   )}
                 </div>
