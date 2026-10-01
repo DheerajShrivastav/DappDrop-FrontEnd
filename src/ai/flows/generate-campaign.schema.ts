@@ -147,8 +147,12 @@ export const ValidationResultSchema = z.object({
         .optional()
         .describe('Fixed tasks array, if tasks had issues.'),
     })
+    // Optional: an approved campaign has nothing to fix, and requiring the object meant a
+    // perfectly good "approved" response that left it out failed schema parsing — which the
+    // pipeline then treated as a validator failure (and used to re-run the validator for).
+    .optional()
     .describe(
-      'Direct fixes for issues. Only populated for fields that need correction.',
+      'Direct fixes for issues. Only populated for fields that need correction. Omit when nothing needs fixing.',
     ),
 })
 

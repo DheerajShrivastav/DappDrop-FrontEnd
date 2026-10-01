@@ -123,15 +123,16 @@ import {
 } from '@/lib/web3-service'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
-import {
-  parseCampaignGenerationError,
-  type GenerationStage,
-} from '@/ai/flows/generate-campaign.errors'
+import { parseCampaignGenerationError } from '@/ai/flows/generate-campaign.errors'
 import { AlertCircle, AlertTriangle, Wifi, Clock, RefreshCw } from 'lucide-react'
 import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
 const ETH_ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/
+
+/** Stop waiting for "Generate with AI" after this long. Above the server's worst case (~70s
+ * pipeline budget, src/ai/config.ts) so it only fires for a stuck or dropped request. */
+const CLIENT_GENERATION_GIVE_UP_MS = 90_000
 
 /** Comma- or newline-separated list of numeric IDs -> trimmed, non-empty strings. */
 function parseIdList(raw: string): string[] {
@@ -392,8 +393,13 @@ export default function CreateCampaignPage() {
   const [step, setStep] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generationStage, setGenerationStage] =
-    useState<GenerationStage | null>(null)
+  // Real elapsed time instead of fake stage timers: the client can't see which stage the
+  // server is in, and a "Reviewing quality…" that never moves read as a hang.
+  const [generationStartedAt, setGenerationStartedAt] = useState<number | null>(null)
+  const [generationNow, setGenerationNow] = useState(() => Date.now())
+  // Bumped on every start, cancel, skip and give-up. A response only applies if its id is still
+  // current — so a late result can never overwrite a form the host has moved on from.
+  const generationIdRef = useRef(0)
   const [generationError, setGenerationError] = useState<{
     message: string
     retryable: boolean
@@ -1141,19 +1147,30 @@ export default function CreateCampaignPage() {
       })
       return
     }
+    const myId = ++generationIdRef.current
+    const isCurrent = () => generationIdRef.current === myId
     setIsGenerating(true)
     setGenerationError(null)
-    setGenerationStage('planning')
-    // Hoist timer IDs so the finally block can always clear them
-    let stageTimer1: ReturnType<typeof setTimeout> | undefined
-    let stageTimer2: ReturnType<typeof setTimeout> | undefined
-    try {
-      // The server action handles all stages internally.
-      // We simulate stage transitions based on typical timing.
-      stageTimer1 = setTimeout(() => setGenerationStage('generating'), 8000)
-      stageTimer2 = setTimeout(() => setGenerationStage('validating'), 25000)
+    setGenerationStartedAt(Date.now())
+    setGenerationNow(Date.now())
 
+    // Client-side give-up. The server budget (AI_PIPELINE_BUDGET_MS, ~70s worst case) should
+    // always answer first; this only fires if the request itself is stuck or was dropped.
+    const giveUp = setTimeout(() => {
+      if (!isCurrent()) return
+      generationIdRef.current++ // ignore whatever arrives later
+      setIsGenerating(false)
+      setGenerationStartedAt(null)
+      setGenerationError({
+        message: 'This is taking longer than usual. Try again, or create the campaign manually.',
+        retryable: true,
+        category: 'timeout',
+      })
+    }, CLIENT_GENERATION_GIVE_UP_MS)
+
+    try {
       const result = await generateCampaign(aiPrompt)
+      if (!isCurrent()) return // cancelled, skipped or given up — don't touch the form
 
       const currentValues = form.getValues()
       form.reset({
@@ -1170,6 +1187,7 @@ export default function CreateCampaignPage() {
       })
       setStep(1)
     } catch (e: any) {
+      if (!isCurrent()) return
       console.error('Error generating campaign:', e)
 
       let errorTitle = 'Generation Failed'
@@ -1186,6 +1204,9 @@ export default function CreateCampaignPage() {
         switch (parsed.category) {
           case 'rate_limit':
             errorTitle = '⏳ AI Service Busy'
+            break
+          case 'timeout':
+            errorTitle = '⏳ Took Too Long'
             break
           case 'config':
             errorTitle = '🔑 Configuration Error'
@@ -1218,12 +1239,28 @@ export default function CreateCampaignPage() {
         duration: 8000,
       })
     } finally {
-      clearTimeout(stageTimer1)
-      clearTimeout(stageTimer2)
-      setIsGenerating(false)
-      setGenerationStage(null)
+      clearTimeout(giveUp)
+      if (isCurrent()) {
+        setIsGenerating(false)
+        setGenerationStartedAt(null)
+      }
     }
   }
+
+  /** Stop waiting. The server call can't be aborted mid-flight, but its result is ignored. */
+  const cancelGeneration = () => {
+    generationIdRef.current++
+    setIsGenerating(false)
+    setGenerationStartedAt(null)
+  }
+
+  useEffect(() => {
+    if (!isGenerating) return
+    const t = setInterval(() => setGenerationNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [isGenerating])
+  const generationSeconds =
+    generationStartedAt === null ? 0 : Math.max(0, Math.floor((generationNow - generationStartedAt) / 1000))
 
   const steps = [
     {
@@ -1394,79 +1431,31 @@ export default function CreateCampaignPage() {
                       </p>
                     </div>
 
-                    {/* Generation stage progress */}
-                    {isGenerating && generationStage && (
-                      <div className="mt-4 p-4 rounded-lg bg-card border animate-in fade-in-50">
+                    {/* Honest progress: elapsed time, not a guessed stage. */}
+                    {isGenerating && (
+                      <div
+                        className="mt-4 rounded-lg border bg-card p-4 animate-in fade-in-50"
+                        role="status"
+                        aria-live="polite"
+                      >
                         <div className="flex items-center gap-3">
-                          <div className="relative">
-                            <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                          </div>
-                          <div className="flex-1">
+                          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />
+                          <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium">
-                              {generationStage === 'planning' &&
-                                '🧠 Analyzing your project...'}
-                              {generationStage === 'generating' &&
-                                '✍️ Writing campaign content...'}
-                              {generationStage === 'validating' &&
-                                '🔍 Reviewing quality...'}
+                              Drafting your campaign…{' '}
+                              <span className="tabular-nums text-muted-foreground">
+                                {generationSeconds}s
+                              </span>
                             </p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {generationStage === 'planning' &&
-                                'Deciding campaign strategy, target audience, and task types'}
-                              {generationStage === 'generating' &&
-                                'Crafting title, description, and tasks based on the plan'}
-                              {generationStage === 'validating' &&
-                                'Checking for quality, accuracy, and consistency'}
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {generationSeconds < 45
+                                ? 'Planning, writing and checking it — usually 10–40 seconds.'
+                                : 'Still working — the AI service is slower than usual right now.'}
                             </p>
                           </div>
-                        </div>
-                        {/* Stage dots */}
-                        <div className="flex items-center gap-2 mt-3">
-                          {(
-                            ['planning', 'generating', 'validating'] as const
-                          ).map((stage, idx) => (
-                            <React.Fragment key={stage}>
-                              <div
-                                className={cn(
-                                  'h-2 w-2 rounded-full transition-colors duration-300',
-                                  generationStage === stage
-                                    ? 'bg-primary animate-pulse'
-                                    : [
-                                      'planning',
-                                      'generating',
-                                      'validating',
-                                    ].indexOf(generationStage!) > idx
-                                      ? 'bg-primary'
-                                      : 'bg-muted',
-                                )}
-                              />
-                              {idx < 2 && (
-                                <div
-                                  className={cn(
-                                    'h-0.5 flex-1 rounded transition-colors duration-300',
-                                    [
-                                      'planning',
-                                      'generating',
-                                      'validating',
-                                    ].indexOf(generationStage!) > idx
-                                      ? 'bg-primary'
-                                      : 'bg-muted',
-                                  )}
-                                />
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </div>
-                        <div className="flex justify-between mt-1">
-                          <span className="text-[10px] text-muted-foreground">
-                            Plan
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            Generate
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            Validate
-                          </span>
+                          <Button type="button" variant="ghost" size="sm" onClick={cancelGeneration}>
+                            Cancel
+                          </Button>
                         </div>
                       </div>
                     )}
@@ -1476,13 +1465,13 @@ export default function CreateCampaignPage() {
                       <div className="mt-4 p-4 rounded-lg border border-destructive/50 bg-destructive/5 animate-in fade-in-50">
                         <div className="flex items-start gap-3">
                           <div className="mt-0.5">
-                            {generationError.category === 'rate_limit' && (
+                            {['rate_limit', 'timeout'].includes(generationError.category) && (
                               <Clock className="h-5 w-5 text-muted-foreground" />
                             )}
                             {generationError.category === 'network' && (
                               <Wifi className="h-5 w-5 text-destructive" />
                             )}
-                            {!['rate_limit', 'network'].includes(
+                            {!['rate_limit', 'timeout', 'network'].includes(
                               generationError.category,
                             ) && (
                                 <AlertCircle className="h-5 w-5 text-destructive" />
@@ -1513,8 +1502,13 @@ export default function CreateCampaignPage() {
                       <Button
                         type="button"
                         variant="ghost"
-                        onClick={() => setStep(1)}
-                        disabled={isGenerating}
+                        // Always available: a slow AI response must never trap the host here.
+                        // Skipping mid-generation stops waiting so the late result can't
+                        // overwrite what they type.
+                        onClick={() => {
+                          if (isGenerating) cancelGeneration()
+                          setStep(1)
+                        }}
                       >
                         Skip &amp; Create Manually
                       </Button>
