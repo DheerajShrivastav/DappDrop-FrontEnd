@@ -127,6 +127,7 @@ import { parseCampaignGenerationError } from '@/ai/flows/generate-campaign.error
 import { AlertCircle, AlertTriangle, Wifi, Clock, RefreshCw } from 'lucide-react'
 import {
   Coins,
+  Lock,
   ListChecks,
   MessageCircle,
   Repeat2,
@@ -447,6 +448,12 @@ export default function CreateCampaignPage() {
   const [pendingTiersSet, setPendingTiersSet] = useState(false)
   const [pendingDeposited, setPendingDeposited] = useState(false)
   const [pendingCapSet, setPendingCapSet] = useState(false)
+  // What was actually escrowed, captured when funding/deposit succeeds. A retry must configure
+  // tiers against THIS token and its decimals, never against whatever the form holds by then.
+  const [fundedReward, setFundedReward] = useState<{
+    tokenAddress: string
+    decimals?: number
+  } | null>(null)
   const [feeEnabled, setFeeEnabled] = useState(false)
   const [isOpening, setIsOpening] = useState(false)
   const router = useRouter()
@@ -579,6 +586,18 @@ export default function CreateCampaignPage() {
       ? tokenCheck.result
       : null
   const tokenSymbol = rewardToken?.symbol ?? 'tokens'
+  // Reward locks after a partial create (see fundedReward). The payout method locks as soon as
+  // the campaign exists: the required Humanity task is injected at creation based on it.
+  const rewardLocked = pendingFunded || pendingDeposited
+  const settlementLocked = campaignCreated
+  const tiersEditable = rewardType === 'ERC20' && settlementMode !== 'MERKLE' && !pendingTiersSet
+  const minStep = !campaignCreated ? 1 : !rewardLocked || tiersEditable ? 3 : 4
+  const payoutLabel =
+    settlementMode === 'RANK_TIERED'
+      ? 'By finishing order'
+      : settlementMode === 'SCORE_TIERED'
+        ? 'By points'
+        : 'Equal split'
   // No decimals fallback: every caller already requires rewardToken; if one ever doesn't, show a
   // dash rather than a number scaled by a guessed 18.
   const fmtToken = (v: bigint) =>
@@ -711,6 +730,19 @@ export default function CreateCampaignPage() {
     let campaignId: string | null = pendingCampaignId
     // Decimals the funding step read on-chain in THIS submit (it throws rather than guess).
     let fundedDecimals: number | undefined
+    // The Rewards inputs are locked once funded, so this only trips if that lock is bypassed —
+    // but configuring tiers for a different token than the escrowed one must never happen.
+    if (
+      fundedReward &&
+      fundedReward.tokenAddress.toLowerCase() !== (data.reward.tokenAddress || '').toLowerCase()
+    ) {
+      toast({
+        variant: 'destructive',
+        title: 'Reward doesn’t match what was funded',
+        description: `This campaign was funded with ${fundedReward.tokenAddress}, so its reward can’t switch to a different token. Nothing was sent.`,
+      })
+      return
+    }
     try {
       if (!campaignId) {
         // The contract checks startTime against the block the tx is MINED in. Resolve against
@@ -788,6 +820,7 @@ export default function CreateCampaignPage() {
           data.reward.amount,
         )
         fundedDecimals = funded.decimals
+        setFundedReward({ tokenAddress: data.reward.tokenAddress, decimals: funded.decimals })
         setPendingFunded(true)
       }
 
@@ -804,6 +837,7 @@ export default function CreateCampaignPage() {
         // pre-flight matters on a retry, where funding is skipped and this is the only read.
         const decimals =
           fundedDecimals ??
+          fundedReward?.decimals ??
           rewardToken?.decimals ??
           (await getERC20TokenInfo(data.reward.tokenAddress))?.decimals
         if (decimals === undefined) {
@@ -866,6 +900,7 @@ export default function CreateCampaignPage() {
         } catch (e) {
           console.warn('Failed to record NFT deposits (non-fatal, tokens are already escrowed on-chain):', e)
         }
+        setFundedReward({ tokenAddress: data.reward.tokenAddress })
         setPendingDeposited(true)
       }
 
@@ -1131,7 +1166,9 @@ export default function CreateCampaignPage() {
     if (!isValid) return
     // The token pre-flight lives outside the schema (it's async, on-chain). Only definite
     // negatives stop the host — each one would otherwise revert AFTER createCampaign has mined.
-    if (step === 3 && rewardType !== 'None') {
+    // Skipped once funded: the token is fixed by then, and the balance check would wrongly fail
+    // because the pool has already left the host's wallet.
+    if (step === 3 && rewardType !== 'None' && !rewardLocked) {
       if (tokenCheck.status === 'checking') {
         toast({ title: 'Still checking the token', description: 'Give it a second, then continue.' })
         return
@@ -1144,7 +1181,9 @@ export default function CreateCampaignPage() {
     setStep((s) => s + 1)
   }
 
-  const prevStep = () => setStep((s) => s - 1)
+  // Back never returns to a step whose values are already on-chain: Details/Schedule/Tasks once
+  // the campaign exists, and Rewards once it's funded — unless tier rows are still unset there.
+  const prevStep = () => setStep((s) => Math.max(minStep, s - 1))
 
   const handleGenerate = async () => {
     if (!aiPrompt) {
@@ -2434,6 +2473,40 @@ export default function CreateCampaignPage() {
               {step === 3 && (
                 <section className="space-y-6 animate-in fade-in-50">
                   <StepHeader title="Rewards" description={steps[2].description} />
+                  {rewardLocked ? (
+                    <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+                      <div className="flex items-start gap-3">
+                        <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Funded on-chain</p>
+                          <p className="text-sm text-muted-foreground">
+                            The reward can&apos;t be changed now.
+                            {tiersEditable
+                              ? ' You can still fix the tiers below, then finish setup on the Review step.'
+                              : ' Finish setup on the Review step.'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-2 border-t pt-3">
+                        <ReviewRow label={rewardType === 'ERC20' ? 'Pool' : 'Items'}>
+                          <span className="font-medium tabular-nums">
+                            {rewardType === 'ERC20'
+                              ? `${Number.isFinite(Number(rewardAmount)) ? Number(rewardAmount).toLocaleString(undefined, { maximumFractionDigits: 18 }) : rewardAmount} ${tokenSymbol}`
+                              : `${parseIdList(form.getValues('reward.tokenIds') || '').length} × ${nftStandard}`}
+                          </span>
+                        </ReviewRow>
+                        <ReviewRow label={rewardType === 'ERC20' ? 'Token' : 'Collection'}>
+                          <CopyableAddress address={fundedReward?.tokenAddress ?? rewardTokenAddress ?? ''} />
+                        </ReviewRow>
+                        {rewardType === 'ERC20' && (
+                          <ReviewRow label="Payout">
+                            {payoutLabel}
+                          </ReviewRow>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
                   <FormField
                     control={form.control}
                     name="reward.type"
@@ -2549,7 +2622,23 @@ export default function CreateCampaignPage() {
                       )}
                     />
                   )}
-                  {rewardType === 'ERC20' && (
+                    </>
+                  )}
+                  {!rewardLocked && settlementLocked && rewardType === 'ERC20' && (
+                    <div className="flex items-start gap-3 rounded-lg border bg-muted/30 p-4">
+                      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="space-y-1 text-sm">
+                        <p>
+                          <span className="font-medium">Payout: </span>
+                          {payoutLabel}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Set when the campaign was created on-chain, so it can&apos;t be changed now.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {rewardType === 'ERC20' && !settlementLocked && (
                     <FormField
                       control={form.control}
                       name="reward.settlementMode"
@@ -2590,7 +2679,7 @@ export default function CreateCampaignPage() {
                       )}
                     />
                   )}
-                  {rewardType === 'ERC20' && settlementMode === 'RANK_TIERED' && (
+                  {rewardType === 'ERC20' && settlementMode === 'RANK_TIERED' && !pendingTiersSet && (
                     <div className="space-y-3 rounded-lg border p-4">
                       <div className="flex items-center justify-between gap-2">
                         <div>
@@ -2690,7 +2779,7 @@ export default function CreateCampaignPage() {
                       />
                     </div>
                   )}
-                  {rewardType === 'ERC20' && settlementMode === 'SCORE_TIERED' && (
+                  {rewardType === 'ERC20' && settlementMode === 'SCORE_TIERED' && !pendingTiersSet && (
                     <div className="space-y-4">
                       <div className="space-y-3 rounded-lg border p-4">
                         <div className="flex items-center justify-between gap-2">
@@ -2828,7 +2917,7 @@ export default function CreateCampaignPage() {
                         </AlertDescription>
                       </Alert>
                     )}
-                  {rewardType === 'ERC721' && (
+                  {rewardType === 'ERC721' && !rewardLocked && (
                     <FormField
                       control={form.control}
                       name="reward.tokenIds"
@@ -2917,20 +3006,25 @@ export default function CreateCampaignPage() {
                         ? 'A required Humanity verification task is added'
                         : 'Humanity-verified wallets only'
                       : null
+                    // `done` mirrors the resume flags onSubmit skips on a retry.
                     const txSteps = [
-                      'Create the campaign and add its tasks',
-                      rewardType === 'ERC20'
-                        ? `Set the reward token, approve ${tokenSymbol} if needed, and fund the pool`
-                        : `Deposit ${nftCount} ${nftStd} item(s), approving the collection first if needed`,
+                      { label: 'Create the campaign and add its tasks', done: campaignCreated },
+                      {
+                        label:
+                          rewardType === 'ERC20'
+                            ? `Set the reward token, approve ${tokenSymbol} if needed, and fund the pool`
+                            : `Deposit ${nftCount} ${nftStd} item(s), approving the collection first if needed`,
+                        done: rewardLocked,
+                      },
                       rewardType === 'ERC20' && settlementMode === 'RANK_TIERED'
-                        ? 'Set the rank tiers'
+                        ? { label: 'Set the rank tiers', done: pendingTiersSet }
                         : null,
                       rewardType === 'ERC20' && settlementMode === 'SCORE_TIERED'
-                        ? 'Set the score tiers and task points'
+                        ? { label: 'Set the score tiers and task points', done: pendingTiersSet }
                         : null,
-                      v.maxParticipants ? 'Set the participant cap' : null,
-                      'Sign a message to save the image and descriptions (no gas)',
-                    ].filter((x): x is string => !!x)
+                      v.maxParticipants ? { label: 'Set the participant cap', done: pendingCapSet } : null,
+                      { label: 'Sign a message to save the image and descriptions (no gas)', done: false },
+                    ].filter((x): x is { label: string; done: boolean } => !!x)
 
                     return (
                       <>
@@ -2969,7 +3063,7 @@ export default function CreateCampaignPage() {
                             </div>
                           </ReviewSection>
 
-                          <ReviewSection title="Reward" onEdit={() => setStep(3)}>
+                          <ReviewSection title="Reward" onEdit={minStep <= 3 ? () => setStep(3) : undefined}>
                             <div className="space-y-2">
                               <ReviewRow label={rewardType === 'ERC20' ? 'Pool' : 'Items'}>
                                 <span className="font-medium tabular-nums">
@@ -3056,10 +3150,18 @@ export default function CreateCampaignPage() {
                           <ol className="space-y-2">
                             {txSteps.map((t, i) => (
                               <li key={i} className="flex gap-3 text-sm">
-                                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border bg-background text-xs font-medium tabular-nums">
-                                  {i + 1}
+                                <span
+                                  className={cn(
+                                    'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-xs font-medium tabular-nums',
+                                    t.done ? 'border-primary bg-primary text-primary-foreground' : 'bg-background',
+                                  )}
+                                >
+                                  {t.done ? <Check className="h-3 w-3" /> : i + 1}
                                 </span>
-                                <span>{t}</span>
+                                <span className={cn(t.done && 'text-muted-foreground')}>
+                                  {t.label}
+                                  {t.done && <span className="ml-1.5 text-xs">· Done</span>}
+                                </span>
                               </li>
                             ))}
                           </ol>
@@ -3101,8 +3203,8 @@ export default function CreateCampaignPage() {
                     type="button"
                     variant="ghost"
                     onClick={prevStep}
-                    disabled={step === 1}
-                    className={cn(step === 1 && 'invisible')}
+                    disabled={step <= minStep}
+                    className={cn(step <= minStep && 'invisible')}
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back
@@ -3122,7 +3224,7 @@ export default function CreateCampaignPage() {
                       {isLoading && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      {creationProgress || 'Create Campaign'}
+                      {creationProgress || (campaignCreated ? 'Finish setup' : 'Create Campaign')}
                     </Button>
                   )}
                 </div>
