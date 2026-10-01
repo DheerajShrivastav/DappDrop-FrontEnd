@@ -543,7 +543,10 @@ export default function CreateCampaignPage() {
       ? tokenCheck.result
       : null
   const tokenSymbol = rewardToken?.symbol ?? 'tokens'
-  const fmtToken = (v: bigint) => `${formatTokenAmount(v, rewardToken?.decimals ?? 18)} ${tokenSymbol}`
+  // No decimals fallback: every caller already requires rewardToken; if one ever doesn't, show a
+  // dash rather than a number scaled by a guessed 18.
+  const fmtToken = (v: bigint) =>
+    rewardToken ? `${formatTokenAmount(v, rewardToken.decimals)} ${tokenSymbol}` : '—'
 
   const poolParsed = rewardToken && rewardAmount ? parseTokenAmount(rewardAmount, rewardToken.decimals) : null
   const poolGross = poolParsed?.ok ? poolParsed.value : null
@@ -670,6 +673,8 @@ export default function CreateCampaignPage() {
     // wizard session, or a retry after e.g. a rejected funding tx would create a second,
     // independent campaign and orphan the first, half-configured one.
     let campaignId: string | null = pendingCampaignId
+    // Decimals the funding step read on-chain in THIS submit (it throws rather than guess).
+    let fundedDecimals: number | undefined
     try {
       if (!campaignId) {
         // The contract checks startTime against the block the tx is MINED in. Resolve against
@@ -741,11 +746,12 @@ export default function CreateCampaignPage() {
 
       if (data.reward.type === 'ERC20' && !pendingFunded) {
         setCreationProgress('Configuring and funding the reward pool…')
-        await configureAndFundERC20Reward(
+        const funded = await configureAndFundERC20Reward(
           campaignId,
           data.reward.tokenAddress,
           data.reward.amount,
         )
+        fundedDecimals = funded.decimals
         setPendingFunded(true)
       }
 
@@ -755,8 +761,25 @@ export default function CreateCampaignPage() {
             ? 'Configuring rank tiers…'
             : 'Configuring score tiers and task points…',
         )
-        const tokenInfo = await getERC20TokenInfo(data.reward.tokenAddress)
-        const decimals = tokenInfo?.decimals ?? 18
+        // Decimals scale every tier amount, so they're never guessed: a failed read used to fall
+        // back to 18, silently mis-scaling a 6-decimal token's tiers by 10^12. Use a value already
+        // read for this exact token (this submit's funding step, then the Rewards-step
+        // pre-flight), else read it now; if nothing is available, stop before any tier tx. The
+        // pre-flight matters on a retry, where funding is skipped and this is the only read.
+        const decimals =
+          fundedDecimals ??
+          rewardToken?.decimals ??
+          (await getERC20TokenInfo(data.reward.tokenAddress))?.decimals
+        if (decimals === undefined) {
+          setCreationProgress(null)
+          toast({
+            variant: 'destructive',
+            title: 'Couldn’t read the token’s decimals',
+            description:
+              'Your campaign is created and funded, but its reward tiers weren’t set. Check your connection and click Create again to finish — the steps already done are skipped.',
+          })
+          return
+        }
         if (data.reward.settlementMode === 'RANK_TIERED') {
           await configureRankTiers(campaignId, sortRankTiers(data.reward.rankTiers || []), decimals)
         } else {
