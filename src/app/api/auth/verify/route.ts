@@ -9,7 +9,11 @@ import {
   NONCE_COOKIE,
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
-  siweDomainAndUri,
+  SIWE_ERROR_WRONG_SITE,
+  describeSiweDomain,
+  isAllowedSiweDomain,
+  siweAllowedDomains,
+  siweFailureReason,
 } from '@/lib/siwe'
 
 // POST /api/auth/verify — verify a signed EIP-4361 message and open a session (FR-W3/W4).
@@ -39,20 +43,34 @@ export async function POST(request: Request) {
     )
   }
 
-  const { domain } = siweDomainAndUri()
   const parsed = parseSiweMessage(message)
 
-  // Validate the message fields against what we expect: our domain, the issued nonce, the
-  // active chain, and time bounds. This is the CSRF + replay guard (single-use nonce below).
+  // The domain is EIP-4361's anti-phishing field: the wallet shows it to the user, and we refuse
+  // a message signed for any site that isn't ours. "Ours" is an allowlist built only from
+  // operator config + Vercel system env vars (see siwe-domains.ts) — never from the request's
+  // Host header, which the caller controls. Exact match, port included.
+  const domain = parsed.domain
+  if (!isAllowedSiweDomain(domain, siweAllowedDomains())) {
+    console.warn(
+      `[auth/verify] rejected SIWE domain ${describeSiweDomain(domain)}; accepted: ${siweAllowedDomains().join(', ')}. ` +
+        'If this is a legitimate address for this deployment, add it to SIWE_ALLOWED_DOMAINS.',
+    )
+    return NextResponse.json({ error: SIWE_ERROR_WRONG_SITE(domain) }, { status: 401 })
+  }
+
+  // Validate the rest against what we expect: the issued nonce and time bounds. This is the
+  // CSRF + replay guard (single-use nonce below). `domain` is non-empty here — important,
+  // because viem skips its domain check entirely when handed a falsy one.
+  const now = new Date()
   const fieldsValid = validateSiweMessage({
     message: parsed,
     domain,
     nonce: expectedNonce,
-    time: new Date(),
+    time: now,
   })
   if (!fieldsValid || !parsed.address) {
     return NextResponse.json(
-      { error: 'SIWE message failed validation (domain/nonce/expiry)' },
+      { error: siweFailureReason(parsed, expectedNonce, now) },
       { status: 401 },
     )
   }

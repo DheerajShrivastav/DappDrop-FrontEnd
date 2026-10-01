@@ -30,7 +30,21 @@ function secret(): string {
   return s
 }
 
-/** The SIWE domain (RFC 4361 authority) + origin, derived from config, no scheme in domain. */
+// The set of domains verify accepts lives in siwe-domains.ts (pure, so it's testable without
+// 'server-only'); re-exported here so server code has one place to import SIWE helpers from.
+export {
+  siweAllowedDomains,
+  isAllowedSiweDomain,
+  siweFailureReason,
+  describeSiweDomain,
+  SIWE_ERROR_WRONG_SITE,
+} from './siwe-domains'
+
+/**
+ * The site's OWN configured SIWE domain + origin (from NEXTAUTH_URL / NEXT_PUBLIC_BASE_URL), no
+ * scheme in domain. The verify endpoint no longer validates against this alone — it checks the
+ * message's domain against siweAllowedDomains(), of which this host is one entry.
+ */
 export function siweDomainAndUri(): { domain: string; uri: string } {
   const base =
     process.env.NEXTAUTH_URL ||
