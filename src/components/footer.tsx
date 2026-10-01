@@ -17,26 +17,47 @@ const TelegramIcon = () => (
     </svg>
 )
 
+// Every link points somewhere real. The footer used to link /docs, /help, /terms, /privacy,
+// /bug-bounty and friends — none of which exist — so each one 404'd, and Next prefetched them
+// all as soon as the footer scrolled into view. Don't add a link here without a page behind it.
+const FRONTEND_REPO = 'https://github.com/DheerajShrivastav/DappDrop-FrontEnd'
+const CONTRACTS_REPO = 'https://github.com/DheerajShrivastav/Dapp-Drop-Smart-Contract'
+
+const footerLinkClass = 'text-slate-400 hover:text-white text-sm transition-colors duration-200'
+
+/** Internal routes go through next/link; external URLs are a plain new-tab <a> (nothing for
+ * Next to prefetch). */
+function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
+    if (/^https?:\/\//.test(href)) {
+        return (
+            <a href={href} target="_blank" rel="noopener noreferrer" className={footerLinkClass}>
+                {children}
+            </a>
+        )
+    }
+    return (
+        <Link href={href} className={footerLinkClass}>
+            {children}
+        </Link>
+    )
+}
+
 // Footer navigation links
 const footerNavigation = {
     product: [
-        { name: 'How It Works', href: '/#how-it-works' },
         { name: 'Active Campaigns', href: '/campaigns' },
-        { name: 'Verification Tools', href: '/#verification-tools' },
-        { name: 'Documentation', href: '/docs' },
+        { name: 'Create a Campaign', href: '/create-campaign' },
+        { name: 'Changelog', href: '/changelog' },
     ],
     resources: [
-        { name: 'Help Center', href: '/help' },
-        { name: 'API Documentation', href: '/docs/api' },
-        { name: 'Community Guidelines', href: '/guidelines' },
-        { name: 'Terms of Service', href: '/terms' },
-        { name: 'Privacy Policy', href: '/privacy' },
+        { name: 'About', href: '/about' },
+        { name: 'Documentation', href: `${FRONTEND_REPO}/tree/master/docs` },
+        { name: 'README', href: `${FRONTEND_REPO}#readme` },
     ],
     developers: [
-        { name: 'GitHub Repository', href: 'https://github.com/DheerajShrivastav/DappDrop-FrontEnd' },
-        { name: 'Smart Contracts', href: '/docs/contracts' },
-        { name: 'Integration Guides', href: '/docs/integration' },
-        { name: 'Bug Bounty', href: '/bug-bounty' },
+        { name: 'GitHub Repository', href: FRONTEND_REPO },
+        { name: 'Smart Contracts', href: CONTRACTS_REPO },
+        { name: 'Integration Guides', href: `${FRONTEND_REPO}/tree/master/docs/integrations` },
     ],
     social: [
         { name: 'Twitter', href: 'https://twitter.com/dappdrop', icon: Twitter },
@@ -110,12 +131,7 @@ export default function Footer() {
                         <ul className="space-y-3">
                             {footerNavigation.product.map((item) => (
                                 <li key={item.name}>
-                                    <Link
-                                        href={item.href}
-                                        className="text-slate-400 hover:text-white text-sm transition-colors duration-200"
-                                    >
-                                        {item.name}
-                                    </Link>
+                                    <FooterLink href={item.href}>{item.name}</FooterLink>
                                 </li>
                             ))}
                         </ul>
@@ -129,12 +145,7 @@ export default function Footer() {
                         <ul className="space-y-3">
                             {footerNavigation.resources.map((item) => (
                                 <li key={item.name}>
-                                    <Link
-                                        href={item.href}
-                                        className="text-slate-400 hover:text-white text-sm transition-colors duration-200"
-                                    >
-                                        {item.name}
-                                    </Link>
+                                    <FooterLink href={item.href}>{item.name}</FooterLink>
                                 </li>
                             ))}
                         </ul>
@@ -148,13 +159,7 @@ export default function Footer() {
                         <ul className="space-y-3">
                             {footerNavigation.developers.map((item) => (
                                 <li key={item.name}>
-                                    <Link
-                                        href={item.href}
-                                        className="text-slate-400 hover:text-white text-sm transition-colors duration-200"
-                                        {...(item.href.startsWith('http') ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                                    >
-                                        {item.name}
-                                    </Link>
+                                    <FooterLink href={item.href}>{item.name}</FooterLink>
                                 </li>
                             ))}
                         </ul>
