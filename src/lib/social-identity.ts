@@ -51,6 +51,38 @@ export async function linkSocialAccount(
   }
 }
 
+/** The participant's self-entered X handle (unverified — proof-by-post is what checks it). */
+export async function getXHandle(wallet: string): Promise<string | null> {
+  const u = await prisma.user.findUnique({ where: { walletAddress: wallet.toLowerCase() }, select: { xHandle: true } })
+  return u?.xHandle ?? null
+}
+
+export async function setXHandle(wallet: string, handle: string | null): Promise<void> {
+  const w = wallet.toLowerCase()
+  const data = { xHandle: handle, xHandleUpdatedAt: new Date() }
+  await prisma.user.upsert({ where: { walletAddress: w }, update: data, create: { walletAddress: w, ...data } })
+}
+
+/** Has this X handle already completed this post task for a DIFFERENT wallet? */
+export async function xHandleUsedByAnotherWallet(params: {
+  handle: string
+  campaignId: number
+  taskIndex: number
+  wallet: string
+}): Promise<boolean> {
+  const row = await prisma.socialVerification.findFirst({
+    where: {
+      taskId: `${params.campaignId}-${params.taskIndex}`,
+      platform: 'TWITTER',
+      isValid: true,
+      userAddress: { not: params.wallet.toLowerCase(), mode: 'insensitive' },
+      proofData: { path: ['xHandle'], equals: params.handle.toLowerCase() },
+    },
+    select: { id: true },
+  })
+  return row !== null
+}
+
 export async function unlinkSocialAccount(wallet: string, platform: SocialPlatform): Promise<void> {
   const f = FIELDS[platform]
   await prisma.user.updateMany({

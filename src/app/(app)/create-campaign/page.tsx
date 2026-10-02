@@ -105,6 +105,13 @@ import { getSession, signAuthMessage } from '@/lib/wallet-auth'
 import type { TaskType } from '@/lib/types'
 import { isSelfReportedTask, SELF_REPORTED_TASK_NOTE } from '@/lib/task-types'
 import {
+  normalizeRequiredText,
+  normalizeXHandle,
+  parseXPostUrl,
+  X_REQUIRED_TEXT_MAX,
+} from '@/lib/x-task-fields'
+import { parseXTarget } from '@/lib/x-intents'
+import {
   becomeHost,
   createDraftCampaignWithTasks,
   configureAndFundERC20Reward,
@@ -134,6 +141,8 @@ import {
   Repeat2,
   Send,
   Wallet,
+  Heart,
+  PenLine,
   type LucideIcon,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -167,6 +176,8 @@ const taskSchema = z
   .object({
     type: z.enum([
       'SOCIAL_FOLLOW',
+      'SOCIAL_LIKE',
+      'SOCIAL_POST',
       'JOIN_DISCORD',
       'JOIN_TELEGRAM',
       'RETWEET',
@@ -179,6 +190,10 @@ const taskSchema = z
     verificationData: z.string().optional(),
     // Optional = participants can skip it and still qualify for the reward (on-chain isOptional).
     isOptional: z.boolean().optional(),
+    // X task fields → CampaignTaskMetadata.metadata (see src/lib/x-task-fields.ts).
+    xHandle: z.string().optional(), // SOCIAL_FOLLOW
+    xPostUrl: z.string().optional(), // SOCIAL_LIKE / RETWEET
+    xRequiredText: z.string().optional(), // SOCIAL_POST
     discordInviteLink: z.string().optional(),
     telegramInviteLink: z.string().optional(),
     // Humanity Protocol presets for HUMANITY_VERIFICATION tasks (multi-select)
@@ -230,6 +245,16 @@ const taskSchema = z
           })
         }
       }
+    }
+
+    if (data.type === 'SOCIAL_FOLLOW' && !normalizeXHandle(data.xHandle)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter the X handle to follow, e.g. @yourproject.', path: ['xHandle'] })
+    }
+    if ((data.type === 'SOCIAL_LIKE' || data.type === 'RETWEET') && !parseXPostUrl(data.xPostUrl)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Paste the post link, e.g. https://x.com/yourproject/status/123…', path: ['xPostUrl'] })
+    }
+    if (data.type === 'SOCIAL_POST' && !normalizeRequiredText(data.xRequiredText)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Enter the text, #hashtag or @mention the post must include (up to ${X_REQUIRED_TEXT_MAX} characters).`, path: ['xRequiredText'] })
     }
 
     if (data.type === 'JOIN_DISCORD') {
@@ -406,6 +431,8 @@ const TASK_TYPE_OPTIONS: { value: TaskType; label: string; icon: LucideIcon }[] 
   { value: 'JOIN_DISCORD', label: 'Join Discord', icon: MessageCircle },
   { value: 'JOIN_TELEGRAM', label: 'Join Telegram', icon: Send },
   { value: 'RETWEET', label: 'Retweet Post', icon: Repeat2 },
+  { value: 'SOCIAL_LIKE', label: 'Like a Post', icon: Heart },
+  { value: 'SOCIAL_POST', label: 'Post on X (verified)', icon: PenLine },
   { value: 'ONCHAIN_TX', label: 'On-chain Action (Beta)', icon: Wallet },
   { value: 'HUMANITY_VERIFICATION', label: 'Humanity Protocol Verification', icon: ShieldCheck },
 ]
@@ -1022,6 +1049,25 @@ export default function CreateCampaignPage() {
                 },
               }),
             })
+          } else if (
+            task.type === 'SOCIAL_FOLLOW' ||
+            task.type === 'SOCIAL_LIKE' ||
+            task.type === 'RETWEET' ||
+            task.type === 'SOCIAL_POST'
+          ) {
+            // Normalised here; re-validated wherever it's used (intent links, proof-by-post).
+            const post = parseXPostUrl(task.xPostUrl)
+            const metadata =
+              task.type === 'SOCIAL_FOLLOW'
+                ? { xHandle: normalizeXHandle(task.xHandle) }
+                : task.type === 'SOCIAL_POST'
+                  ? { xRequiredText: normalizeRequiredText(task.xRequiredText) }
+                  : { xPostId: post?.id ?? null, xPostUrl: post?.url ?? null }
+            await postTaskMetadata(i, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ campaignId: Number(campaignId), taskIndex: i, taskType: task.type, metadata }),
+            })
           } else if (task.type === 'ONCHAIN_TX' && task.paymentRequired) {
             await postTaskMetadata(i, {
               method: 'POST',
@@ -1271,7 +1317,16 @@ export default function CreateCampaignPage() {
         shortDescription: result.shortDescription,
         description: result.description,
         // AI tasks get the same default as hand-added ones: self-reported → optional.
-        tasks: result.tasks.map((t) => ({ ...t, isOptional: isSelfReportedTask(t.type) })),
+        tasks: result.tasks.map((t) => {
+          // Prefill X fields from the AI's wording when it names a handle / post (host can edit).
+          const target = parseXTarget(t.description)
+          return {
+            ...t,
+            isOptional: isSelfReportedTask(t.type),
+            xHandle: target.handle ? `@${target.handle}` : undefined,
+            xPostUrl: target.handle && target.tweetId ? `https://x.com/${target.handle}/status/${target.tweetId}` : undefined,
+          }
+        }),
       })
       toast({
         title: '✨ Campaign Drafted!',
@@ -1938,6 +1993,55 @@ export default function CreateCampaignPage() {
                           <Info className="mt-0.5 h-4 w-4 shrink-0" />
                           <span>{SELF_REPORTED_TASK_NOTE}</span>
                         </p>
+                      )}
+                      {tasks[index].type === 'SOCIAL_FOLLOW' && (
+                        <FormField
+                          control={form.control}
+                          name={`tasks.${index}.xHandle`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>X handle to follow</FormLabel>
+                              <FormControl>
+                                <Input placeholder="@yourproject" autoComplete="off" {...field} value={field.value ?? ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+                      {(tasks[index].type === 'SOCIAL_LIKE' || tasks[index].type === 'RETWEET') && (
+                        <FormField
+                          control={form.control}
+                          name={`tasks.${index}.xPostUrl`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Post link</FormLabel>
+                              <FormControl>
+                                <Input placeholder="https://x.com/yourproject/status/1234567890" autoComplete="off" {...field} value={field.value ?? ''} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
+                      {tasks[index].type === 'SOCIAL_POST' && (
+                        <FormField
+                          control={form.control}
+                          name={`tasks.${index}.xRequiredText`}
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>The post must include</FormLabel>
+                              <FormControl>
+                                <Input placeholder="#YourProject or @yourproject" autoComplete="off" {...field} value={field.value ?? ''} />
+                              </FormControl>
+                              <FormDescription>
+                                Checked automatically: participants post this plus a personal code, and we
+                                confirm the post is theirs.
+                              </FormDescription>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
                       )}
                       <FormField
                         control={form.control}

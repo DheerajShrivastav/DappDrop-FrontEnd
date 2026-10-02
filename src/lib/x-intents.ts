@@ -23,6 +23,18 @@ const RESERVED = new Set(['home', 'intent', 'i', 'search', 'explore', 'settings'
 
 export type XTarget = { handle?: string; tweetId?: string }
 
+/** Host-entered fields first (validated again here), then whatever the task's text mentions. */
+export function xTargetForTask(task: {
+  description?: string
+  verificationData?: string
+  metadata?: { xHandle?: string | null; xPostId?: string | null } | null
+} | null | undefined): XTarget {
+  const fromText = parseXTarget(task?.verificationData, task?.description)
+  const handle = task?.metadata?.xHandle && HANDLE_RE.test(task.metadata.xHandle) ? task.metadata.xHandle : fromText.handle
+  const tweetId = task?.metadata?.xPostId && TWEET_ID_RE.test(task.metadata.xPostId) ? task.metadata.xPostId : fromText.tweetId
+  return { handle, tweetId }
+}
+
 /** First valid handle / post id found in `sources`, in order. */
 export function parseXTarget(...sources: Array<string | undefined | null>): XTarget {
   const out: XTarget = {}

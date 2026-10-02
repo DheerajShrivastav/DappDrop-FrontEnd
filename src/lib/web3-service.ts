@@ -1473,6 +1473,24 @@ export const getCampaignByIdWithMetadata = async (
             }
           }
 
+          if (
+            (task.type === 'SOCIAL_FOLLOW' || task.type === 'SOCIAL_LIKE' || task.type === 'RETWEET' || task.type === 'SOCIAL_POST') &&
+            meta.metadata
+          ) {
+            const m = meta.metadata as Record<string, unknown>
+            const str = (v: unknown) => (typeof v === 'string' ? v : null)
+            return {
+              ...task,
+              metadata: {
+                ...task.metadata,
+                xHandle: str(m.xHandle),
+                xPostId: str(m.xPostId),
+                xPostUrl: str(m.xPostUrl),
+                xRequiredText: str(m.xRequiredText),
+              },
+            }
+          }
+
           if (task.type === 'ONCHAIN_TX' && meta.metadata) {
             return {
               ...task,

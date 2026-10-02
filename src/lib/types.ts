@@ -26,6 +26,11 @@ export type Task = {
     amountDisplay?: string
     /** For HUMANITY_VERIFICATION tasks: which preset(s) to verify against */
     humanityPreset?: string | string[]
+    /** X task fields set by the host (src/lib/x-task-fields.ts) */
+    xHandle?: string | null
+    xPostId?: string | null
+    xPostUrl?: string | null
+    xRequiredText?: string | null
   }
 }
 

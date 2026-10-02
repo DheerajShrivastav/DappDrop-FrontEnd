@@ -8,7 +8,14 @@ import { isUserVerified } from '@/lib/humanity-service'
 import { prisma } from '@/lib/prisma'
 import { type AttestationEvidence } from '@/lib/signer'
 import { attestAndRespond } from '@/lib/attest-response'
-import { accountUsedByAnotherWallet, getLinkedAccounts } from '@/lib/social-identity'
+import {
+  accountUsedByAnotherWallet,
+  getLinkedAccounts,
+  getXHandle,
+  xHandleUsedByAnotherWallet,
+} from '@/lib/social-identity'
+import { checkPostProof, postProofCode } from '@/lib/x-proof'
+import { normalizeRequiredText, normalizeXHandle } from '@/lib/x-task-fields'
 import { TASK_VERIFICATION_METHOD } from '@/lib/task-types'
 import {
   requireSessionWallet,
@@ -57,6 +64,7 @@ export async function POST(request: Request) {
       campaignId: campaignIdRaw,
       taskId,
       userAddress,
+      postUrl, // SOCIAL_POST only: the participant's post, checked via oEmbed
       // discordId / discordUsername / telegramUserId / telegramUsername may still arrive from older
       // clients and are deliberately IGNORED: membership is checked only for the account linked to
       // this wallet server-side (Discord OAuth / Telegram Login Widget, see social-identity.ts).
@@ -133,11 +141,7 @@ export async function POST(request: Request) {
       })
     }
 
-    let isVerified = false
-    // Evidence snapshot persisted with the signature (BR-V4 audit log).
-    let evidence: AttestationEvidence = { taskType }
-
-    // Discord / Telegram configuration written by the campaign's host.
+    // Discord / Telegram / X configuration written by the campaign's host.
     const taskMetadata = await prisma.campaignTaskMetadata.findUnique({
       where: {
         campaignId_taskIndex: {
@@ -146,6 +150,51 @@ export async function POST(request: Request) {
         },
       },
     })
+
+    // Proof-by-post (SOCIAL_POST): a real check — the public post must contain this wallet's code
+    // (+ the host's required text) and be authored by the participant's saved X handle.
+    if (method === 'proof-by-post') {
+      const savedHandle = normalizeXHandle(await getXHandle(wallet))
+      const code = postProofCode(campaignId, wallet)
+      const requiredText = normalizeRequiredText((taskMetadata?.metadata as any)?.xRequiredText)
+      const proof = await checkPostProof({ postUrl: typeof postUrl === 'string' ? postUrl : '', savedHandle, code, requiredText })
+      if (!proof.ok) {
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'post_proof_failed')
+        return NextResponse.json({ success: false, verified: false, message: proof.message })
+      }
+      const handle = proof.post.authorHandle.toLowerCase()
+      if (await xHandleUsedByAnotherWallet({ handle, campaignId, taskIndex, wallet })) {
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'x_handle_reused')
+        return NextResponse.json({
+          success: false,
+          verified: false,
+          message: `@${proof.post.authorHandle} has already completed this task for another wallet.`,
+        })
+      }
+      const postLink = `https://x.com/${proof.post.authorHandle}/status/${proof.postId}`
+      const checkedAt = new Date().toISOString()
+      await prisma.socialVerification.create({
+        data: {
+          userAddress: wallet,
+          taskId: `${campaignId}-${taskIndex}`,
+          platform: 'TWITTER',
+          proofData: { xHandle: handle, postUrl: postLink, postId: proof.postId, code, verificationMethod: 'proof-by-post', verificationTime: checkedAt },
+          verifiedAt: new Date(),
+          isValid: true,
+        },
+      })
+      return attestAndRespond(campaignId, taskIndex, wallet, {
+        taskType,
+        method: 'proof-by-post',
+        postUrl: postLink,
+        xHandle: handle,
+        checkedAt,
+      })
+    }
+
+    let isVerified = false
+    // Evidence snapshot persisted with the signature (BR-V4 audit log).
+    let evidence: AttestationEvidence = { taskType }
 
     if (taskType === 'JOIN_DISCORD') {
       // Discord verification - use stored server ID from dedicated column
