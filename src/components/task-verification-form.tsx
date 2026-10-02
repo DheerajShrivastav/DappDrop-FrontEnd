@@ -18,9 +18,8 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog'
-import { DiscordAuthButton } from '@/components/discord-auth-button'
-import { TelegramVerificationForm } from '@/components/telegram/telegram-verification-form'
-import { MessageSquare, Loader2, ExternalLink } from 'lucide-react'
+import { LinkedAccountPanel } from '@/components/linked-account-panel'
+import { Loader2, ExternalLink } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import type { Task, TaskType } from '@/lib/types'
 import { parseXTarget, xIntentFor } from '@/lib/x-intents'
@@ -33,12 +32,8 @@ interface TaskVerificationFormProps {
   campaignId: string
   /** The task being verified — used for the X link on self-reported tasks. */
   task?: Task | null
-  onVerify: (
-    taskId: string,
-    taskType: TaskType,
-    discordData?: any,
-    telegramData?: any
-  ) => Promise<void>
+  /** No identity data: the server checks the account linked to the signed-in wallet. */
+  onVerify: (taskId: string, taskType: TaskType) => Promise<void>
 }
 
 export function TaskVerificationForm({
@@ -50,12 +45,13 @@ export function TaskVerificationForm({
   task,
   onVerify,
 }: TaskVerificationFormProps) {
-  const [discordUserData, setDiscordUserData] = useState<any>(null)
-  const [telegramUserData, setTelegramUserData] = useState<any>(null)
   const [isVerifying, setIsVerifying] = useState(false)
-  const [isConnecting, setIsConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
-  const [storedVerification, setStoredVerification] = useState<any>(null)
+  // Discord / Telegram: Verify unlocks once an account is linked to this wallet server-side.
+  const [accountLinked, setAccountLinked] = useState(false)
+  useEffect(() => {
+    if (!isOpen) setConnectionError(null)
+  }, [isOpen])
 
   // Self-reported tasks: "I've completed this" unlocks only after the participant has opened the
   // task on X, plus a few seconds. This is FRICTION, NOT SECURITY — it's client-side, trivially
@@ -92,80 +88,14 @@ export function TaskVerificationForm({
   const X_GATE_MS = 5_000
   const gateRemaining = xOpenedAt === null ? null : Math.max(0, X_GATE_MS - (now - xOpenedAt))
 
-  // Load any previously stored verification data and reset state when dialog opens/closes
-  useEffect(() => {
-    if (typeof window !== 'undefined' && taskId && campaignId && isOpen) {
-      // When dialog opens, check for stored Discord verification
-      const storedData = localStorage.getItem(
-        `discord_verification_${campaignId}_${taskId}`
-      )
-      if (storedData) {
-        try {
-          const parsedData = JSON.parse(storedData)
-          setStoredVerification(parsedData)
-        } catch (e) {
-          console.error('Error parsing stored Discord verification:', e)
-        }
-      }
-
-      // When dialog opens, check for stored Telegram verification
-      const storedTelegramData = localStorage.getItem(
-        `telegram_verification_${campaignId}_${taskId}`
-      )
-      if (storedTelegramData) {
-        try {
-          const parsedTelegramData = JSON.parse(storedTelegramData)
-          if (parsedTelegramData.verified) {
-            setTelegramUserData({
-              username: parsedTelegramData.username,
-              userId: parsedTelegramData.userId,
-            })
-          }
-        } catch (e) {
-          console.error('Error parsing stored Telegram verification:', e)
-        }
-      }
-    }
-
-    // Reset state when dialog closes
-    if (!isOpen) {
-      setIsConnecting(false)
-      setConnectionError(null)
-      // Keep discordUserData, telegramUserData and storedVerification as they may be needed when reopening
-    }
-  }, [taskId, campaignId, isOpen])
 
   const handleVerification = async () => {
     if (!taskId) return
 
     setIsVerifying(true)
     try {
-      await onVerify(taskId, taskType, discordUserData, telegramUserData)
-
-      // Store verification data for future reference
-      if (discordUserData && taskType === 'JOIN_DISCORD') {
-        localStorage.setItem(
-          `discord_verification_${campaignId}_${taskId}`,
-          JSON.stringify({
-            username: discordUserData.username,
-            id: discordUserData.id,
-            verified: true,
-            timestamp: new Date().toISOString(),
-          })
-        )
-      }
-
-      if (telegramUserData && taskType === 'JOIN_TELEGRAM') {
-        localStorage.setItem(
-          `telegram_verification_${campaignId}_${taskId}`,
-          JSON.stringify({
-            username: telegramUserData.username,
-            userId: telegramUserData.userId,
-            verified: true,
-            timestamp: new Date().toISOString(),
-          })
-        )
-      }
+      // No identity data is passed: the server uses the account linked to the signed-in wallet.
+      await onVerify(taskId, taskType)
     } catch (error) {
       console.error('Verification error:', error)
     } finally {
@@ -177,225 +107,46 @@ export function TaskVerificationForm({
   const renderVerificationForm = () => {
     switch (taskType) {
       case 'JOIN_DISCORD':
+      case 'JOIN_TELEGRAM': {
+        const isDiscord = taskType === 'JOIN_DISCORD'
         return (
           <>
             <DialogHeader>
-              <DialogTitle>Verify Discord Task</DialogTitle>
+              <DialogTitle>{isDiscord ? 'Verify Discord Task' : 'Verify Telegram Task'}</DialogTitle>
               <DialogDescription>
-                Please connect your Discord account to verify that you've joined
-                the server.
+                {isDiscord
+                  ? 'Join the server, then connect your Discord account so we can check you are a member.'
+                  : 'Join the channel or group, then sign in with Telegram so we can check you are a member.'}
               </DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col items-center py-6 space-y-4">
-              {/* Show error message if there was an error */}
+            <div className="space-y-3 py-2">
+              {task?.description && <p className="text-sm">{task.description}</p>}
+              <LinkedAccountPanel
+                key={taskType}
+                platform={isDiscord ? 'discord' : 'telegram'}
+                onLinkedChange={setAccountLinked}
+              />
               {connectionError && (
-                <Alert variant="destructive" className="w-full mb-2">
-                  <AlertTitle>Connection Error</AlertTitle>
-                  <AlertDescription>{connectionError}</AlertDescription>
-                </Alert>
-              )}
-
-              {storedVerification?.verified && (
-                <Alert className="bg-green-500/10 border-green-500 w-full mb-4">
-                  <AlertTitle className="text-green-600">
-                    Previously Verified
-                  </AlertTitle>
-                  <AlertDescription className="text-sm space-y-1">
-                    <p>You've already verified this task with:</p>
-                    <p>
-                      <strong>Username:</strong> {storedVerification.username}
-                    </p>
-                    {storedVerification.id && (
-                      <p>
-                        <strong>Discord ID:</strong> {storedVerification.id}
-                      </p>
-                    )}
-                    <p>
-                      <strong>Verified:</strong>{' '}
-                      {new Date(storedVerification.timestamp).toLocaleString()}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={handleVerification}
-                    >
-                      Verify Again
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {!discordUserData ? (
-                <div className="flex flex-col items-center space-y-4 w-full">
-                  {isConnecting ? (
-                    <div className="flex flex-col items-center p-4">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        Connecting to Discord...
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Please complete authentication in the popup window
-                      </p>
-                    </div>
-                  ) : (
-                    <DiscordAuthButton
-                      onSuccess={(userData) => {
-                        console.log('Discord auth success:', userData)
-                        setDiscordUserData(userData)
-                        setIsConnecting(false)
-                        setConnectionError(null)
-                      }}
-                      onError={(error) => {
-                        console.error('Discord connection failed:', error)
-                        setIsConnecting(false)
-                        setConnectionError(
-                          error.message ||
-                            'Failed to connect to Discord. Please try again.'
-                        )
-                      }}
-                      // Set connecting state when the button is clicked
-                      beforeAuth={() => {
-                        setIsConnecting(true)
-                        setConnectionError(null)
-                      }}
-                    />
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center space-y-3 p-4 bg-secondary/30 rounded-lg w-full">
-                  <div className="text-lg font-medium flex items-center">
-                    <MessageSquare className="mr-2 h-5 w-5 text-[#5865F2]" />
-                    {discordUserData.username}
-                    {discordUserData.discriminator && (
-                      <span className="text-muted-foreground">
-                        #{discordUserData.discriminator}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Discord account connected
-                  </p>
-                  <div className="text-xs bg-secondary p-2 rounded-md w-full mt-2">
-                    <p>
-                      <strong>Username:</strong> {discordUserData.username}
-                    </p>
-                    <p>
-                      <strong>User ID:</strong> {discordUserData.id}
-                    </p>
-                    {discordUserData.email && (
-                      <p>
-                        <strong>Email:</strong> {discordUserData.email}
-                      </p>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDiscordUserData(null)}
-                  >
-                    Change Account
-                  </Button>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
-              </DialogClose>
-              <Button
-                onClick={handleVerification}
-                disabled={!discordUserData || isVerifying}
-              >
-                {isVerifying && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Confirm & Verify
-              </Button>
-            </DialogFooter>
-          </>
-        )
-
-      case 'JOIN_TELEGRAM':
-        return (
-          <>
-            <DialogHeader>
-              <DialogTitle>Verify Telegram Task</DialogTitle>
-              <DialogDescription>
-                Please provide your Telegram information to verify that you've
-                joined the channel or group.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="flex flex-col items-center py-6">
-              {/* Show error message if there was an error */}
-              {connectionError && (
-                <Alert variant="destructive" className="w-full mb-2">
+                <Alert variant="destructive">
                   <AlertTitle>Verification Error</AlertTitle>
                   <AlertDescription>{connectionError}</AlertDescription>
                 </Alert>
               )}
-
-              {telegramUserData && (
-                <Alert className="bg-green-500/10 border-green-500 w-full mb-4">
-                  <AlertTitle className="text-green-600">
-                    Previously Verified
-                  </AlertTitle>
-                  <AlertDescription className="text-sm space-y-1">
-                    <p>You've already verified this task with:</p>
-                    <p>
-                      <strong>Username:</strong> {telegramUserData.username}
-                    </p>
-                    {telegramUserData.userId && (
-                      <p>
-                        <strong>User ID:</strong> {telegramUserData.userId}
-                      </p>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-2"
-                      onClick={handleVerification}
-                      disabled={isVerifying}
-                    >
-                      Use Previous Verification
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2 ml-2"
-                      onClick={() => setTelegramUserData(null)}
-                    >
-                      Verify Again
-                    </Button>
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {!telegramUserData && (
-                <TelegramVerificationForm
-                  campaignId={campaignId}
-                  taskId={taskId || ''}
-                  onVerificationComplete={(success, message, telegramData) => {
-                    if (success && telegramData) {
-                      // Store the telegram data and trigger verification
-                      setTelegramUserData(telegramData)
-                      // Call the parent's onVerify function
-                      handleVerification()
-                    } else {
-                      setConnectionError(message || 'Verification failed')
-                    }
-                  }}
-                  isLoading={isVerifying}
-                />
-              )}
             </div>
             <DialogFooter>
               <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button variant="outline" disabled={isVerifying}>
+                  Cancel
+                </Button>
               </DialogClose>
+              <Button onClick={handleVerification} disabled={!accountLinked || isVerifying}>
+                {isVerifying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Verify membership
+              </Button>
             </DialogFooter>
           </>
         )
+      }
 
       // WALLET_CONNECT: the signed-in wallet session is the proof (verify-task attests it with
       // method 'siwe-session' for the session wallet only) — a real check, so no X gate.
