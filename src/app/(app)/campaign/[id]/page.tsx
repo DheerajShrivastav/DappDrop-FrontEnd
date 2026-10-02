@@ -257,8 +257,6 @@ export default function CampaignDetailsPage() {
   const handleTaskVerification = async (
     taskId: string,
     taskType: TaskType['type'],
-    discordData?: any,
-    telegramData?: any,
   ) => {
     if (!isConnected || !address || !campaign) {
       toast({
@@ -276,39 +274,6 @@ export default function CampaignDetailsPage() {
     )
 
     try {
-      // For Discord tasks, check if we have stored verification data if no discordData is provided
-      if (taskType === 'JOIN_DISCORD' && !discordData) {
-        const storedVerification = localStorage.getItem(
-          `discord_verification_${campaignId}_${taskId}`,
-        )
-        if (storedVerification) {
-          try {
-            discordData = JSON.parse(storedVerification)
-            console.log('Using stored Discord verification data:', discordData)
-          } catch (e) {
-            console.error('Error parsing stored verification:', e)
-          }
-        }
-      }
-
-      // For Telegram tasks, check if we have stored verification data if no telegramData is provided
-      if (taskType === 'JOIN_TELEGRAM' && !telegramData) {
-        const storedVerification = localStorage.getItem(
-          `telegram_verification_${campaignId}_${taskId}`,
-        )
-        if (storedVerification) {
-          try {
-            telegramData = JSON.parse(storedVerification)
-            console.log(
-              'Using stored Telegram verification data:',
-              telegramData,
-            )
-          } catch (e) {
-            console.error('Error parsing stored verification:', e)
-          }
-        }
-      }
-
       // Handle HUMANITY_VERIFICATION task type - check verification status before proceeding
       if (taskType === 'HUMANITY_VERIFICATION') {
         const humanityResponse = await fetch(
@@ -329,12 +294,6 @@ export default function CampaignDetailsPage() {
         }
       }
 
-      // Format discord username with discriminator if available
-      const discordUsername =
-        discordData?.username && discordData?.discriminator
-          ? `${discordData.username}#${discordData.discriminator}`
-          : discordData?.username || null
-
       // All tasks now call our backend API for verification/completion
       const response = await fetch('/api/verify-task', {
         method: 'POST',
@@ -344,10 +303,8 @@ export default function CampaignDetailsPage() {
           campaignId,
           taskId,
           userAddress: address,
-          discordUsername,
-          discordId: discordData?.id || null,
-          telegramUsername: telegramData?.username || null,
-          telegramUserId: telegramData?.userId || null,
+          // No Discord/Telegram identity here: the server checks the account linked to this
+          // wallet (it ignores any ID a client sends).
         }),
       })
 
@@ -387,32 +344,6 @@ export default function CampaignDetailsPage() {
 
       // Refresh campaign data to update participant count and other blockchain data
       await fetchAllCampaignData()
-
-      // Store successful verification in localStorage for Discord tasks
-      if (taskType === 'JOIN_DISCORD' && discordData) {
-        localStorage.setItem(
-          `discord_verification_${campaignId}_${taskId}`,
-          JSON.stringify({
-            username: discordData.username,
-            id: discordData.id,
-            verified: true,
-            timestamp: new Date().toISOString(),
-          }),
-        )
-      }
-
-      // Store successful verification in localStorage for Telegram tasks
-      if (taskType === 'JOIN_TELEGRAM' && telegramData) {
-        localStorage.setItem(
-          `telegram_verification_${campaignId}_${taskId}`,
-          JSON.stringify({
-            username: telegramData.username,
-            userId: telegramData.userId,
-            verified: true,
-            timestamp: new Date().toISOString(),
-          }),
-        )
-      }
 
       if (!isJoined) {
         setIsJoined(true)
@@ -546,55 +477,6 @@ export default function CampaignDetailsPage() {
     }
   }, [address, isConnected, campaign, campaignId])
 
-  // Load any previously stored Discord and Telegram verifications on component mount
-  useEffect(() => {
-    if (
-      typeof window !== 'undefined' &&
-      campaign?.id &&
-      campaign.tasks?.length > 0
-    ) {
-      // Check local storage for previous Discord and Telegram verifications
-      campaign.tasks.forEach((task) => {
-        if (task.type === 'JOIN_DISCORD') {
-          const storedVerification = localStorage.getItem(
-            `discord_verification_${campaign.id}_${task.id}`,
-          )
-          if (storedVerification) {
-            try {
-              const verificationData = JSON.parse(storedVerification)
-              if (verificationData.verified) {
-                setUserTasks((prevTasks) =>
-                  prevTasks.map((t) =>
-                    t.taskId === task.id ? { ...t, completed: true } : t,
-                  ),
-                )
-              }
-            } catch (e) {
-              console.error('Error parsing stored Discord verification:', e)
-            }
-          }
-        } else if (task.type === 'JOIN_TELEGRAM') {
-          const storedVerification = localStorage.getItem(
-            `telegram_verification_${campaign.id}_${task.id}`,
-          )
-          if (storedVerification) {
-            try {
-              const verificationData = JSON.parse(storedVerification)
-              if (verificationData.verified) {
-                setUserTasks((prevTasks) =>
-                  prevTasks.map((t) =>
-                    t.taskId === task.id ? { ...t, completed: true } : t,
-                  ),
-                )
-              }
-            } catch (e) {
-              console.error('Error parsing stored Telegram verification:', e)
-            }
-          }
-        }
-      })
-    }
-  }, [campaign?.id, campaign?.tasks])
 
   // NOTE: We intentionally do NOT check the global humanity verification status
   // on page load. The `userHumanityStatus` state is per-campaign — it should only
@@ -1030,11 +912,11 @@ export default function CampaignDetailsPage() {
           taskType={verifyingTaskType}
           campaignId={campaignId}
           task={campaign?.tasks.find((t) => t.id === verifyingTaskId) ?? null}
-          onVerify={async (taskId, taskType, discordData, telegramData) => {
+          onVerify={async (taskId, taskType) => {
             // handleTaskVerification returns a success boolean for the humanity call sites
             // that need to branch on it; this dialog only needs the side effects, so adapt
             // to the Promise<void> shape the form expects.
-            await handleTaskVerification(taskId, taskType, discordData, telegramData)
+            await handleTaskVerification(taskId, taskType)
           }}
         />
       )}

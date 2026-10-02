@@ -74,8 +74,12 @@ Modal → buildAuthUrl() → Humanity OAuth → /humanity-callback
   → exchangeCodeForToken() → verifyPresets(['is_human'])
   → POST /api/verify-humanity (save to DB)
   → Redirect to campaign page
-  → useEffect detects result → completeTask() on blockchain
+  → useEffect detects result → POST /api/verify-task
+  → platform signer attests the task for the signed-in wallet (verifyTaskCompletionWithSignature)
 ```
+
+Non-hold tasks settle only via signer attestation: the participant never calls `completeTask` for
+them (the contract reverts `NotSelfVerifiable`).
 
 ## Usage
 

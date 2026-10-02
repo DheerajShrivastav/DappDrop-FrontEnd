@@ -8,6 +8,7 @@ import { isUserVerified } from '@/lib/humanity-service'
 import { prisma } from '@/lib/prisma'
 import { type AttestationEvidence } from '@/lib/signer'
 import { attestAndRespond } from '@/lib/attest-response'
+import { accountUsedByAnotherWallet, getLinkedAccounts } from '@/lib/social-identity'
 import { TASK_VERIFICATION_METHOD } from '@/lib/task-types'
 import {
   requireSessionWallet,
@@ -56,10 +57,9 @@ export async function POST(request: Request) {
       campaignId: campaignIdRaw,
       taskId,
       userAddress,
-      discordUsername,
-      discordId,
-      telegramUsername,
-      telegramUserId,
+      // discordId / discordUsername / telegramUserId / telegramUsername may still arrive from older
+      // clients and are deliberately IGNORED: membership is checked only for the account linked to
+      // this wallet server-side (Discord OAuth / Telegram Login Widget, see social-identity.ts).
     } = body
 
     const mismatch = walletMismatchResponse(userAddress, wallet)
@@ -161,16 +161,31 @@ export async function POST(request: Request) {
         })
       }
 
-      isVerified = await verifyDiscordJoin(
-        discordUsername,
-        discordServerId,
-        discordId,
-      )
+      const discord = (await getLinkedAccounts(wallet)).discord
+      if (!discord) {
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'discord_not_linked')
+        return NextResponse.json({
+          success: false,
+          verified: false,
+          needsLink: 'discord',
+          message: 'Connect your Discord account first.',
+        })
+      }
+      if (await accountUsedByAnotherWallet({ platform: 'discord', accountId: discord.id, campaignId, taskIndex, wallet })) {
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'discord_account_reused')
+        return NextResponse.json({
+          success: false,
+          verified: false,
+          message: 'This Discord account has already completed this task for another wallet.',
+        })
+      }
+      isVerified = await verifyDiscordJoin(discord.username ?? '', discordServerId, discord.id)
       evidence = {
         taskType,
         platform: 'discord',
         discordServerId,
-        method: discordId ? 'oauth' : 'manual',
+        discordId: discord.id,
+        method: 'linked-oauth',
         checkedAt: new Date().toISOString(),
       }
 
@@ -178,7 +193,7 @@ export async function POST(request: Request) {
         const existingVerification = await prisma.socialVerification.findFirst({
           where: {
             userAddress: wallet,
-            taskId: `${campaignId}-${taskId}`,
+            taskId: `${campaignId}-${taskIndex}`,
             platform: 'DISCORD',
             isValid: true,
           },
@@ -188,13 +203,13 @@ export async function POST(request: Request) {
           await prisma.socialVerification.create({
             data: {
               userAddress: wallet,
-              taskId: `${campaignId}-${taskId}`,
+              taskId: `${campaignId}-${taskIndex}`,
               platform: 'DISCORD',
               proofData: {
-                username: discordUsername,
-                discordId: discordId || 'manual_verification',
+                username: discord.username,
+                discordId: discord.id,
                 serverId: discordServerId,
-                verificationMethod: discordId ? 'oauth' : 'manual',
+                verificationMethod: 'linked-oauth',
                 verificationTime: new Date().toISOString(),
               },
               verifiedAt: new Date(),
@@ -219,16 +234,31 @@ export async function POST(request: Request) {
         })
       }
 
-      isVerified = await verifyTelegramJoin(
-        telegramUsername || '',
-        telegramChatId,
-        telegramUserId,
-      )
+      const telegram = (await getLinkedAccounts(wallet)).telegram
+      if (!telegram) {
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'telegram_not_linked')
+        return NextResponse.json({
+          success: false,
+          verified: false,
+          needsLink: 'telegram',
+          message: 'Connect your Telegram account first.',
+        })
+      }
+      if (await accountUsedByAnotherWallet({ platform: 'telegram', accountId: telegram.id, campaignId, taskIndex, wallet })) {
+        await logVerificationFailure(campaignId, taskIndex, taskType, 'telegram_account_reused')
+        return NextResponse.json({
+          success: false,
+          verified: false,
+          message: 'This Telegram account has already completed this task for another wallet.',
+        })
+      }
+      isVerified = await verifyTelegramJoin(telegram.username ?? '', telegramChatId, telegram.id)
       evidence = {
         taskType,
         platform: 'telegram',
         telegramChatId,
-        method: telegramUserId ? 'user_id' : 'username',
+        telegramUserId: telegram.id,
+        method: 'linked-login-widget',
         checkedAt: new Date().toISOString(),
       }
 
@@ -236,7 +266,7 @@ export async function POST(request: Request) {
         const existingVerification = await prisma.socialVerification.findFirst({
           where: {
             userAddress: wallet,
-            taskId: `${campaignId}-${taskId}`,
+            taskId: `${campaignId}-${taskIndex}`,
             platform: 'TELEGRAM',
             isValid: true,
           },
@@ -246,13 +276,13 @@ export async function POST(request: Request) {
           await prisma.socialVerification.create({
             data: {
               userAddress: wallet,
-              taskId: `${campaignId}-${taskId}`,
+              taskId: `${campaignId}-${taskIndex}`,
               platform: 'TELEGRAM',
               proofData: {
-                username: telegramUsername,
-                userId: telegramUserId || 'username_verification',
+                username: telegram.username,
+                userId: telegram.id,
                 chatId: telegramChatId,
-                verificationMethod: telegramUserId ? 'user_id' : 'username',
+                verificationMethod: 'linked-login-widget',
                 verificationTime: new Date().toISOString(),
               },
               verifiedAt: new Date(),
