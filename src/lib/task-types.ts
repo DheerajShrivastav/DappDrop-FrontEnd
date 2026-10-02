@@ -155,4 +155,4 @@ export function isSelfReportedTask(type: TaskType | string | undefined | null): 
 
 /** Shown to hosts under a self-reported task in the wizard. */
 export const SELF_REPORTED_TASK_NOTE =
-  'Automatic verification is coming soon. For now participants confirm this task themselves.'
+  "Automatic verification is coming soon. For now, participants confirm this task themselves, so it can't stop bots on its own."

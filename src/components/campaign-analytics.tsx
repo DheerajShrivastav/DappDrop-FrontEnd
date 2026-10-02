@@ -21,6 +21,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import type { Campaign, ParticipantData } from '@/lib/types'
 import { truncateAddress } from '@/lib/utils'
+import { isSelfReportedTask } from '@/lib/task-types'
+import { SelfReportedBadge } from '@/components/self-reported-badge'
 
 interface CampaignAnalyticsProps {
   campaign: Campaign
@@ -100,6 +102,8 @@ export function CampaignAnalytics({
     )
   }
 
+  const selfReportedCount = campaign.tasks.filter((t) => isSelfReportedTask(t.type)).length
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-start sm:items-center justify-between space-y-0 pb-4 gap-4">
@@ -109,6 +113,14 @@ export function CampaignAnalytics({
             A detailed view of your campaign participants, task completion
             rates, and reward distribution status.
           </CardDescription>
+          {selfReportedCount > 0 && (
+            <p className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+              <SelfReportedBadge />
+              {selfReportedCount} of {campaign.tasks.length} task
+              {campaign.tasks.length === 1 ? ' is' : 's are'} confirmed by participants themselves, so
+              completion counts include unverified tasks.
+            </p>
+          )}
         </div>
         <Button asChild variant="outline">
           <Link href={`/campaign/${campaign.id}/admin`}>

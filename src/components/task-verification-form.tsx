@@ -20,9 +20,10 @@ import {
 } from '@/components/ui/dialog'
 import { DiscordAuthButton } from '@/components/discord-auth-button'
 import { TelegramVerificationForm } from '@/components/telegram/telegram-verification-form'
-import { MessageSquare, Loader2 } from 'lucide-react'
+import { MessageSquare, Loader2, ExternalLink } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
-import { TaskType } from '@/lib/types'
+import type { Task, TaskType } from '@/lib/types'
+import { parseXTarget, xIntentFor } from '@/lib/x-intents'
 
 interface TaskVerificationFormProps {
   isOpen: boolean
@@ -30,6 +31,8 @@ interface TaskVerificationFormProps {
   taskId: string | null
   taskType: TaskType
   campaignId: string
+  /** The task being verified — used for the X link on self-reported tasks. */
+  task?: Task | null
   onVerify: (
     taskId: string,
     taskType: TaskType,
@@ -44,6 +47,7 @@ export function TaskVerificationForm({
   taskId,
   taskType,
   campaignId,
+  task,
   onVerify,
 }: TaskVerificationFormProps) {
   const [discordUserData, setDiscordUserData] = useState<any>(null)
@@ -52,6 +56,41 @@ export function TaskVerificationForm({
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectionError, setConnectionError] = useState<string | null>(null)
   const [storedVerification, setStoredVerification] = useState<any>(null)
+
+  // Self-reported tasks: "I've completed this" unlocks only after the participant has opened the
+  // task on X, plus a few seconds. This is FRICTION, NOT SECURITY — it's client-side, trivially
+  // bypassed, and the backend still attests self-reported tasks on the participant's word. It
+  // just stops the reflexive "click confirm without doing anything" path. Kept per task in
+  // sessionStorage so closing and reopening the dialog doesn't reset it.
+  const xClickKey = taskId ? `x_task_opened_${campaignId}_${taskId}` : null
+  const [xOpenedAt, setXOpenedAt] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!isOpen || !xClickKey) return
+    try {
+      const v = sessionStorage.getItem(xClickKey)
+      setXOpenedAt(v ? Number(v) : null)
+    } catch {
+      setXOpenedAt(null)
+    }
+  }, [isOpen, xClickKey])
+  useEffect(() => {
+    if (!isOpen || xOpenedAt === null) return
+    const t = setInterval(() => setNow(Date.now()), 500)
+    return () => clearInterval(t)
+  }, [isOpen, xOpenedAt])
+  const markXOpened = () => {
+    const t = Date.now()
+    setXOpenedAt((prev) => prev ?? t)
+    setNow(t)
+    try {
+      if (xClickKey && !sessionStorage.getItem(xClickKey)) sessionStorage.setItem(xClickKey, String(t))
+    } catch {
+      // storage unavailable (private mode): the in-memory state still gates this dialog
+    }
+  }
+  const X_GATE_MS = 5_000
+  const gateRemaining = xOpenedAt === null ? null : Math.max(0, X_GATE_MS - (now - xOpenedAt))
 
   // Load any previously stored verification data and reset state when dialog opens/closes
   useEffect(() => {
@@ -358,54 +397,76 @@ export function TaskVerificationForm({
           </>
         )
 
-      // Self-attested task types: the backend (api/verify-task) has no external proof to check
-      // for these — it marks them verified once the app confirms the participant said they did
-      // it (see the final `else` branch in verify-task/route.ts: any known, non-humanity task
-      // type is verified on request). So this is a confirm-only dialog, not a real check.
+      // WALLET_CONNECT: the signed-in wallet session is the proof (verify-task attests it with
+      // method 'siwe-session' for the session wallet only) — a real check, so no X gate.
+      case 'WALLET_CONNECT':
+        return (
+          <>
+            <DialogHeader>
+              <DialogTitle>Verify Wallet Connection</DialogTitle>
+              <DialogDescription>
+                Your signed-in wallet is the proof. Confirm to record it for this task.
+              </DialogDescription>
+            </DialogHeader>
+            {connectionError && (
+              <Alert variant="destructive">
+                <AlertTitle>Verification Error</AlertTitle>
+                <AlertDescription>{connectionError}</AlertDescription>
+              </Alert>
+            )}
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline" disabled={isVerifying}>
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button onClick={handleVerification} disabled={isVerifying}>
+                {isVerifying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Confirm
+              </Button>
+            </DialogFooter>
+          </>
+        )
+
+      // Self-reported task types (no automatic X check yet): the backend attests these for the
+      // signed-in wallet on the participant's word, recorded as 'self-reported' in the audit log.
       case 'SOCIAL_FOLLOW':
       case 'SOCIAL_LIKE':
       case 'SOCIAL_POST':
-      case 'RETWEET':
-      case 'WALLET_CONNECT': {
+      case 'RETWEET': {
         const copy: Record<string, { title: string; instruction: string }> = {
-          SOCIAL_FOLLOW: {
-            title: 'Verify Follow',
-            instruction: 'Follow the account described on the task, then confirm below.',
-          },
-          SOCIAL_LIKE: {
-            title: 'Verify Like',
-            instruction: 'Like the post described on the task, then confirm below.',
-          },
-          SOCIAL_POST: {
-            title: 'Verify Post',
-            instruction: 'Publish the post described on the task, then confirm below.',
-          },
-          RETWEET: {
-            title: 'Verify Repost',
-            instruction: 'Repost the content described on the task, then confirm below.',
-          },
-          WALLET_CONNECT: {
-            title: 'Verify Wallet Connection',
-            instruction: 'Confirm below to record this wallet as connected for this task.',
-          },
+          SOCIAL_FOLLOW: { title: 'Follow on X', instruction: 'Follow the account on X, then come back and confirm.' },
+          SOCIAL_LIKE: { title: 'Like on X', instruction: 'Like the post on X, then come back and confirm.' },
+          SOCIAL_POST: { title: 'Post on X', instruction: 'Publish the post described below on X, then come back and confirm.' },
+          RETWEET: { title: 'Repost on X', instruction: 'Repost the post on X, then come back and confirm.' },
         }
         const { title, instruction } = copy[taskType]
+        // Only validated handles / numeric post ids ever reach the link (see x-intents.ts).
+        const intent = xIntentFor(taskType, parseXTarget(task?.verificationData, task?.description))
+        const unlocked = gateRemaining === 0
         return (
           <>
             <DialogHeader>
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription>{instruction}</DialogDescription>
             </DialogHeader>
-            <div className="flex flex-col items-center py-6 space-y-4">
+            <div className="space-y-4 py-2">
+              {task?.description && <p className="text-sm">{task.description}</p>}
+              <Button asChild variant="outline" className="w-full">
+                <a href={intent.href} target="_blank" rel="noopener noreferrer" onClick={markXOpened}>
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  {intent.label}
+                </a>
+              </Button>
               {connectionError && (
-                <Alert variant="destructive" className="w-full mb-2">
+                <Alert variant="destructive">
                   <AlertTitle>Verification Error</AlertTitle>
                   <AlertDescription>{connectionError}</AlertDescription>
                 </Alert>
               )}
-              <p className="text-sm text-muted-foreground text-center">
-                This task can&apos;t be automatically checked — only confirm once you&apos;ve
-                actually completed it.
+              <p className="text-center text-xs text-muted-foreground">
+                This task is self-reported — it can&apos;t be checked automatically yet. Only confirm
+                once you&apos;ve actually done it.
               </p>
             </div>
             <DialogFooter>
@@ -414,11 +475,13 @@ export function TaskVerificationForm({
                   Cancel
                 </Button>
               </DialogClose>
-              <Button onClick={handleVerification} disabled={isVerifying}>
-                {isVerifying ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                I&apos;ve completed this
+              <Button onClick={handleVerification} disabled={isVerifying || !unlocked}>
+                {isVerifying ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                {gateRemaining === null
+                  ? 'Open X first'
+                  : unlocked
+                    ? "I've done it"
+                    : `I've done it (${Math.ceil(gateRemaining / 1000)}s)`}
               </Button>
             </DialogFooter>
           </>

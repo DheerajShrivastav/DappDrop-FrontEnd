@@ -177,6 +177,8 @@ const taskSchema = z
       .string()
       .min(3, 'Task description must be at least 3 characters long.'),
     verificationData: z.string().optional(),
+    // Optional = participants can skip it and still qualify for the reward (on-chain isOptional).
+    isOptional: z.boolean().optional(),
     discordInviteLink: z.string().optional(),
     telegramInviteLink: z.string().optional(),
     // Humanity Protocol presets for HUMANITY_VERIFICATION tasks (multi-select)
@@ -480,6 +482,7 @@ export default function CreateCampaignPage() {
       tasks: [
         {
           type: 'SOCIAL_FOLLOW',
+          isOptional: true, // self-reported → optional by default
           description: '',
           verificationData: '',
           discordInviteLink: '',
@@ -801,7 +804,7 @@ export default function CreateCampaignPage() {
           type: t.type,
           description: t.description,
           verificationData: t.verificationData || '',
-          isOptional: false,
+          isOptional: t.isOptional ?? false,
         }))
         if (needsAutoHumanityTask) {
           draftTasks.push({
@@ -1267,7 +1270,8 @@ export default function CreateCampaignPage() {
         title: result.title,
         shortDescription: result.shortDescription,
         description: result.description,
-        tasks: result.tasks,
+        // AI tasks get the same default as hand-added ones: self-reported → optional.
+        tasks: result.tasks.map((t) => ({ ...t, isOptional: isSelfReportedTask(t.type) })),
       })
       toast({
         title: '✨ Campaign Drafted!',
@@ -1803,6 +1807,14 @@ export default function CreateCampaignPage() {
               {step === 2 && (
                 <section className="space-y-6 animate-in fade-in-50">
                   <StepHeader title="Tasks" description={steps[1].description} />
+                  {tasks.length > 0 && tasks.every((t) => isSelfReportedTask(t.type)) && (
+                    <p className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                      <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>
+                        Add a verified task (Humanity, Discord or Telegram) to keep bots out.
+                      </span>
+                    </p>
+                  )}
 
                   {/* Discord Bot Warning - Show if Discord tasks exist but bot URL is not configured */}
                   {tasks.some((task) => task.type === 'JOIN_DISCORD') &&
@@ -1870,7 +1882,12 @@ export default function CreateCampaignPage() {
                             <FormItem>
                               <FormLabel>Type</FormLabel>
                               <Select
-                                onValueChange={field.onChange}
+                                onValueChange={(v) => {
+                                  field.onChange(v)
+                                  // Self-reported tasks default to optional (they can't keep bots
+                                  // out); verified ones default to required. The host can override.
+                                  form.setValue(`tasks.${index}.isOptional`, isSelfReportedTask(v))
+                                }}
                                 defaultValue={field.value}
                               >
                                 <FormControl>
@@ -1920,6 +1937,37 @@ export default function CreateCampaignPage() {
                         <p className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
                           <Info className="mt-0.5 h-4 w-4 shrink-0" />
                           <span>{SELF_REPORTED_TASK_NOTE}</span>
+                        </p>
+                      )}
+                      <FormField
+                        control={form.control}
+                        name={`tasks.${index}.isOptional`}
+                        render={({ field }) => (
+                          <FormItem className="flex flex-row items-start gap-3 space-y-0">
+                            <FormControl>
+                              <Checkbox
+                                checked={!!field.value}
+                                onCheckedChange={(v) => field.onChange(v === true)}
+                                className="mt-0.5"
+                              />
+                            </FormControl>
+                            <div className="space-y-0.5">
+                              <FormLabel className="font-normal">Optional</FormLabel>
+                              <p className="text-xs text-muted-foreground">
+                                Participants can skip this task and still qualify for the reward.
+                              </p>
+                            </div>
+                          </FormItem>
+                        )}
+                      />
+                      {isSelfReportedTask(tasks[index].type) && !tasks[index].isOptional && (
+                        <p className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span>
+                            This task is required but self-reported: anyone can confirm it without doing
+                            it, so making it required doesn&apos;t keep bots out. Consider making it
+                            optional.
+                          </span>
                         </p>
                       )}
 
@@ -2497,6 +2545,7 @@ export default function CreateCampaignPage() {
                     onClick={() =>
                       append({
                         type: 'SOCIAL_FOLLOW',
+                        isOptional: true, // self-reported → optional by default
                         description: '',
                         verificationData: '',
                         discordInviteLink: '',
@@ -2917,7 +2966,8 @@ export default function CreateCampaignPage() {
                           doesn&apos;t affect scoring.
                         </FormDescription>
                         {tasks.map((t, i) => (
-                          <div key={i} className="flex items-center justify-between gap-3">
+                          <div key={i} className="space-y-1">
+                          <div className="flex items-center justify-between gap-3">
                             <span className="min-w-0 truncate text-sm text-muted-foreground">
                               [{TASK_TYPE_OPTIONS.find((o) => o.value === t.type)?.label}]{' '}
                               {t.description || '(no description yet)'}
@@ -2933,6 +2983,16 @@ export default function CreateCampaignPage() {
                                 </FormItem>
                               )}
                             />
+                          </div>
+                          {isSelfReportedTask(t.type) && Number(taskPointsWatched?.[i] ?? 0) > 0 && (
+                            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                              <span>
+                                This task is self-reported, so its points can be earned without doing
+                                anything.
+                              </span>
+                            </p>
+                          )}
                           </div>
                         ))}
                         {(form.formState.errors.reward as any)?.taskPoints?.message && (
@@ -3142,7 +3202,12 @@ export default function CreateCampaignPage() {
                                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums">
                                       {i + 1}
                                     </span>
-                                    <span className="min-w-0 flex-1">{task.description}</span>
+                                    <span className="min-w-0 flex-1">
+                                      {task.description}
+                                      {task.isOptional && (
+                                        <span className="ml-1.5 text-xs text-muted-foreground">(optional)</span>
+                                      )}
+                                    </span>
                                     <Badge variant="outline" className="shrink-0 gap-1 font-normal">
                                       <Icon className="h-3 w-3" />
                                       {opt?.label}
