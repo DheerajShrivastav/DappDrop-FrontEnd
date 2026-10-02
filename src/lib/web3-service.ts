@@ -279,6 +279,7 @@ const mapContractDataToCampaign = (
         type: fromOnChainTaskType(Number(task.taskType)) as TaskType,
         description: task.description,
         verificationData: verificationDataString,
+        isOptional: Boolean(task.isOptional),
         discordInviteLink: discordInviteLink || undefined,
       }
     }),

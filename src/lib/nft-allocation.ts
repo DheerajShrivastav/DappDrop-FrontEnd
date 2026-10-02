@@ -2,6 +2,7 @@ import 'server-only'
 
 import { StandardMerkleTree } from '@openzeppelin/merkle-tree'
 import { prisma } from './prisma'
+import { filterQualifyingParticipants } from './reward-qualification'
 import {
   getCampaignByIdWithMetadata,
   getCampaignParticipants,
@@ -83,7 +84,8 @@ export async function proposeNFTAllocation(campaignId: number): Promise<Proposed
   }
 
   const participants = await getCampaignParticipants(campaign)
-  let qualifying = participants.filter((p) => p.tasksCompleted >= totalTasks)
+  // Every REQUIRED task (optional ones don't count) — see reward-qualification.ts.
+  let qualifying = await filterQualifyingParticipants(campaignId, participants)
 
   const excludedForHumanity: string[] = []
   if (humanityGated) {

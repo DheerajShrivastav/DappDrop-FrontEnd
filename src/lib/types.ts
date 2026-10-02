@@ -10,6 +10,9 @@ export type Task = {
   type: TaskType
   description: string
   verificationData?: string
+  /** On-chain isOptional: participants can skip it and still qualify (RPC path only — the
+   * subgraph query doesn't fetch it, so undefined there means "unknown", not "required"). */
+  isOptional?: boolean
   discordInviteLink?: string // For JOIN_DISCORD tasks: the actual invite link for participants to join
   telegramInviteLink?: string // For JOIN_TELEGRAM tasks: the actual invite link for participants to join
   metadata?: {

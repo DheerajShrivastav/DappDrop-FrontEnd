@@ -1029,6 +1029,7 @@ export default function CampaignDetailsPage() {
           taskId={verifyingTaskId}
           taskType={verifyingTaskType}
           campaignId={campaignId}
+          task={campaign?.tasks.find((t) => t.id === verifyingTaskId) ?? null}
           onVerify={async (taskId, taskType, discordData, telegramData) => {
             // handleTaskVerification returns a success boolean for the humanity call sites
             // that need to branch on it; this dialog only needs the side effects, so adapt

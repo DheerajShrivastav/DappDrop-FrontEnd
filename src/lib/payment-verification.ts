@@ -15,13 +15,19 @@ export interface PaymentVerificationResult {
 /**
  * Verify a payment transaction on the blockchain
  * Similar to verifying an ONCHAIN_TX task
+ *
+ * `expectedSender` is the participant claiming the payment (the SIWE session wallet). The payment
+ * must come FROM them: tx.from for native payments, and for ERC-20 both tx.from and the matching
+ * Transfer's `from`. Without this, anyone could submit someone else's payment hash first and take
+ * the credit (transactionHash is unique, so the real payer would then be locked out).
  */
 export async function verifyPaymentTransaction(
   txHash: string,
   expectedRecipient: string,
   expectedAmount: string,
   tokenAddress: string,
-  network: string
+  network: string,
+  expectedSender: string,
 ): Promise<PaymentVerificationResult> {
   const rpcUrl = NETWORK_RPC[network]
   if (!rpcUrl) {
@@ -58,6 +64,14 @@ export async function verifyPaymentTransaction(
       return { verified: false, error: 'Transaction details not found' }
     }
 
+    const sender = expectedSender.toLowerCase()
+    if (tx.from.toLowerCase() !== sender) {
+      return {
+        verified: false,
+        error: 'This payment was sent from a different wallet. Submit a payment sent from your connected wallet.',
+      }
+    }
+
     // Check if native token (ETH/MATIC) or ERC-20
     const isNative =
       tokenAddress === '0x0' || tokenAddress === ethers.ZeroAddress
@@ -90,50 +104,47 @@ export async function verifyPaymentTransaction(
         'event Transfer(address indexed from, address indexed to, uint256 value)',
       ])
 
-      // Find Transfer event in transaction logs
-      const transferLog = receipt.logs.find((log) => {
-        if (log.address.toLowerCase() !== tokenAddress.toLowerCase())
-          return false
-        try {
-          const parsed = erc20Interface.parseLog({
-            topics: log.topics as string[],
-            data: log.data,
-          })
-          return parsed?.name === 'Transfer'
-        } catch {
-          return false
-        }
-      })
+      // Every Transfer of this token in the tx; then look for the one that IS the payment. Taking
+      // the first Transfer log (as before) could pick an unrelated transfer in a multi-step tx.
+      const transfers = receipt.logs
+        .filter((log) => log.address.toLowerCase() === tokenAddress.toLowerCase())
+        .map((log) => {
+          try {
+            const parsed = erc20Interface.parseLog({ topics: log.topics as string[], data: log.data })
+            if (parsed?.name !== 'Transfer') return null
+            const [from, to, value] = parsed.args
+            return { from: String(from).toLowerCase(), to: String(to).toLowerCase(), value: value.toString() }
+          } catch {
+            return null
+          }
+        })
+        .filter((t): t is { from: string; to: string; value: string } => t !== null)
 
-      if (!transferLog) {
+      if (transfers.length === 0) {
         return {
           verified: false,
           error: 'No Transfer event found in transaction',
         }
       }
 
-      const parsed = erc20Interface.parseLog({
-        topics: transferLog.topics as string[],
-        data: transferLog.data,
-      })
-
-      if (!parsed) {
-        return { verified: false, error: 'Failed to parse Transfer event' }
-      }
-
-      const [from, to, value] = parsed.args
-
-      if (to.toLowerCase() !== expectedRecipient.toLowerCase()) {
-        return {
-          verified: false,
-          error: `Wrong recipient: expected ${expectedRecipient}, got ${to}`,
+      const recipient = expectedRecipient.toLowerCase()
+      const match = transfers.find(
+        (t) => t.from === sender && t.to === recipient && t.value === expectedAmount,
+      )
+      if (!match) {
+        const toRecipient = transfers.filter((t) => t.to === recipient)
+        if (toRecipient.length === 0) {
+          return { verified: false, error: `Wrong recipient: expected ${expectedRecipient}` }
         }
-      }
-
-      if (value.toString() !== expectedAmount) {
+        if (!toRecipient.some((t) => t.from === sender)) {
+          return {
+            verified: false,
+            error: 'This payment was sent from a different wallet. Submit a payment sent from your connected wallet.',
+          }
+        }
         return {
           verified: false,
-          error: `Wrong amount: expected ${expectedAmount}, got ${value.toString()}`,
+          error: `Wrong amount: expected ${expectedAmount}, got ${toRecipient.map((t) => t.value).join(', ')}`,
         }
       }
 

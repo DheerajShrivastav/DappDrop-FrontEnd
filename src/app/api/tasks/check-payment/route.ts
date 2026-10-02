@@ -1,22 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { parsePaymentInfo } from '@/lib/payment-verification'
+import { requireSessionWallet, walletMismatchResponse } from '@/lib/task-verification-auth'
 
 /**
- * Check if a user has completed a payment task
+ * Check if the signed-in wallet has completed a payment task
  * Similar to checking Humanity Protocol verification status
+ *
+ * Session-only: it used to answer for any `userAddress`, linking a wallet to its payment tx for
+ * anyone who asked. The query param is now optional and only cross-checked.
  */
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireSessionWallet()
+    if ('response' in auth) return auth.response
+    const userAddress = auth.wallet
+
     const campaignIdParam = request.nextUrl.searchParams.get('campaignId')
     const taskIndexParam = request.nextUrl.searchParams.get('taskIndex')
-    const userAddress = request.nextUrl.searchParams.get('userAddress')
+    const mismatch = walletMismatchResponse(request.nextUrl.searchParams.get('userAddress'), userAddress)
+    if (mismatch) return mismatch
 
-    if (!campaignIdParam || !taskIndexParam || !userAddress) {
+    if (!campaignIdParam || !taskIndexParam) {
       return NextResponse.json(
         {
           error:
-            'Missing required parameters: campaignId, taskIndex, userAddress',
+            'Missing required parameters: campaignId, taskIndex',
         },
         { status: 400 }
       )

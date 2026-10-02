@@ -21,6 +21,8 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
+import { isSelfReportedTask } from '@/lib/task-types'
+import { SelfReportedBadge } from '@/components/self-reported-badge'
 
 // Task-type icons are categorical, not status — kept neutral/monochrome (icon shape
 // alone communicates the type; color is reserved for lifecycle/money state).
@@ -120,7 +122,7 @@ export function TaskList({
           <CardHeader>
             <CardTitle className="font-headline">Tasks to Complete</CardTitle>
             <CardDescription>
-              Complete all tasks to be eligible for rewards
+              Complete all required tasks to be eligible for rewards
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -150,9 +152,17 @@ export function TaskList({
                         <TaskIcon type={task.type} />
                       )}
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold">{task.description}</h4>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        {/* overflow-wrap: a pasted post URL is one unbreakable "word" and used to
+                            push the row past the viewport on phones. */}
+                        <h4 className="min-w-0 font-semibold [overflow-wrap:anywhere]">{task.description}</h4>
+                        {isSelfReportedTask(task.type) && <SelfReportedBadge />}
+                        {task.isOptional && (
+                          <Badge variant="outline" className="h-5 shrink-0 px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
+                            Optional
+                          </Badge>
+                        )}
                         {task.type === 'ONCHAIN_TX' && (
                           <Badge
                             variant="outline"
