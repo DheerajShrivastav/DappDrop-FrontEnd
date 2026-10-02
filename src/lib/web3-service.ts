@@ -2351,6 +2351,9 @@ export const mapContractRevertToMessage = (error: any): string => {
     return 'Token IDs and amounts must have the same number of entries.'
   }
   // --- Cancel ---
+  if (has('Web3Campaigns__NotSelfVerifiable')) {
+    return 'This task is checked by the platform, not completed from your wallet. Use its Verify button.'
+  }
   if (has('Web3Campaigns__CampaignHasParticipants')) {
     return 'Someone has participated in this campaign, so it can no longer be cancelled.'
   }
@@ -2540,17 +2543,11 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       taskIndex,
     })
 
-    // Read the on-chain task type. In v0.6.0, completeTask self-verifies ONLY the two
-    // hold types (ONCHAIN_HOLD_ERC20 = 8, ONCHAIN_HOLD_ERC721 = 9); their in-tx balance
-    // check can make estimateGas fail with "missing revert data" when the RPC doesn't
-    // return custom error data, so those get the manual-gas-limit path below.
-    //
-    // TODO(P1): every OTHER task type (social, discord/telegram, humanity, onchain_tx) is
-    // an ATTESTED task in v0.6.0 — completeTask will revert TaskManagedBySignature for any
-    // index an attestation has touched. They must settle via the backend SIGNER_ROLE service
-    // (verifyTaskCompletionWithSignature), NOT this client call. See docs/GAP_ANALYSIS §3,
-    // docs/DECISIONS_v0.6.0.md Decision 2, PRD FR-T1/FR-T3/BR-V*. This function should narrow
-    // to self-verify hold tasks once the signer service lands.
+    // completeTask self-verifies ONLY the two hold types (ONCHAIN_HOLD_ERC20 = 8,
+    // ONCHAIN_HOLD_ERC721 = 9): the contract checks the balance in the same transaction. Every
+    // other type settles ONLY via a signer attestation (verify-task → verifyTaskCompletionWithSignature);
+    // the contract reverts NotSelfVerifiable for them. So refuse anything else here, before asking
+    // the wallet to sign a transaction that can only fail.
     let taskTypeOnChain: number | null = null
     try {
       const taskData = await contractToRead.getCampaignTask(
@@ -2560,7 +2557,8 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       taskTypeOnChain = Number(taskData.taskType)
       console.log('On-chain task type:', taskTypeOnChain)
     } catch (e) {
-      console.warn('Could not read task type, proceeding with default flow')
+      // Without the type we can't know it's a hold task — don't send blind.
+      throw new Error('Could not read this task from the chain. Please try again.')
     }
 
     // Hold tasks (8/9) may revert during estimateGas without decodable data; handle via:
@@ -2570,9 +2568,14 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
     const isOnChainVerifiedTask =
       taskTypeOnChain === OnChainTaskType.ONCHAIN_HOLD_ERC20 ||
       taskTypeOnChain === OnChainTaskType.ONCHAIN_HOLD_ERC721
+    if (!isOnChainVerifiedTask) {
+      throw new Error(
+        'Only token-holding tasks are completed from your wallet. Use the task\'s Verify button — it is checked and recorded by the platform.',
+      )
+    }
 
     let tx
-    if (isOnChainVerifiedTask) {
+    {
       // For on-chain verified tasks, try staticCall first to detect revert reasons
       try {
         await contractWithSigner.completeTask.staticCall(
@@ -2610,11 +2613,6 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
           throw staticErr
         }
       }
-    } else {
-      tx = await contractWithSigner.completeTask(
-        campaignIdNumber,
-        taskIndex,
-      )
     }
 
     console.log('Transaction sent:', tx.hash)
