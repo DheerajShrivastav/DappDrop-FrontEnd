@@ -6,10 +6,14 @@ import {
 } from '@/lib/verification-service'
 import { isUserVerified } from '@/lib/humanity-service'
 import { prisma } from '@/lib/prisma'
-import { getCampaignById } from '@/lib/web3-service'
-import type { Campaign } from '@/lib/types'
 import { type AttestationEvidence } from '@/lib/signer'
 import { attestAndRespond } from '@/lib/attest-response'
+import { TASK_VERIFICATION_METHOD } from '@/lib/task-types'
+import {
+  requireSessionWallet,
+  resolveCanonicalTask,
+  walletMismatchResponse,
+} from '@/lib/task-verification-auth'
 
 /** Best-effort, never throws — a logging failure must never break the verify-task response
  * itself. No wallet/user identifier stored (P3 CP3 host analytics: aggregated only). */
@@ -28,11 +32,27 @@ async function logVerificationFailure(
   }
 }
 
+/**
+ * POST /api/verify-task — check a task server-side and, on PASS, have the platform signer attest
+ * it for the SIGNED-IN wallet.
+ *
+ * Fail-closed rules (this route makes the signer vouch on-chain, so every one matters):
+ *   - the acting wallet is the SIWE session wallet; a body `userAddress` is only cross-checked
+ *   - the task's type comes from the chain, not the request body
+ *   - each type passes only by its own rule in TASK_VERIFICATION_METHOD; a type without one
+ *     (or that the chain reports but the app doesn't know) is never attested
+ *   - self-reported tasks are attested on the participant's word but recorded as such in the
+ *     attestation audit log (method: 'self-reported'), never dressed up as a real check
+ */
 export async function POST(request: Request) {
   try {
+    const auth = await requireSessionWallet()
+    if ('response' in auth) return auth.response
+    const wallet = auth.wallet
+
     const body = await request.json()
     const {
-      taskType,
+      taskType: claimedTaskType, // informational only — never used to pick the verifier
       campaignId: campaignIdRaw,
       taskId,
       userAddress,
@@ -41,6 +61,9 @@ export async function POST(request: Request) {
       telegramUsername,
       telegramUserId,
     } = body
+
+    const mismatch = walletMismatchResponse(userAddress, wallet)
+    if (mismatch) return mismatch
 
     // Normalize to numbers
     const campaignId =
@@ -56,11 +79,65 @@ export async function POST(request: Request) {
       )
     }
 
+    const canonical = await resolveCanonicalTask(campaignId, taskIndex)
+    if (!canonical.ok) {
+      await logVerificationFailure(campaignId, taskIndex, undefined, 'task_lookup_failed')
+      return NextResponse.json(
+        { success: false, verified: false, message: canonical.message },
+        { status: canonical.status },
+      )
+    }
+    const taskType = canonical.type
+    if (claimedTaskType && claimedTaskType !== taskType) {
+      console.warn('[verify-task] client-sent taskType differs from the on-chain task; using on-chain', {
+        campaignId,
+        taskIndex,
+        claimedTaskType,
+        taskType,
+      })
+    }
+
+    const method = TASK_VERIFICATION_METHOD[taskType]
+    if (method === 'payment') {
+      // Payments are verified (and attested) only by /api/tasks/verify-payment, which checks the
+      // transaction actually came from this wallet.
+      return NextResponse.json(
+        {
+          success: false,
+          verified: false,
+          message: 'Submit your payment transaction to complete this task.',
+        },
+        { status: 400 },
+      )
+    }
+    if (method === 'contract') {
+      return NextResponse.json(
+        {
+          success: false,
+          verified: false,
+          message: 'Holding tasks are verified by the contract itself — complete them from the campaign page.',
+        },
+        { status: 400 },
+      )
+    }
+
+    // Self-reported (Twitter tasks, no automatic X check yet) and WALLET_CONNECT (the session is
+    // the proof). Both attest ONLY for the session wallet; the method is written into the evidence
+    // so the audit log can always tell these apart from a real check. The signer's unique
+    // (campaign, task, participant, version) record keeps it to one attestation per wallet per task.
+    if (method === 'self-reported' || method === 'siwe-session') {
+      return attestAndRespond(campaignId, taskIndex, wallet, {
+        taskType,
+        method,
+        checkedAt: new Date().toISOString(),
+      })
+    }
+
     let isVerified = false
     // Evidence snapshot persisted with the signature (BR-V4 audit log).
     let evidence: AttestationEvidence = { taskType }
 
-    // Get task metadata for Discord/Telegram
+    // Discord / Telegram configuration written by the campaign's host.
     const taskMetadata = await prisma.campaignTaskMetadata.findUnique({
       where: {
         campaignId_taskIndex: {
@@ -70,25 +147,7 @@ export async function POST(request: Request) {
       },
     })
 
-    if (!taskType) {
-      return NextResponse.json(
-        { error: 'taskType is required in the request body' },
-        { status: 400 },
-      )
-    }
-
-    if (!taskType) {
-      return NextResponse.json(
-        { error: 'taskType is required in the request body' },
-        { status: 400 },
-      )
-    }
-
-    // Simple task type detection without heavy validation
-    const isDiscordTask = taskType === 'JOIN_DISCORD'
-    const isTelegramTask = taskType === 'JOIN_TELEGRAM'
-
-    if (isDiscordTask) {
+    if (taskType === 'JOIN_DISCORD') {
       // Discord verification - use stored server ID from dedicated column
       const discordServerId = taskMetadata?.discordServerId
 
@@ -115,11 +174,10 @@ export async function POST(request: Request) {
         checkedAt: new Date().toISOString(),
       }
 
-      // Store verification if successful
-      if (isVerified && userAddress) {
+      if (isVerified) {
         const existingVerification = await prisma.socialVerification.findFirst({
           where: {
-            userAddress: userAddress,
+            userAddress: wallet,
             taskId: `${campaignId}-${taskId}`,
             platform: 'DISCORD',
             isValid: true,
@@ -129,7 +187,7 @@ export async function POST(request: Request) {
         if (!existingVerification) {
           await prisma.socialVerification.create({
             data: {
-              userAddress: userAddress,
+              userAddress: wallet,
               taskId: `${campaignId}-${taskId}`,
               platform: 'DISCORD',
               proofData: {
@@ -145,8 +203,7 @@ export async function POST(request: Request) {
           })
         }
       }
-    } else if (isTelegramTask) {
-      // Basic Telegram verification
+    } else if (taskType === 'JOIN_TELEGRAM') {
       const telegramChatId = taskMetadata?.telegramChatId
       if (!telegramChatId) {
         console.warn('Telegram task missing chat ID metadata', {
@@ -175,11 +232,10 @@ export async function POST(request: Request) {
         checkedAt: new Date().toISOString(),
       }
 
-      // Store verification if successful
-      if (isVerified && userAddress) {
+      if (isVerified) {
         const existingVerification = await prisma.socialVerification.findFirst({
           where: {
-            userAddress: userAddress,
+            userAddress: wallet,
             taskId: `${campaignId}-${taskId}`,
             platform: 'TELEGRAM',
             isValid: true,
@@ -189,7 +245,7 @@ export async function POST(request: Request) {
         if (!existingVerification) {
           await prisma.socialVerification.create({
             data: {
-              userAddress: userAddress,
+              userAddress: wallet,
               taskId: `${campaignId}-${taskId}`,
               platform: 'TELEGRAM',
               proofData: {
@@ -205,149 +261,68 @@ export async function POST(request: Request) {
           })
         }
       }
-    } else {
-      // For HUMANITY_VERIFICATION and other tasks, get canonical task type from campaign data
-      // Get the campaign to determine the actual task type
-      let canonicalTaskType: string | null = null
-      let requiresHumanityVerification = false
-
+    } else if (taskType === 'HUMANITY_VERIFICATION') {
+      // In v2, verification happens via OAuth flow on the client; the callback caches the
+      // result, and this checks it for the SESSION wallet.
       try {
-        const campaign = await getCampaignById(campaignId.toString())
-        if (campaign && campaign.tasks && campaign.tasks[taskIndex]) {
-          canonicalTaskType = campaign.tasks[taskIndex].type
-          requiresHumanityVerification =
-            canonicalTaskType === 'HUMANITY_VERIFICATION'
-        }
-      } catch (error) {
-        console.error(
-          'Error fetching campaign for task type validation:',
-          error,
-        )
-      }
-
-      // Use metadata as override only if canonical type is available
-      const effectiveTaskType = canonicalTaskType || taskMetadata?.taskType
-
-      console.log('Task type validation:', {
-        taskIndex,
-        canonicalTaskType,
-        metadataTaskType: taskMetadata?.taskType,
-        effectiveTaskType,
-        requiresHumanityVerification,
-      })
-
-      if (effectiveTaskType === 'HUMANITY_VERIFICATION' && userAddress) {
-        // In v2, verification happens via OAuth flow on the client.
-        // Here we normally check the cached DB status (set by the OAuth callback).
-        try {
-          let isHuman = await isUserVerified(userAddress)
-
-          // Fallback/Update logic: if they are hitting this to complete the Humanity task,
-          // we can attempt a real-time check in case the OAuth callback hasn't processed yet.
-          if (!isHuman) {
-            await logVerificationFailure(campaignId, taskIndex, effectiveTaskType, 'humanity_pending')
-            return NextResponse.json(
-              {
-                success: false,
-                verified: false,
-                message:
-                  'Humanity verification pending. Please complete the Humanity Protocol verification and try again shortly.',
-                error:
-                  'Humanity verification pending. Please complete the Humanity Protocol verification and try again shortly.',
-              },
-              { status: 403 },
-            )
-
-          }
-
-          // Humanity check passed — fall through to the shared attestation step below.
-          isVerified = isHuman
-          evidence = {
-            taskType: effectiveTaskType,
-            platform: 'humanity',
-            isHuman,
-            checkedAt: new Date().toISOString(),
-          }
-        } catch (error: any) {
-          console.error('Error checking humanity verification:', error)
+        const isHuman = await isUserVerified(wallet)
+        if (!isHuman) {
+          await logVerificationFailure(campaignId, taskIndex, taskType, 'humanity_pending')
           return NextResponse.json(
             {
               success: false,
               verified: false,
-              message: 'Error checking verification status',
-              error: error.message || 'Database error',
+              message:
+                'Humanity verification pending. Please complete the Humanity Protocol verification and try again shortly.',
+              error:
+                'Humanity verification pending. Please complete the Humanity Protocol verification and try again shortly.',
             },
-            { status: 500 },
+            { status: 403 },
           )
         }
-      } else if (
-        effectiveTaskType === 'HUMANITY_VERIFICATION' &&
-        !userAddress
-      ) {
-        // HUMANITY_VERIFICATION requires a wallet address - fail closed
-        await logVerificationFailure(campaignId, taskIndex, effectiveTaskType ?? undefined, 'missing_wallet_address')
-        return NextResponse.json({
-          success: false,
-          verified: false,
-          message: 'Wallet address required for humanity verification',
-          internalError: false,
-        })
-      } else if (requiresHumanityVerification && !effectiveTaskType) {
-        // Canonical task requires humanity verification but metadata is missing/misconfigured - fail closed
-        console.warn(
-          'Missing task type metadata for humanity verification task:',
+        isVerified = true
+        evidence = {
+          taskType,
+          platform: 'humanity',
+          isHuman,
+          checkedAt: new Date().toISOString(),
+        }
+      } catch (error: any) {
+        console.error('Error checking humanity verification:', error)
+        return NextResponse.json(
           {
-            campaignId,
-            taskIndex,
-            canonicalTaskType,
-            metadataTaskType: taskMetadata?.taskType,
-          },
-        )
-        await logVerificationFailure(campaignId, taskIndex, undefined, 'humanity_task_misconfigured')
-        return NextResponse.json({
-          success: false,
-          verified: false,
-          message:
-            'Task configuration error - humanity verification required but not properly configured',
-          internalError: true,
-        })
-      } else {
-        // For non-humanity verification tasks, default to verified only if we have a valid task type
-        if (
-          effectiveTaskType &&
-          effectiveTaskType !== 'HUMANITY_VERIFICATION'
-        ) {
-          isVerified = true
-          evidence = {
-            taskType: effectiveTaskType,
-            method: 'canonical-task-type',
-            checkedAt: new Date().toISOString(),
-          }
-        } else {
-          // Unknown task type - fail closed for security
-          console.warn('Unknown or missing task type - failing closed:', {
-            campaignId,
-            taskIndex,
-            canonicalTaskType,
-            metadataTaskType: taskMetadata?.taskType,
-          })
-          await logVerificationFailure(campaignId, taskIndex, undefined, 'unknown_task_type')
-          return NextResponse.json({
             success: false,
             verified: false,
-            message: 'Unknown task type - verification failed',
-            internalError: true,
-          })
-        }
+            message: 'Error checking verification status',
+            error: error.message || 'Database error',
+          },
+          { status: 500 },
+        )
       }
+    } else {
+      // Unreachable while TASK_VERIFICATION_METHOD and the branches above agree — but if a method
+      // is ever added without a branch here, the task must fail, not pass.
+      console.warn('[verify-task] verifiable type without a verifier branch — failing closed', {
+        campaignId,
+        taskIndex,
+        taskType,
+      })
+      await logVerificationFailure(campaignId, taskIndex, taskType, 'no_verifier')
+      return NextResponse.json({
+        success: false,
+        verified: false,
+        message: 'This task type cannot be verified.',
+        internalError: true,
+      })
     }
 
     if (!isVerified) {
-      const reason = isDiscordTask
-        ? 'discord_not_joined'
-        : isTelegramTask
-          ? 'telegram_not_joined'
-          : 'verification_failed'
+      const reason =
+        taskType === 'JOIN_DISCORD'
+          ? 'discord_not_joined'
+          : taskType === 'JOIN_TELEGRAM'
+            ? 'telegram_not_joined'
+            : 'verification_failed'
       await logVerificationFailure(campaignId, taskIndex, taskType, reason)
       return NextResponse.json({
         success: true,
@@ -356,9 +331,9 @@ export async function POST(request: Request) {
       })
     }
 
-    // PASS → sign (and best-effort submit) the EIP-712 attestation, and return the signature
-    // for self-submit fallback. Hold tasks are rejected inside the signer and never land here.
-    return attestAndRespond(campaignId, taskIndex, userAddress, evidence)
+    // PASS → sign (and best-effort submit) the EIP-712 attestation for the session wallet, and
+    // return the signature for self-submit fallback. Hold tasks are rejected inside the signer.
+    return attestAndRespond(campaignId, taskIndex, wallet, evidence)
   } catch (error: any) {
     console.error('API Error:', error)
     return NextResponse.json(

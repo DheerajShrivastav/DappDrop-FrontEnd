@@ -101,8 +101,9 @@ import { useToast } from '@/hooks/use-toast'
 import { useWallet } from '@/context/wallet-provider'
 import React from 'react'
 import { BrowserProvider } from 'ethers'
-import { signAuthMessage } from '@/lib/wallet-auth'
+import { getSession, signAuthMessage } from '@/lib/wallet-auth'
 import type { TaskType } from '@/lib/types'
+import { isSelfReportedTask, SELF_REPORTED_TASK_NOTE } from '@/lib/task-types'
 import {
   becomeHost,
   createDraftCampaignWithTasks,
@@ -709,6 +710,19 @@ export default function CreateCampaignPage() {
       })
       return
     }
+    // Task settings (Discord server, Telegram chat, payment terms) are saved host-only, which
+    // needs a wallet sign-in session. Check it BEFORE the first transaction: finding out after
+    // the campaign exists would leave it with tasks nobody can verify.
+    const sessionWallet = await getSession()
+    if (!sessionWallet || sessionWallet.toLowerCase() !== address.toLowerCase()) {
+      toast({
+        variant: 'destructive',
+        title: 'Sign in with your wallet first',
+        description:
+          'Reconnect your wallet and approve the sign-in message, then try again. Nothing was sent.',
+      })
+      return
+    }
 
     setIsLoading(true)
     // Tiered settlement has no Merkle tree to filter, so humanity gating for it is enforced by
@@ -950,13 +964,22 @@ export default function CreateCampaignPage() {
         console.warn('Failed to save campaign metadata:', metadataError)
       }
 
-      // Per-task off-chain metadata (Discord/Telegram/Humanity/payment) — unchanged from
-      // the prior flow, still off-chain and orthogonal to the v0.6.0 chain rewrite.
+      // Per-task off-chain metadata (Discord/Telegram/Humanity/payment) — still off-chain and
+      // orthogonal to the v0.6.0 chain rewrite. The route is host-only and fetch() doesn't throw
+      // on a 4xx, so refusals are collected and reported instead of disappearing into a log.
+      const failedTaskSettings: number[] = []
+      const postTaskMetadata = async (taskIndex: number, init: RequestInit) => {
+        const res = await fetch('/api/campaign-task-metadata', init)
+        if (!res.ok) {
+          failedTaskSettings.push(taskIndex)
+          console.warn(`Task ${taskIndex} settings were not saved (HTTP ${res.status})`)
+        }
+      }
       for (let i = 0; i < data.tasks.length; i++) {
         const task = data.tasks[i]
         try {
           if (task.type === 'JOIN_DISCORD' && task.discordInviteLink) {
-            await fetch('/api/campaign-task-metadata', {
+            await postTaskMetadata(i, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -968,7 +991,7 @@ export default function CreateCampaignPage() {
               }),
             })
           } else if (task.type === 'JOIN_TELEGRAM' && task.telegramInviteLink) {
-            await fetch('/api/campaign-task-metadata', {
+            await postTaskMetadata(i, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -981,7 +1004,7 @@ export default function CreateCampaignPage() {
             })
           } else if (task.type === 'HUMANITY_VERIFICATION') {
             const preset = (task as any).humanityPreset
-            await fetch('/api/campaign-task-metadata', {
+            await postTaskMetadata(i, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -997,7 +1020,7 @@ export default function CreateCampaignPage() {
               }),
             })
           } else if (task.type === 'ONCHAIN_TX' && task.paymentRequired) {
-            await fetch('/api/campaign-task-metadata', {
+            await postTaskMetadata(i, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -1018,6 +1041,7 @@ export default function CreateCampaignPage() {
             })
           }
         } catch (e) {
+          failedTaskSettings.push(i)
           console.warn(`Failed to store metadata for task ${i}:`, e)
         }
       }
@@ -1027,7 +1051,7 @@ export default function CreateCampaignPage() {
       // the 'is_human' preset since the host never configured one for a task they didn't add.
       if (needsAutoHumanityTask) {
         try {
-          await fetch('/api/campaign-task-metadata', {
+          await postTaskMetadata(data.tasks.length, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1038,8 +1062,17 @@ export default function CreateCampaignPage() {
             }),
           })
         } catch (e) {
+          failedTaskSettings.push(data.tasks.length)
           console.warn('Failed to store metadata for auto-injected humanity task:', e)
         }
+      }
+      if (failedTaskSettings.length > 0) {
+        toast({
+          variant: 'destructive',
+          title: "Some task settings weren't saved",
+          description: `Task ${failedTaskSettings.map((n) => n + 1).join(', ')} couldn't be configured, so participants can't verify ${failedTaskSettings.length === 1 ? 'it' : 'them'}. Don't open the campaign yet — contact support.`,
+          duration: 15000,
+        })
       }
 
       setCreatedCampaignId(campaignId)
@@ -1880,6 +1913,15 @@ export default function CreateCampaignPage() {
                           )}
                         />
                       </div>
+
+                      {/* Self-reported tasks (Twitter): no automatic check yet, so be upfront with
+                          the host that participants confirm these themselves. */}
+                      {isSelfReportedTask(tasks[index].type) && (
+                        <p className="flex items-start gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+                          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span>{SELF_REPORTED_TASK_NOTE}</span>
+                        </p>
+                      )}
 
                       {tasks[index].type === 'JOIN_DISCORD' && (
                         <div className="space-y-4">

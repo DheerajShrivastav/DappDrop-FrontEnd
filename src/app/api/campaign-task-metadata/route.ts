@@ -1,13 +1,23 @@
 // src/app/api/campaign-task-metadata/route.ts
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireSessionWallet } from '@/lib/task-verification-auth'
+import { HostCheckUnavailableError, requireCampaignHost } from '@/lib/require-host'
 
+/**
+ * POST — write a task's off-chain verification config. HOST-ONLY.
+ *
+ * This decides what verify-task checks against: the Discord server, the Telegram chat, and the
+ * payment recipient/amount. It used to accept writes from anyone, so a participant could point a
+ * campaign's Discord task at their own server (or its payment at themselves, for 1 wei), "pass"
+ * it, and get the signer to attest. Now only the campaign's on-chain host can write it.
+ */
 export async function POST(request: Request) {
-  console.log('🌐 === CAMPAIGN TASK METADATA API CALLED ===')
-
   try {
+    const auth = await requireSessionWallet()
+    if ('response' in auth) return auth.response
+
     const body = await request.json()
-    console.log('📥 Received request body:', JSON.stringify(body, null, 2))
 
     const {
       campaignId: campaignIdRaw,
@@ -39,6 +49,18 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Missing required parameters or invalid campaignId/taskIndex' },
         { status: 400 }
+      )
+    }
+
+    try {
+      await requireCampaignHost(campaignId, auth.wallet)
+    } catch (e) {
+      if (e instanceof HostCheckUnavailableError) {
+        return NextResponse.json({ error: e.message }, { status: 503 })
+      }
+      return NextResponse.json(
+        { error: "Only this campaign's host can change its task settings." },
+        { status: 403 },
       )
     }
 

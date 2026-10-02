@@ -113,3 +113,46 @@ export function fromOnChainTaskType(
   )
   return match ? match[0] : 'SOCIAL_FOLLOW'
 }
+
+/**
+ * How the backend decides a task is done before the platform signer attests it. Every task type
+ * has exactly one rule; a type with no rule is never attested (fail closed).
+ *   - 'self-reported': SOCIAL_FOLLOW / SOCIAL_LIKE / RETWEET / SOCIAL_POST. There is no automatic
+ *     X check yet (proof-by-post is a follow-up), so the participant confirms it themselves. It is
+ *     still only ever attested for the SIWE session wallet, and recorded as self-reported in the
+ *     attestation audit log so it's never mistaken for a real check.
+ *   - 'siwe-session': WALLET_CONNECT. The signed-in session itself proves the wallet is connected.
+ *   - 'bot-membership': JOIN_DISCORD / JOIN_TELEGRAM, checked by the platform bots.
+ *   - 'humanity': HUMANITY_VERIFICATION, checked against Humanity Protocol status.
+ *   - 'payment': ONCHAIN_TX, only via /api/tasks/verify-payment (payment must come from the wallet).
+ *   - 'contract': ONCHAIN_HOLD_*, settled by the contract itself — never attested.
+ */
+export type TaskVerificationMethod =
+  | 'self-reported'
+  | 'siwe-session'
+  | 'bot-membership'
+  | 'humanity'
+  | 'payment'
+  | 'contract'
+
+export const TASK_VERIFICATION_METHOD: Record<TaskType, TaskVerificationMethod> = {
+  SOCIAL_FOLLOW: 'self-reported',
+  SOCIAL_LIKE: 'self-reported',
+  RETWEET: 'self-reported',
+  SOCIAL_POST: 'self-reported',
+  WALLET_CONNECT: 'siwe-session',
+  JOIN_DISCORD: 'bot-membership',
+  JOIN_TELEGRAM: 'bot-membership',
+  HUMANITY_VERIFICATION: 'humanity',
+  ONCHAIN_TX: 'payment',
+  ONCHAIN_HOLD_ERC20: 'contract',
+  ONCHAIN_HOLD_ERC721: 'contract',
+}
+
+export function isSelfReportedTask(type: TaskType | string | undefined | null): boolean {
+  return !!type && TASK_VERIFICATION_METHOD[type as TaskType] === 'self-reported'
+}
+
+/** Shown to hosts under a self-reported task in the wizard. */
+export const SELF_REPORTED_TASK_NOTE =
+  'Automatic verification is coming soon. For now participants confirm this task themselves.'

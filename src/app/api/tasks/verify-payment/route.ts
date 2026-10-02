@@ -6,15 +6,41 @@ import {
 } from '@/lib/payment-verification'
 import { attestAndRespond } from '@/lib/attest-response'
 import { hasCompletedTaskOnChain } from '@/lib/web3-service'
+import {
+  requireSessionWallet,
+  resolveCanonicalTask,
+  walletMismatchResponse,
+} from '@/lib/task-verification-auth'
 
 /**
  * Verify payment transaction for a task
  * Similar to verifying ONCHAIN_TX or Humanity Protocol
+ *
+ * The participant is the SIWE session wallet (a body `userAddress` is only cross-checked), the
+ * task must really be ONCHAIN_TX on-chain, and the payment must have been SENT by that wallet.
  */
 export async function POST(request: NextRequest) {
   try {
-    const { campaignId: campaignIdRaw, taskIndex: taskIndexRaw, transactionHash, userAddress } =
-      await request.json()
+    const auth = await requireSessionWallet()
+    if ('response' in auth) return auth.response
+    const userAddress = auth.wallet
+
+    const {
+      campaignId: campaignIdRaw,
+      taskIndex: taskIndexRaw,
+      transactionHash: transactionHashRaw,
+      userAddress: claimedAddress,
+    } = await request.json()
+
+    // One canonical spelling. Hashes are case-insensitive hex, but the "already used" check and the
+    // unique constraint compare strings — "0xAB…" and "0xab…" used to count as two payments.
+    const transactionHash =
+      typeof transactionHashRaw === 'string' && /^0x[0-9a-fA-F]{64}$/.test(transactionHashRaw.trim())
+        ? transactionHashRaw.trim().toLowerCase()
+        : null
+
+    const mismatch = walletMismatchResponse(claimedAddress, userAddress)
+    if (mismatch) return mismatch
 
     // Normalize to numbers
     const campaignId = typeof campaignIdRaw === 'number' ? campaignIdRaw : parseInt(campaignIdRaw, 10)
@@ -33,12 +59,24 @@ export async function POST(request: NextRequest) {
       isNaN(campaignId) ||
       taskIndex === undefined ||
       isNaN(taskIndex) ||
-      !transactionHash ||
-      !userAddress
+      !transactionHash
     ) {
       return NextResponse.json(
-        { error: 'Missing required parameters or invalid campaignId/taskIndex' },
+        { error: 'Missing or invalid parameters (campaignId, taskIndex, transactionHash)' },
         { status: 400 }
+      )
+    }
+
+    // Only an ONCHAIN_TX task can be completed by a payment. Without this, payment metadata on any
+    // task index (e.g. a Discord task) would turn a payment into an attestation for that task.
+    const canonical = await resolveCanonicalTask(campaignId, taskIndex)
+    if (!canonical.ok) {
+      return NextResponse.json({ verified: false, error: canonical.message }, { status: canonical.status })
+    }
+    if (canonical.type !== 'ONCHAIN_TX') {
+      return NextResponse.json(
+        { verified: false, error: 'This task is not a payment task.' },
+        { status: 400 },
       )
     }
 
@@ -140,7 +178,8 @@ export async function POST(request: NextRequest) {
       paymentInfo.paymentRecipient,
       paymentInfo.amount,
       paymentInfo.tokenAddress,
-      paymentInfo.network
+      paymentInfo.network,
+      userAddress, // the payment must come FROM the signed-in wallet
     )
 
     if (!verification.verified) {
