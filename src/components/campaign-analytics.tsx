@@ -1,5 +1,7 @@
 'use client'
 
+import { useEffect, useState } from 'react'
+
 import Link from 'next/link'
 import { Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -37,6 +39,22 @@ export function CampaignAnalytics({
   participantAddresses,
   isLoading,
 }: CampaignAnalyticsProps) {
+  // Participants' self-entered X handles, from a host-only route — for spot-checking
+  // self-reported tasks. Unverified; labelled so. (Before any early return: hook rules.)
+  const [xHandles, setXHandles] = useState<Record<string, string>>({})
+  const addressKey = participants.map((p) => p.address.toLowerCase()).sort().join(',')
+  useEffect(() => {
+    if (!addressKey) return
+    let cancelled = false
+    fetch(`/api/campaigns/${campaign.id}/participant-x-handles?addresses=${encodeURIComponent(addressKey)}`, { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : { handles: {} }))
+      .then((d) => !cancelled && setXHandles(d.handles ?? {}))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [campaign.id, addressKey])
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-40">
@@ -133,6 +151,9 @@ export function CampaignAnalytics({
           <TableHeader>
             <TableRow>
               <TableHead>Participant Address</TableHead>
+              <TableHead>
+                X handle <span className="font-normal text-muted-foreground">(unverified)</span>
+              </TableHead>
               <TableHead className="text-center">Tasks Completed</TableHead>
               <TableHead className="text-center">Reward Claimed</TableHead>
             </TableRow>
@@ -142,6 +163,20 @@ export function CampaignAnalytics({
               <TableRow key={p.address}>
                 <TableCell className="font-mono">
                   {truncateAddress(p.address)}
+                </TableCell>
+                <TableCell>
+                  {xHandles[p.address.toLowerCase()] ? (
+                    <a
+                      href={`https://x.com/${xHandles[p.address.toLowerCase()]}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline-offset-2 hover:underline"
+                    >
+                      @{xHandles[p.address.toLowerCase()]}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-center">
                   {p.tasksCompleted} / {campaign.tasks.length}

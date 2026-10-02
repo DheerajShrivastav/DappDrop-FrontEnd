@@ -117,10 +117,12 @@ export function fromOnChainTaskType(
 /**
  * How the backend decides a task is done before the platform signer attests it. Every task type
  * has exactly one rule; a type with no rule is never attested (fail closed).
- *   - 'self-reported': SOCIAL_FOLLOW / SOCIAL_LIKE / RETWEET / SOCIAL_POST. There is no automatic
- *     X check yet (proof-by-post is a follow-up), so the participant confirms it themselves. It is
+ *   - 'self-reported': SOCIAL_FOLLOW / SOCIAL_LIKE / RETWEET. There is no automatic X check for
+ *     these, so the participant confirms it themselves. It is
  *     still only ever attested for the SIWE session wallet, and recorded as self-reported in the
  *     attestation audit log so it's never mistaken for a real check.
+ *   - 'proof-by-post': SOCIAL_POST. The participant posts their personal code (+ the host's
+ *     required text) and we check the public post via X's oEmbed, including its real author.
  *   - 'siwe-session': WALLET_CONNECT. The signed-in session itself proves the wallet is connected.
  *   - 'bot-membership': JOIN_DISCORD / JOIN_TELEGRAM, checked by the platform bots.
  *   - 'humanity': HUMANITY_VERIFICATION, checked against Humanity Protocol status.
@@ -129,6 +131,7 @@ export function fromOnChainTaskType(
  */
 export type TaskVerificationMethod =
   | 'self-reported'
+  | 'proof-by-post'
   | 'siwe-session'
   | 'bot-membership'
   | 'humanity'
@@ -139,7 +142,7 @@ export const TASK_VERIFICATION_METHOD: Record<TaskType, TaskVerificationMethod> 
   SOCIAL_FOLLOW: 'self-reported',
   SOCIAL_LIKE: 'self-reported',
   RETWEET: 'self-reported',
-  SOCIAL_POST: 'self-reported',
+  SOCIAL_POST: 'proof-by-post',
   WALLET_CONNECT: 'siwe-session',
   JOIN_DISCORD: 'bot-membership',
   JOIN_TELEGRAM: 'bot-membership',

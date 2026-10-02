@@ -257,6 +257,7 @@ export default function CampaignDetailsPage() {
   const handleTaskVerification = async (
     taskId: string,
     taskType: TaskType['type'],
+    extra?: { postUrl?: string },
   ) => {
     if (!isConnected || !address || !campaign) {
       toast({
@@ -303,6 +304,7 @@ export default function CampaignDetailsPage() {
           campaignId,
           taskId,
           userAddress: address,
+          postUrl: extra?.postUrl, // SOCIAL_POST only
           // No Discord/Telegram identity here: the server checks the account linked to this
           // wallet (it ignores any ID a client sends).
         }),
@@ -912,11 +914,11 @@ export default function CampaignDetailsPage() {
           taskType={verifyingTaskType}
           campaignId={campaignId}
           task={campaign?.tasks.find((t) => t.id === verifyingTaskId) ?? null}
-          onVerify={async (taskId, taskType) => {
+          onVerify={async (taskId, taskType, extra) => {
             // handleTaskVerification returns a success boolean for the humanity call sites
             // that need to branch on it; this dialog only needs the side effects, so adapt
             // to the Promise<void> shape the form expects.
-            await handleTaskVerification(taskId, taskType)
+            await handleTaskVerification(taskId, taskType, extra)
           }}
         />
       )}
