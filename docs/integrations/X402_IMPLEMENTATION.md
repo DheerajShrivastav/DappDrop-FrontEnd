@@ -172,8 +172,8 @@ const txHash = await completePaymentTask(
   taskIndex // Task index
 )
 
-// After payment is verified, complete the task on-chain
-await completeTask(campaignId, taskIndex)
+// No completeTask call: a verified payment is attested by the platform signer for the signed-in
+// wallet (verify-payment → attestation). Non-hold tasks settle only via signer attestation.
 ```
 
 ### Manual Payment Flow (Step by Step)
@@ -192,11 +192,10 @@ if (status.paymentRequired && !status.verified) {
   // 2. Send payment
   const txHash = await sendPaymentTransaction(provider, status.paymentInfo)
 
-  // 3. Verify with server
+  // 3. Verify with server — the payment must be sent from the signed-in wallet. On success the
+  //    server's signer attests the task (submitted by the backend, or returned for the client to
+  //    submit via verifyTaskCompletionWithSignature). There is no completeTask step.
   await verifyPaymentTransaction(campaignId, taskIndex, txHash, userAddress)
-
-  // 4. Complete task on-chain
-  await completeTask(campaignId, taskIndex)
 }
 ```
 

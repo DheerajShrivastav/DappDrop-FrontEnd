@@ -103,9 +103,13 @@ longer writes task completions for these.**
 
 ## 3. Task verification (BR-V*, FR-T1/T3)
 
-**Current:** `POST /api/verify-task` checks Discord/Telegram/Humanity and returns
-`{isVerified}`; the client then calls `completeTask` from the user's wallet to record it.
+**At the time of this analysis:** `POST /api/verify-task` checked Discord/Telegram/Humanity and
+returned `{isVerified}`; the client then called `completeTask` from the user's wallet to record it.
 No EIP-712 signing anywhere; no `SIGNER_ROLE` key handling.
+
+**Now:** non-hold tasks settle only via signer attestation (verify-task / verify-payment →
+`verifyTaskCompletionWithSignature`, for the SIWE session wallet). `completeTask` is used for
+`ONCHAIN_HOLD_*` only; the contract reverts `NotSelfVerifiable` for every other type.
 
 **Required (v0.6.0):**
 - Backend verifies, reads `getTaskAttestationVersion(campaignId, participant, taskIndex)`,
