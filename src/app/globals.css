@@ -341,3 +341,8 @@
         .lp-link:hover { text-decoration-thickness: 2px; }
     }
 }
+
+/* S1-02: the phone menu sheet's backdrop. */
+.lp-menu::backdrop {
+    background: rgb(23 23 23 / 0.45);
+}
