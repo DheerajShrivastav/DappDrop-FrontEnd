@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { network } from '@/config/landing'
 import { Hero } from '@/components/landing/hero'
 import { ProofSlot } from '@/components/landing/proof-slot'
+import { Payouts } from '@/components/landing/payouts'
 import { StickyStartBar } from '@/components/landing/sticky-start-bar'
 
 // S1-04: the landing page is a server component and fully static (○ in the build output). Every
@@ -19,6 +20,7 @@ export default function Home() {
     <>
       <Hero />
       <ProofSlot />
+      <Payouts />
       <StickyStartBar helper={network.testnet ? `${network.name} · no platform fee` : 'No platform fee during beta'} />
     </>
   )

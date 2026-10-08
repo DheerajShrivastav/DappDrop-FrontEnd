@@ -27,7 +27,7 @@ export function Hero() {
     : 'No platform fee during beta'
 
   return (
-    <section aria-labelledby="hero-title" data-section="hero" className="lp-container pb-12 pt-8 lg:pb-16 lg:pt-16">
+    <section aria-labelledby="hero-title" data-section="hero" className="lp-container pb-8 pt-7 lg:pb-16 lg:pt-16">
       <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="lg:col-span-7">
           <p className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">

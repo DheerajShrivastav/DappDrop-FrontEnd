@@ -52,6 +52,9 @@ export const network = {
   ...networkInfo,
   /** Entrypoint (Web3Campaigns) address: from the app config, which follows the deployment. */
   entrypoint: appConfig.addresses.entrypoint,
+  /** Global default tier (OnChainRewardModule) and NFT settlement modules, from the app config. */
+  rewardModule: appConfig.addresses.onChainRewardModule,
+  nftModule: appConfig.addresses.nftSettlementModule,
   /** How many contracts make up the deployed suite (entrypoint + reward module + NFT module + lib). */
   deployedContracts: 4,
 } as const

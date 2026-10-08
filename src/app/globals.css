@@ -445,3 +445,40 @@
 .slip-toggle[open] .slip-show {
     display: none;
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Pass 2: the ink band (#start + footer, continuous) and shared section helpers.
+   On ink: paper / paper-2 text, signal-on-ink for links and focus. Never ink-3 or signal here.
+   --------------------------------------------------------------------------------------------- */
+.lp-ink {
+    background: var(--ink);
+    color: var(--paper);
+}
+.lp-ink :focus-visible {
+    outline-color: var(--signal-on-ink);
+}
+.lp-ink .lp-link {
+    color: var(--paper);
+    text-decoration-color: var(--signal-on-ink);
+}
+
+/* :target highlight for linkable blocks (#can-cant, FAQ items). */
+.lp-target:target {
+    outline: 2px solid var(--signal);
+    outline-offset: 6px;
+}
+
+/* Disclosure markers: our own, so the summary can be styled consistently. */
+.lp-details > summary {
+    list-style: none;
+    cursor: pointer;
+}
+.lp-details > summary::-webkit-details-marker {
+    display: none;
+}
+.lp-details > summary .lp-chevron {
+    transition: transform var(--dur-short) var(--ease-out);
+}
+.lp-details[open] > summary .lp-chevron {
+    transform: rotate(90deg);
+}

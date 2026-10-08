@@ -18,7 +18,7 @@
     "webhooks:dry-run": "tsx worker/webhook-dispatcher.ts --dry-run",
     "webhooks:loop": "tsx worker/webhook-dispatcher.ts --loop",
     "test:claims": "tsx --test tests/landing/claims-denylist.spec.ts",
-    "test:unit": "tsx --test src/config/claims.test.ts",
+    "test:unit": "tsx --test src/config/*.test.ts",
     "test:gates": "playwright test",
     "check:bundle": "node scripts/check-landing-bundle.mjs",
     "check:contrast": "node scripts/contrast-check.mjs"
