@@ -1,4 +1,5 @@
 // Server Component — no client hooks needed
+import { AppFonts } from '@/app/_fonts/app-fonts'
 import type {ElementType} from 'react'
 import { format } from 'date-fns'
 import {
@@ -439,6 +440,7 @@ export default function ChangelogPage() {
 
   return (
     <div className="bg-background text-foreground">
+      <AppFonts />
       <section className="bg-card border-b border-primary/20">
         <div className="container mx-auto px-4 py-20 text-center">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tighter">

@@ -1,12 +1,14 @@
 
 
 
+import { AppFonts } from '@/app/_fonts/app-fonts'
 import { CheckCircle, Gift, PlusCircle, Rocket, Users, Zap, ShieldCheck, ShieldOff, Bot } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 export default function AboutPage() {
   return (
     <div className="bg-background text-foreground">
+      <AppFonts />
       <section className="bg-card border-b border-primary/20">
         <div className="container mx-auto px-4 py-20 text-center">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tighter">

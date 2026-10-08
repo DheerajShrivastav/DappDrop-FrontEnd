@@ -19,8 +19,11 @@ export default {
         },
         extend: {
             fontFamily: {
-                body: ['var(--font-inter)', 'sans-serif'],
-                headline: ['var(--font-space-grotesk)', 'var(--font-inter)', 'sans-serif'],
+                // Each var() carries its own fallback: the app fonts load only on app routes and
+                // the older marketing pages (src/app/_fonts/app-fonts.tsx). Without a fallback an
+                // undefined variable would invalidate the whole font-family declaration.
+                body: ['var(--font-inter, ui-sans-serif)', 'system-ui', '-apple-system', '"Segoe UI"', 'Roboto', 'sans-serif'],
+                headline: ['var(--font-space-grotesk, var(--font-inter, ui-sans-serif))', 'system-ui', 'sans-serif'],
                 code: ['monospace'],
             },
             colors: {

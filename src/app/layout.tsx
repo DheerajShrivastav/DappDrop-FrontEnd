@@ -1,21 +1,11 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { Toaster } from '@/components/ui/toaster';
-import { Inter, Space_Grotesk } from 'next/font/google'
-import { MotionConfig } from 'framer-motion'
 
-const inter = Inter({
-    subsets: ['latin'],
-    display: 'swap',
-    variable: '--font-inter',
-})
-
-const spaceGrotesk = Space_Grotesk({
-    subsets: ['latin'],
-    display: 'swap',
-    variable: '--font-space-grotesk',
-})
-
+// The root layout is deliberately thin: it renders on every route, including the landing page,
+// which has a hard JS and font budget. App-only pieces live where they're used:
+// - Inter / Space Grotesk: src/app/_fonts/app-fonts.tsx, rendered by (app)/layout and the
+//   about/changelog pages;
+// - framer-motion's MotionConfig and the Toaster: (app)/layout.tsx.
 export const metadata: Metadata = {
     title: 'DappDrop: Web3 quest campaigns with rewards in on-chain escrow',
     description:
@@ -33,15 +23,9 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`} style={{ scrollBehavior: 'smooth' }} suppressHydrationWarning>
+        <html lang="en" suppressHydrationWarning>
             <body className="font-body antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
-                {/* Global reduced-motion gate: every framer-motion animation in the app
-                    automatically collapses to instant when the user prefers reduced motion,
-                    without needing to thread useReducedMotion() through each component. */}
-                <MotionConfig reducedMotion="user">
-                    {children}
-                </MotionConfig>
-                <Toaster />
+                {children}
             </body>
         </html>
     );
