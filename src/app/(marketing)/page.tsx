@@ -6,6 +6,8 @@ import { Payouts } from '@/components/landing/payouts'
 import { HowSteps } from '@/components/landing/how-steps'
 import { TaskMatrix } from '@/components/landing/task-matrix'
 import { Security } from '@/components/landing/security'
+import { Participants } from '@/components/landing/participants'
+import { Pricing } from '@/components/landing/pricing'
 import { HashDetailsOpener } from '@/components/landing/hash-details-opener'
 import { StickyStartBar } from '@/components/landing/sticky-start-bar'
 
@@ -28,6 +30,8 @@ export default function Home() {
       <HowSteps />
       <TaskMatrix />
       <Security />
+      <Participants />
+      <Pricing />
       <HashDetailsOpener />
       <StickyStartBar helper={network.testnet ? `${network.name} · no platform fee` : 'No platform fee during beta'} />
     </>
