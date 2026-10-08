@@ -74,7 +74,7 @@ export default function Home() {
               asChild
               className="bg-primary hover:bg-primary/90 text-white shadow-elevated h-14 px-10 text-lg font-semibold rounded-xl interactive-lift"
             >
-              <Link href="/campaigns">Explore Campaigns</Link>
+              <Link prefetch={false} href="/campaigns">Explore Campaigns</Link>
             </Button>
             <Button
               size="lg"
@@ -82,7 +82,7 @@ export default function Home() {
               asChild
               className="h-14 px-10 text-lg font-semibold border-2 border-slate-200 hover:border-primary hover:bg-slate-50 hover:text-primary rounded-xl interactive-lift"
             >
-              <Link href="/create-campaign">
+              <Link prefetch={false} href="/create-campaign">
                 <PlusCircle className="mr-2 h-5 w-5" />
                 Create Campaign
               </Link>

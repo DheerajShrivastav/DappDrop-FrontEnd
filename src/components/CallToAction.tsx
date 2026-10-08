@@ -50,7 +50,7 @@ export function CallToAction() {
                         asChild
                         className="bg-white text-slate-900 hover:bg-slate-100 hover:text-primary shadow-lg hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] h-14 px-10 text-lg font-bold rounded-xl transition-all duration-300 transform hover:scale-105"
                     >
-                        <Link href="/create-campaign">
+                        <Link prefetch={false} href="/create-campaign">
                             <PlusCircle className="mr-2 h-5 w-5" />
                             Create Campaign
                         </Link>
