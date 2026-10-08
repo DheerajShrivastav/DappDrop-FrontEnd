@@ -17,13 +17,24 @@ const CONTRACTS_REPO = 'https://github.com/DheerajShrivastav/Dapp-Drop-Smart-Con
 
 const footerLinkClass = 'text-slate-300 hover:text-white text-sm transition-colors duration-200'
 
-/** Internal routes go through next/link (never prefetched); external URLs are a plain new-tab <a>. */
-function FooterLink({ href, children }: { href: string; children: React.ReactNode }) {
+/**
+ * Internal routes go through next/link (never prefetched) on app pages; on marketing pages
+ * (`plain`) they're plain <a>, which keeps next/link's client chunk off the landing page.
+ * External URLs are always a plain new-tab <a>.
+ */
+function FooterLink({ href, plain, children }: { href: string; plain?: boolean; children: React.ReactNode }) {
     if (/^https?:\/\//.test(href)) {
         return (
             <a href={href} target="_blank" rel="noopener noreferrer" className={footerLinkClass}>
                 {children}
                 <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+        )
+    }
+    if (plain) {
+        return (
+            <a href={href} className={footerLinkClass}>
+                {children}
             </a>
         )
     }
@@ -52,14 +63,14 @@ const footerNavigation = {
     ],
 }
 
-function FooterColumn({ title, items }: { title: string; items: { name: string; href: string }[] }) {
+function FooterColumn({ title, items, plain }: { title: string; items: { name: string; href: string }[]; plain?: boolean }) {
     return (
         <nav aria-label={title}>
             <h2 className="text-white font-semibold text-sm uppercase tracking-wider mb-4">{title}</h2>
             <ul className="space-y-3">
                 {items.map((item) => (
                     <li key={item.name}>
-                        <FooterLink href={item.href}>{item.name}</FooterLink>
+                        <FooterLink href={item.href} plain={plain}>{item.name}</FooterLink>
                     </li>
                 ))}
             </ul>
@@ -67,24 +78,25 @@ function FooterColumn({ title, items }: { title: string; items: { name: string; 
     )
 }
 
-export default function Footer() {
+/** `plain`: render internal links as plain <a> (marketing pages). */
+export default function Footer({ plain = false }: { plain?: boolean }) {
     const network = chainName(config.chainId)
     return (
         <footer className="bg-slate-900 border-t border-slate-800">
             <div className="container mx-auto px-4 py-16">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 lg:gap-8">
                     <div className="lg:col-span-1">
-                        <Link href="/" prefetch={false} className="inline-block mb-4 font-headline font-bold text-xl text-white">
-                            DappDrop
-                        </Link>
+                        <FooterLink href="/" plain={plain}>
+                            <span className="inline-block mb-4 font-headline font-bold text-xl text-white">DappDrop</span>
+                        </FooterLink>
                         <p className="text-white font-medium text-sm mb-3">Quest campaigns, settled on-chain.</p>
                         <p className="text-slate-300 text-sm leading-relaxed">
                             Public beta on {network} testnet. Not audited yet.
                         </p>
                     </div>
-                    <FooterColumn title="Product" items={footerNavigation.product} />
-                    <FooterColumn title="Resources" items={footerNavigation.resources} />
-                    <FooterColumn title="For developers" items={footerNavigation.developers} />
+                    <FooterColumn title="Product" items={footerNavigation.product} plain={plain} />
+                    <FooterColumn title="Resources" items={footerNavigation.resources} plain={plain} />
+                    <FooterColumn title="For developers" items={footerNavigation.developers} plain={plain} />
                 </div>
             </div>
 

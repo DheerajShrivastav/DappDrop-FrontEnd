@@ -23,7 +23,7 @@ export default function MarketingLayout({
             <main id="main" tabIndex={-1} className="flex-grow outline-none">
                 {children}
             </main>
-            <Footer />
+            <Footer plain />
             <Analytics />
         </div>
     );
