@@ -14,7 +14,8 @@ export function StatusStrip() {
       : null
 
   return (
-    <div className="border-b border-rule bg-sunk text-ink">
+    // A labelled region, so the strip sits in a landmark like everything else (axe "region").
+    <section aria-label="Beta status" className="border-b border-rule bg-sunk text-ink">
       <div className="lp-container flex min-h-[31px] items-center justify-center py-[5px] text-center text-[0.8125rem] leading-5">
         {/* Phone: one line at 320 px. */}
         <p className="md:hidden">
@@ -32,6 +33,6 @@ export function StatusStrip() {
           </a>
         </p>
       </div>
-    </div>
+    </section>
   )
 }

@@ -43,10 +43,15 @@ export function Hero() {
             Quest campaigns with the reward locked in up front.
           </h1>
 
-          <p className="mt-5 max-w-[38rem] text-lead text-ink-2">
-            In DappDrop you fund the escrow before your campaign opens. Reward lists are public for 24 hours before
-            claims open, and you can take back whatever isn&apos;t claimed.
-          </p>
+          {/* Two sentences, two elements: on a phone one 5-line paragraph out-sizes the H1 and
+              steals the LCP (the H1 must be the LCP element). It reads as one paragraph. */}
+          <div className="mt-5 max-w-[38rem] text-lead text-ink-2">
+            <p>In DappDrop you fund the escrow before your campaign opens.</p>
+            <p>
+              Reward lists are public for 24 hours before claims open, and you can take back whatever isn&apos;t
+              claimed.
+            </p>
+          </div>
 
           <div className="mt-7">
             <a id="hero-cta" href="/#start" className={`${primaryButton} w-full sm:w-auto`} data-cta="hero_primary" data-loc="hero">

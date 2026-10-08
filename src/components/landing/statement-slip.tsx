@@ -118,7 +118,10 @@ export function StatementSlip() {
             <dd className="mt-1.5">
               <span className="flex flex-wrap gap-1.5">
                 {EXAMPLE_WALLETS.map((w) => (
-                  <span key={w} className="rounded bg-sunk px-1.5 py-0.5 font-mono text-[0.8125rem] text-ink" data-b="wallet">
+                  <span key={w} className="relative isolate rounded px-1.5 py-0.5 font-mono text-[0.8125rem] text-ink">
+                    {/* The chip's fill is its own layer, so the trace animates the fill, never
+                        the text's opacity (text keeps full contrast throughout). */}
+                    <span className="slip-fill" aria-hidden="true" data-b="wallet" />
                     {w}
                   </span>
                 ))}

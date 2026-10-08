@@ -8,6 +8,8 @@ import { track } from '@/lib/track'
  *
  * - The rest state is the completed, server-rendered slip; this only highlights it.
  * - Starts once, after #slip has been ≥ 50% visible for 500 ms. WAAPI, transform/opacity only.
+ * - Text is never faded: beats move layers (scale, a fill, a rule, a glow), so contrast holds
+ *   at every frame.
  * - Beats (Stage 2, 5 beats, 5.0 s): total stamps 0.8 → task ticks 1.0 (the self-reported chip
  *   stays still) → 24 h sweep 1.6 → wallet chips fill 0.9 → reclaim glows once 0.7.
  *   Stage 1 (stage=4) drops the task-tick beat: 4.0 s.
@@ -24,9 +26,9 @@ const LOCK =
   'linear(0,.057,.188,.344,.498,.635,.749,.837,.903,.949,.98,.999,1.009,1.014,1.015,1.014,1.012,1.01,1.008,1.005,1.004,1.002,1.001,1.001,1)'
 const BEATS: Beat[] = [
   ['[data-b="total"]', [{ transform: 'scale(1)' }, { transform: 'scale(.98)' }, { transform: 'scale(1)' }], 800, 0, LOCK],
-  ['[data-b="tick"]', [{ opacity: 0.35, transform: 'scale(.96)' }, { opacity: 1, transform: 'none' }], 400, 120],
+  ['[data-b="tick"]', [{ transform: 'scale(.94)' }, { transform: 'scale(1.03)' }, { transform: 'none' }], 400, 120],
   ['.slip-sweep', [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], 1600, 0, 'cubic-bezier(.65,0,.35,1)'],
-  ['[data-b="wallet"]', [{ opacity: 0.25 }, { opacity: 1 }], 450, 150],
+  ['[data-b="wallet"]', [{ transform: 'scaleX(0)' }, { transform: 'scaleX(1)' }], 450, 150],
   ['.slip-glow', [{ opacity: 0 }, { opacity: 1 }, { opacity: 0 }], 700, 0],
 ]
 // Beat lengths on the timeline (ms): 0.8 / 1.0 / 1.6 / 0.9 / 0.7.
