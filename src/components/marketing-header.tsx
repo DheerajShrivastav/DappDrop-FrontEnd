@@ -19,7 +19,7 @@ export default function MarketingHeader() {
       <div className="lp-container flex h-16 items-center gap-2 sm:gap-3">
         {/* Plain <a> everywhere in the marketing chrome: nothing to prefetch, and it keeps
             next/link's client chunk (~3.4 KB gz) off the landing page. */}
-        <a href="/" className="flex min-w-0 shrink items-baseline gap-3 text-ink" aria-label="DappDrop home">
+        <a href="/" className="flex min-w-0 shrink items-baseline gap-3 text-ink">
           <Wordmark className="whitespace-nowrap" />
           <span className="hidden whitespace-nowrap font-mono text-eyebrow uppercase text-ink-3 xl:inline">
             Quest campaigns, settled on-chain

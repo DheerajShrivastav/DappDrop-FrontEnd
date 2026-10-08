@@ -3,8 +3,9 @@ import { explorerCodeUrl, network, repos, securityBuyerSummary } from '@/config/
 
 /**
  * S1-07: the proof row (plan §2.2): four checkable artefacts, no counts of users or money.
- * No H2; the list is labelled "Check our work". Each chip is one link whose accessible name
- * says where it goes and ends "(opens in a new tab)" (an aria-label, not nested spans).
+ * No H2; the list is labelled "Check our work". Each chip is one link whose accessible name is
+ * its visible text plus where it goes, ending "(opens in a new tab)". (The plan asked for an
+ * aria-label; axe 4.14's label-in-name check rejects that here, so it's an sr-only suffix.)
  * Later, BB-01's ledger rows render in this same slot (mainnet threshold only).
  *
  * Chip 3's number and link come from the same ref (F59): the deployed tag when it's set; until
@@ -14,8 +15,7 @@ const CONTRACTS_BRANCH = 'dev'
 
 type Chip = { id: string; title: string; detail: string; href: string; dest: string }
 
-/** Accessible name = the visible text (WCAG 2.5.3) + where the link goes + the new-tab note. */
-const nameOf = (c: Chip) => `${c.title}, ${c.detail.replace(/ ↗$/, '').replace(/ · /g, ', ')}. Opens ${c.dest} (opens in a new tab)`
+
 
 function chips(): Chip[] {
   const ref = claims.deployedTag ?? CONTRACTS_BRANCH
@@ -74,7 +74,6 @@ export function ProofSlot() {
               href={c.href}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={nameOf(c)}
               data-dest={`proof_${c.id}`}
               data-proof={c.id}
               className="group flex h-full min-h-11 flex-col justify-center gap-1 px-3 py-4 sm:px-5"
@@ -83,6 +82,8 @@ export function ProofSlot() {
                 {c.title}
               </span>
               <span className="font-mono text-[0.75rem] leading-5 text-ink-2">{c.detail}</span>
+              {/* The name is the visible text plus this, so it always contains the label (2.5.3). */}
+              <span className="sr-only">: {c.dest} (opens in a new tab)</span>
             </a>
           </li>
         ))}
