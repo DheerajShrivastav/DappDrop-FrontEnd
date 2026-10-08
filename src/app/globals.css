@@ -482,3 +482,30 @@
 .lp-details[open] > summary .lp-chevron {
     transform: rotate(90deg);
 }
+
+/* AS-10: printing the can/can't card on its own ("Print or save as PDF" adds html.print-card). */
+@media print {
+    @page {
+        size: auto;
+        margin: 14mm;
+    }
+    html.print-card body * {
+        visibility: hidden;
+    }
+    html.print-card .lp-print-card,
+    html.print-card .lp-print-card * {
+        visibility: visible;
+    }
+    html.print-card .lp-print-card {
+        position: absolute;
+        inset: 0 0 auto 0;
+        margin: 0;
+        border: 1px solid #999;
+        box-shadow: none;
+        font-size: 11pt;
+    }
+    .lp-sticky,
+    .skip-link {
+        display: none !important;
+    }
+}
