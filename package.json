@@ -18,7 +18,10 @@
     "webhooks:dry-run": "tsx worker/webhook-dispatcher.ts --dry-run",
     "webhooks:loop": "tsx worker/webhook-dispatcher.ts --loop",
     "test:claims": "tsx --test tests/landing/claims-denylist.spec.ts",
-    "test:unit": "tsx --test src/config/claims.test.ts"
+    "test:unit": "tsx --test src/config/claims.test.ts",
+    "test:gates": "playwright test",
+    "check:bundle": "node scripts/check-landing-bundle.mjs",
+    "check:contrast": "node scripts/contrast-check.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.58",
@@ -77,9 +80,11 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "axe-core": "4.11.0",
     "eslint": "9.39.1",
     "eslint-config-next": "16.0.3",
     "postcss": "^8",
