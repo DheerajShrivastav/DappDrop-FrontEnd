@@ -1,5 +1,6 @@
 import MarketingHeader from '@/components/marketing-header';
 import Footer from '@/components/footer';
+import { Analytics } from '@/components/landing/analytics';
 
 export default function MarketingLayout({
     children,
@@ -18,6 +19,7 @@ export default function MarketingLayout({
                 {children}
             </main>
             <Footer />
+            <Analytics />
         </>
     );
 }

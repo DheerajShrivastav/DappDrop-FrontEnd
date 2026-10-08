@@ -78,6 +78,17 @@ const nextConfig: NextConfig = {
     }))
   },
 
+  // QW-07: cookieless analytics through first-party paths, so the landing CSP can stay
+  // script-src/connect-src 'self'. Only when NEXT_PUBLIC_PLAUSIBLE_DOMAIN is set at build time.
+  async rewrites() {
+    if (!process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN) return []
+    const host = (process.env.PLAUSIBLE_HOST || 'https://plausible.io').replace(/\/$/, '')
+    return [
+      { source: '/js/pl.js', destination: `${host}/js/script.js` },
+      { source: '/api/event', destination: `${host}/api/event` },
+    ]
+  },
+
   // Prevent server-only packages from being bundled into client chunks
   serverExternalPackages: ['@prisma/client', 'prisma'],
 }
