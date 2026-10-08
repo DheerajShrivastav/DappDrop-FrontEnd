@@ -41,6 +41,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:unit
       - run: npm run check:contrast
+      - run: npm run check:imports
       - run: npm run build
       - name: Claims denylist (QW-01)
         run: npm run test:claims

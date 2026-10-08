@@ -281,7 +281,7 @@
     --ease-lock: linear(0, 0.057, 0.188, 0.344, 0.498, 0.635, 0.749, 0.837, 0.903, 0.949, 0.98, 0.999, 1.009, 1.014, 1.015, 1.014, 1.012, 1.01, 1.008, 1.005, 1.004, 1.002, 1.001, 1.001, 1);
 
     /* Layout */
-    --section-y: clamp(4rem, 2.5rem + 6vw, 8rem);
+    --section-y: clamp(3rem, 2rem + 6vw, 8rem); /* 48–55 px on phones (height budget), 128 px desktop */
     --sticky-bar-h: 4.5rem;
 }
 
@@ -507,5 +507,32 @@
     .lp-sticky,
     .skip-link {
         display: none !important;
+    }
+}
+
+/* S1-10: #how. Panel + cross-fade only at ≥ 1024 × 700; stacked cards everywhere else. */
+.lp-how-slide {
+    position: absolute;
+    inset: 0 0 auto 0;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity var(--dur-medium) var(--ease-out), transform var(--dur-medium) var(--ease-out);
+}
+.lp-how-slide.is-active {
+    position: relative;
+    opacity: 1;
+    transform: none;
+}
+@media (min-width: 1024px) and (min-height: 700px) {
+    .lp-how-inline {
+        display: none;
+    }
+}
+@media (max-height: 699.98px) {
+    .lp-how-panel {
+        display: none !important;
+    }
+    .lp-how-step {
+        min-height: 0 !important;
     }
 }

@@ -21,7 +21,8 @@
     "test:unit": "tsx --test src/config/*.test.ts",
     "test:gates": "playwright test",
     "check:bundle": "node scripts/check-landing-bundle.mjs",
-    "check:contrast": "node scripts/contrast-check.mjs"
+    "check:contrast": "node scripts/contrast-check.mjs",
+    "check:imports": "node scripts/check-landing-imports.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.58",
