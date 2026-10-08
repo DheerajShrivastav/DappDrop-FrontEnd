@@ -13,7 +13,7 @@ export default function Header() {
     return (
         <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md shadow-soft">
             <div className="container flex h-16 items-center">
-                <Link href="/" className="flex items-center gap-2.5 mr-8">
+                <Link href="/" prefetch={false} className="flex items-center gap-2.5 mr-8">
                     <div className="bg-gradient-to-br from-slate-700 to-slate-900 p-2 rounded-xl shadow-elevated">
                         <Rocket className="h-5 w-5 text-white" />
                     </div>
