@@ -7,7 +7,6 @@ import {
   Zap,
   Award,
 } from 'lucide-react'
-import { TestnetBanner } from '@/components/testnet-banner'
 import { Button } from '@/components/ui/button'
 import { InteractiveHeroBackground } from '@/components/interactive-hero-background'
 import { CallToAction } from '@/components/CallToAction'
@@ -17,9 +16,6 @@ import { motion } from 'framer-motion'
 export function LegacyHome() {
   return (
     <>
-      {/* Testnet Warning Banner */}
-      <TestnetBanner />
-
       {/* Hero Section with Interactive Background */}
       <motion.section
         className="relative bg-white overflow-hidden border-b"

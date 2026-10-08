@@ -346,3 +346,12 @@
 .lp-menu::backdrop {
     background: rgb(23 23 23 / 0.45);
 }
+
+/* S1-03: the sticky phone bar slides in from below; hidden (and inert) by default. */
+.lp-sticky {
+    transform: translateY(100%);
+    transition: transform var(--dur-short) var(--ease-out);
+}
+.lp-sticky[data-on] {
+    transform: none;
+}

@@ -1,6 +1,7 @@
 import MarketingHeader from '@/components/marketing-header';
 import Footer from '@/components/footer';
 import { Analytics } from '@/components/landing/analytics';
+import { StatusStrip } from '@/components/landing/status-strip';
 import { display, mono } from './fonts';
 
 export default function MarketingLayout({
@@ -16,6 +17,7 @@ export default function MarketingLayout({
             <a href="#main" className="skip-link">
                 Skip to main content
             </a>
+            <StatusStrip />
             <MarketingHeader />
             {/* tabIndex -1: the skip link and in-page jumps move keyboard focus here too. */}
             <main id="main" tabIndex={-1} className="flex-grow outline-none">
