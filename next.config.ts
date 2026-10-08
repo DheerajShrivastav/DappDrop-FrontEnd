@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import { officialDomain, redirectHosts } from './src/config/site'
 
 const nextConfig: NextConfig = {
   /* config options here */
@@ -63,6 +64,18 @@ const nextConfig: NextConfig = {
       'pino-pretty': false,
     }
     return config
+  },
+
+  // QW-04: the vercel.app host 308s to the official domain. API routes and the Humanity OAuth
+  // callback are excluded: an OAuth flow that started on one host must finish on that host
+  // (its state cookie lives there), and server-to-server callers shouldn't be bounced.
+  async redirects() {
+    return redirectHosts.map((host) => ({
+      source: '/:path((?!api/|humanity-callback).*)',
+      has: [{ type: 'host' as const, value: host }],
+      destination: `https://${officialDomain}/:path`,
+      permanent: true,
+    }))
   },
 
   // Prevent server-only packages from being bundled into client chunks

@@ -1,5 +1,6 @@
 // Server Component — no client hooks needed
 import { AppFonts } from '@/app/_fonts/app-fonts'
+import type { Metadata } from 'next'
 import type {ElementType} from 'react'
 import { format } from 'date-fns'
 import {
@@ -26,6 +27,8 @@ import {
   Sparkles,
   Layout,
 } from 'lucide-react'
+
+export const metadata: Metadata = { alternates: { canonical: '/changelog' } }
 
 const changelogData = [
   {

@@ -56,6 +56,9 @@ export const network = {
   deployedContracts: 4,
 } as const
 
+/** "Sepolia testnet" on a test network, the bare chain name otherwise. */
+export const networkLabel = network.testnet ? `${network.name} testnet` : network.name
+
 /** Verified-source tab for an address on this chain's explorer ('' if the chain is unknown). */
 export function explorerCodeUrl(address: string): string {
   return network.explorer && address ? `${network.explorer}/address/${address}#code` : ''
@@ -65,19 +68,7 @@ export function explorerCodeUrl(address: string): string {
 // Domain and repos
 // ---------------------------------------------------------------------------------------------
 
-/**
- * TODO(founder): decision D9 (brand domain). Default: the current custom domain. This drives the
- * canonical URL, the sitemap, the anti-phishing line and the vercel.app → canonical redirect.
- */
-export const officialDomain = 'dapp-drop.dheerajshrivastav.me'
-export const siteOrigin = `https://${officialDomain}`
-/** Hosts that 308-redirect to the official domain (QW-04). */
-export const redirectHosts = ['dapp-drop.vercel.app']
-
-export const repos = {
-  app: 'https://github.com/DheerajShrivastav/DappDrop-FrontEnd',
-  contracts: 'https://github.com/DheerajShrivastav/Dapp-Drop-Smart-Contract',
-} as const
+export { officialDomain, siteOrigin, redirectHosts, repos } from './site'
 
 // ---------------------------------------------------------------------------------------------
 // Founder decisions (plan §7). Defaults = "Default if undecided".

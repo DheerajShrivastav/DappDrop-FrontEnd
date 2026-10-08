@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { siteOrigin } from '@/config/site';
+import { networkLabel } from '@/config/landing';
 
 // The root layout is deliberately thin: it renders on every route, including the landing page,
 // which has a hard JS and font budget. App-only pieces live where they're used:
@@ -9,12 +11,12 @@ import './globals.css';
 export const metadata: Metadata = {
     title: 'DappDrop: Web3 quest campaigns with rewards in on-chain escrow',
     description:
-        'Run token and NFT reward campaigns with on-chain escrow. Reward lists are public for 24 hours before claims open. Public beta on Sepolia testnet.',
-    icons: {
-        icon: '/icon.svg',
-        shortcut: '/icon.svg',
-        apple: '/icon.svg',
-    },
+        `Run token and NFT reward campaigns with on-chain escrow. Reward lists are public for 24 hours before claims open. Public beta on ${networkLabel}.`,
+    // Absolute URLs (canonical, OG) resolve against the official domain (src/config/site.ts).
+    metadataBase: new URL(siteOrigin),
+    applicationName: 'DappDrop',
+    // Icons: src/app/icon.png, apple-icon.png and favicon.ico (file conventions), typeset from
+    // the Newsreader wordmark.
 };
 
 export default function RootLayout({

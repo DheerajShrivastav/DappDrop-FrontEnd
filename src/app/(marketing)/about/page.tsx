@@ -2,8 +2,11 @@
 
 
 import { AppFonts } from '@/app/_fonts/app-fonts'
+import type { Metadata } from 'next'
 import { CheckCircle, Gift, PlusCircle, Rocket, Users, Zap, ShieldCheck, ShieldOff, Bot } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
+export const metadata: Metadata = { alternates: { canonical: '/about' } }
 
 export default function AboutPage() {
   return (
