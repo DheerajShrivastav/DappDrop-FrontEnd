@@ -15,12 +15,13 @@ export function StatusStrip() {
 
   return (
     <div className="border-b border-rule bg-sunk text-ink">
-      <div className="lp-container flex min-h-8 items-center justify-center py-1.5 text-center text-[0.8125rem] leading-5">
+      <div className="lp-container flex min-h-[31px] items-center justify-center py-[5px] text-center text-[0.8125rem] leading-5">
         {/* Phone: one line at 320 px. */}
         <p className="md:hidden">
-          Beta on {networkLabel} · No platform fee ·{' '}
+          {/* The whole line is the link, so it fits one line at 320 px ("Details" shows from 360). */}
           <a href="/#faq-beta" className="lp-link">
-            Details<span className="sr-only"> about the beta</span>
+            Beta on {networkLabel} · No platform fee
+            <span className="sr-only min-[360px]:not-sr-only"> · Details</span>
           </a>
         </p>
         <p className="hidden md:block">

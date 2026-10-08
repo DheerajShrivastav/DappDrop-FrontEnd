@@ -52,7 +52,7 @@ export function StickyStartBar({ helper }: { helper: string }) {
       className="lp-sticky fixed inset-x-0 bottom-0 z-30 border-t border-rule bg-paper lg:hidden"
     >
       <div className="lp-container flex h-[var(--sticky-bar-h)] items-center justify-between gap-3">
-        <span className="font-mono text-eyebrow uppercase text-ink-3">{helper}</span>
+        <span className="font-mono text-[0.75rem] leading-5 text-ink-3">{helper}</span>
         <a
           href="/#start"
           data-cta="sticky_start"

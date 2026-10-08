@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { network } from '@/config/landing'
 import { MenuDialog } from '@/components/landing/menu-dialog'
 import { Wordmark } from '@/components/landing/wordmark'
@@ -17,13 +16,15 @@ export default function MarketingHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-rule bg-paper">
-      <div className="lp-container flex h-16 items-center gap-3">
-        <Link href="/" prefetch={false} className="flex min-w-0 shrink items-baseline gap-3 text-ink" aria-label="DappDrop home">
-          <Wordmark className="truncate" />
+      <div className="lp-container flex h-16 items-center gap-2 sm:gap-3">
+        {/* Plain <a> everywhere in the marketing chrome: nothing to prefetch, and it keeps
+            next/link's client chunk (~3.4 KB gz) off the landing page. */}
+        <a href="/" className="flex min-w-0 shrink items-baseline gap-3 text-ink" aria-label="DappDrop home">
+          <Wordmark className="whitespace-nowrap" />
           <span className="hidden whitespace-nowrap font-mono text-eyebrow uppercase text-ink-3 xl:inline">
             Quest campaigns, settled on-chain
           </span>
-        </Link>
+        </a>
 
         {network.testnet && (
           <span className="inline-flex shrink-0 items-center gap-1.5 font-mono text-eyebrow uppercase text-ink-2 lg:hidden">
@@ -51,7 +52,7 @@ export default function MarketingHeader() {
           </a>
         </nav>
 
-        <div className="ml-auto flex shrink-0 items-center gap-2 lg:hidden">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2 lg:hidden">
           <a href={START_HREF} className={headerButton} data-cta="header_start" data-loc="header">
             Start
           </a>
@@ -78,9 +79,9 @@ export default function MarketingHeader() {
                         <span className="sr-only"> (opens in a new tab)</span>
                       </a>
                     ) : (
-                      <Link href={l.href} prefetch={false} className="flex min-h-11 items-center py-2 text-body text-ink">
+                      <a href={l.href} className="flex min-h-11 items-center py-2 text-body text-ink">
                         {l.label}
-                      </Link>
+                      </a>
                     )}
                   </li>
                 ))}
