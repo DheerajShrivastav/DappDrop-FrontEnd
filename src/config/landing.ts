@@ -138,3 +138,10 @@ export const securityContact: string | null = null
  * time. Set NEXT_PUBLIC_PLAUSIBLE_DOMAIN to the site's Plausible domain to turn it on.
  */
 export const analyticsDomain: string | null = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN?.trim() || null
+
+/**
+ * TODO(founder): OUT-C06, the buyer summary at the top of the contracts repo's
+ * docs/SECURITY_FINDINGS.md ("internal review notes, not an audit"; live vs pending; "no proxy").
+ * Until it exists, proof chip 4 says "our security notes (internal review, not an audit)".
+ */
+export const securityBuyerSummary = false

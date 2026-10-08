@@ -8,6 +8,7 @@ import { setTrackContext, track } from '@/lib/track'
  * on (see the marketing layout), so with no env var it ships nothing.
  *
  * - `cta_click`: any element with data-cta="<cta_id>" (target = its href).
+ * - `proof_item_click`: proof-row chips (data-proof="<chip>").
  * - `outbound_click`: any target=_blank link; destination = data-dest or the link's host.
  * - `section_view`: each [data-section] the first time half of it is visible.
  */
@@ -21,6 +22,8 @@ export function TrackListener({ claimsVersion, launchStage }: { claimsVersion: s
       const href = el.getAttribute('href') || ''
       const cta = el.getAttribute('data-cta')
       if (cta) track('cta_click', { cta_id: cta, location: el.getAttribute('data-loc') || '', target: href })
+      const proof = el.getAttribute('data-proof')
+      if (proof) track('proof_item_click', { chip: proof })
       if (el.getAttribute('target') === '_blank') {
         let dest = el.getAttribute('data-dest') || ''
         if (!dest) {
