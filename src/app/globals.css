@@ -355,3 +355,85 @@
 .lp-sticky[data-on] {
     transform: none;
 }
+
+/* ---------------------------------------------------------------------------------------------
+   S1-05: the Escrow Statement slip.
+   --------------------------------------------------------------------------------------------- */
+/* Perforated top edge: a row of half-circle bites (CSS mask), decorative. */
+.slip-perf {
+    position: absolute;
+    inset: -5px 0 auto 0;
+    height: 10px;
+    background: var(--surface);
+    -webkit-mask: radial-gradient(circle 5px at 8px 0, #0000 98%, #000) -8px 0 / 16px 100% repeat-x;
+    mask: radial-gradient(circle 5px at 8px 0, #0000 98%, #000) -8px 0 / 16px 100% repeat-x;
+}
+
+/* Ribbon: vertical on phone, an inline run with "─" connectors from 640 px. */
+.slip-ribbon {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+@media (min-width: 640px) {
+    .slip-ribbon {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: 0;
+        row-gap: 0.25rem;
+    }
+    .slip-ribbon > li:not(:last-child)::after {
+        content: "─";
+        margin-inline: 0.4rem;
+        color: var(--rule-strong);
+        font-weight: 400;
+    }
+}
+
+/* The 24-hour stop's static accent rule (the ring/sweep the trace replays) and the reclaim glow. */
+.slip-sweep {
+    position: absolute;
+    left: 0;
+    right: 1.4rem;
+    bottom: -3px;
+    height: 2px;
+    background: var(--signal);
+    transform-origin: left center;
+}
+.slip-glow {
+    position: absolute;
+    inset: -2px -6px;
+    border-radius: 4px;
+    background: var(--sunk);
+    z-index: -1;
+    opacity: 0;
+}
+[data-b="reclaim"],
+[data-b="ring"] {
+    isolation: isolate;
+}
+
+/* Phone crop: hide the full-only rows below 1024 px until "Show the full statement" is open.
+   Only where :has() works; elsewhere the full slip shows and the toggle is hidden. */
+@supports selector(:has(*)) {
+    @media (max-width: 1023.98px) {
+        .slip:not(:has(.slip-toggle[open])) .slip-full {
+            display: none;
+        }
+    }
+}
+@supports not selector(:has(*)) {
+    .slip-toggle {
+        display: none;
+    }
+}
+.slip-toggle[open] > summary {
+    /* Once open there's nothing to collapse into; keep the control so it can close again. */
+    color: var(--ink-2);
+}
+.slip-toggle:not([open]) .slip-hide,
+.slip-toggle[open] .slip-show {
+    display: none;
+}
