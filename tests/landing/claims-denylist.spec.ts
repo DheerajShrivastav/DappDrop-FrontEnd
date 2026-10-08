@@ -2,14 +2,16 @@
  * QW-01: permanent claims denylist for the landing page.
  *
  * Every string below was a false or unsupported claim on the old landing page (fact sheet §5) or
- * a link to a channel we don't own (§6). This test reads the prerendered HTML of `/` from the
- * production build and fails if any of them comes back.
+ * a link to a channel we don't own (§6). Two scans:
+ * - the prerendered HTML of `/` from the production build (what visitors get);
+ * - every source file under src/, with comments stripped (so a dead component or another page
+ *   can't keep a false claim around to be re-rendered later).
  *
  * Run after `npm run build`:  npm run test:claims
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 const HTML_PATH = path.join(process.cwd(), '.next/server/app/index.html')
@@ -63,4 +65,39 @@ test('the built landing page links to no unowned social channel', () => {
 
 test('nothing on the landing page pings', () => {
   assert.ok(!landingHtml().includes('animate-ping'), 'animate-ping found in /')
+})
+
+// ---------------------------------------------------------------------------------------------
+// Source scan: all of src/, comments stripped.
+// ---------------------------------------------------------------------------------------------
+
+const SRC = path.join(process.cwd(), 'src')
+const SOURCE_EXT = /\.(tsx?|jsx?|mjs|css|json|md|mdx)$/
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const name of readdirSync(dir)) {
+    const p = path.join(dir, name)
+    if (statSync(p).isDirectory()) walk(p, out)
+    else if (SOURCE_EXT.test(name)) out.push(p)
+  }
+  return out
+}
+
+/** Drops block comments, JSX comments and // line comments (not "://" inside URLs). */
+function stripComments(code: string): string {
+  return code
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:\\])\/\/.*$/gm, '$1')
+}
+
+test('no source file under src/ carries a banned claim or link (comments excluded)', () => {
+  const hits: string[] = []
+  for (const file of walk(SRC)) {
+    const code = stripComments(readFileSync(file, 'utf8'))
+    for (const s of [...BANNED_TEXT, ...BANNED_HREFS]) {
+      if (code.includes(s)) hits.push(`${path.relative(process.cwd(), file)}: "${s}"`)
+    }
+  }
+  assert.deepEqual(hits, [], `banned claim(s) in source:\n${hits.join('\n')}`)
 })

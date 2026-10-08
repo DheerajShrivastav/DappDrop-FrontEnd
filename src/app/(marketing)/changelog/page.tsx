@@ -150,14 +150,14 @@ const changelogData = [
   {
     date: new Date('2025-11-29T12:00:00Z'),
     version: 'Payment Integration',
-    title: 'X402 Payment Protocol Integration',
+    title: 'On-chain Payment Tasks',
     description:
-      'Revolutionary payment task integration with X402 Payment Protocol, enabling campaigns to require on-chain payment verification for task completion with comprehensive status tracking and user-friendly UI.',
+      'A payment task type: campaigns can require an on-chain payment, verified on-chain for task completion, with status tracking in the UI.',
     changes: [
       {
         type: 'Feature',
         icon: CreditCard,
-        text: 'Integrated X402 Payment Protocol for secure on-chain payment verification and task completion.',
+        text: 'On-chain payment verification for payment tasks.',
       },
       {
         type: 'Feature',

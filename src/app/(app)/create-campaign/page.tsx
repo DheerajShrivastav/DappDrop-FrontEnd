@@ -2149,7 +2149,7 @@ export default function CreateCampaignPage() {
                               Beta
                             </Badge>
                             <p className="text-sm text-muted-foreground">
-                              On-chain actions (x402 Payment Protocol) are in beta and may change.
+                              On-chain payment tasks are in beta and may change.
                             </p>
                           </div>
                           <FormField
