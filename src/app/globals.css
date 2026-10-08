@@ -249,3 +249,95 @@
         outline-offset: 2px;
     }
 }
+
+/* ---------------------------------------------------------------------------------------------
+   S1-01: landing ("The Statement") design tokens. Plan §3.1; contrast gate:
+   scripts/contrast-check.mjs reads the hex values below, so keep them as plain #RRGGBB.
+   The plan's `--accent` is named `--signal` here: shadcn already owns `--accent` (HSL) and the
+   app depends on it.
+   --------------------------------------------------------------------------------------------- */
+:root {
+    /* Colour */
+    --paper: #F6F4EF;          /* page */
+    --surface: #FFFFFF;        /* slips, frames */
+    --sunk: #ECE8DF;           /* ribbon band, stripes */
+    --ink: #171717;            /* text, primary button */
+    --ink-2: #4F4B45;          /* secondary text */
+    --ink-3: #6B665E;          /* captions, meta (also control borders on sunk) */
+    --rule: #DCD6CA;           /* decorative hairline */
+    --rule-strong: #8C8780;    /* control borders on paper/surface */
+    --signal: #2338C6;         /* links, focus, the 24-hour line (plan: --accent) */
+    --paper-2: #B5AFA4;        /* secondary text on the ink band */
+    --signal-on-ink: #9AA6FF;  /* accent and focus ring on the ink band (plan: --accent-on-ink) */
+
+    /* Motion (MOT spec) */
+    --dur-micro: 120ms;
+    --dur-short: 180ms;
+    --dur-medium: 280ms;
+    --dur-long: 420ms;
+    --dur-beat: 700ms;
+    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+    --ease-lock: linear(0, 0.057, 0.188, 0.344, 0.498, 0.635, 0.749, 0.837, 0.903, 0.949, 0.98, 0.999, 1.009, 1.014, 1.015, 1.014, 1.012, 1.01, 1.008, 1.005, 1.004, 1.002, 1.001, 1.001, 1);
+
+    /* Layout */
+    --section-y: clamp(4rem, 2.5rem + 6vw, 8rem);
+    --sticky-bar-h: 4.5rem;
+}
+
+@layer components {
+    /* The landing page's one container: 1,200 px content, gutters 20 / 32 / 48 px. (A class, not
+       Tailwind's `container`, which the app pages already rely on.) */
+    .lp-container {
+        width: 100%;
+        max-width: calc(1200px + 2 * 3rem);
+        margin-inline: auto;
+        padding-inline: 1.25rem;
+    }
+    @media (min-width: 768px) {
+        .lp-container { padding-inline: 2rem; }
+    }
+    @media (min-width: 1024px) {
+        .lp-container { padding-inline: 3rem; }
+    }
+
+    .section-y {
+        padding-block: var(--section-y);
+    }
+
+    /* Marketing surface: paper background, ink text, system body stack. */
+    .lp-page {
+        background: var(--paper);
+        color: var(--ink);
+        /* System stack on the landing page (0 KB). The older marketing pages (about, changelog)
+           define --font-inter via <AppFonts/>, so they keep Inter. */
+        font-family: var(--font-inter, ui-sans-serif), system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    .lp-page :focus-visible {
+        outline: 2px solid var(--signal);
+        outline-offset: 2px;
+    }
+
+    .lp-page h1,
+    .lp-page h2,
+    .lp-page h3 {
+        text-wrap: balance;
+    }
+
+    .lp-page p {
+        text-wrap: pretty;
+    }
+
+    /* Text link: ink text, accent underline (1 px, offset 3 px); 2 px on hover. */
+    .lp-link {
+        color: var(--ink);
+        text-decoration-line: underline;
+        text-decoration-color: var(--signal);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+    }
+    @media (hover: hover) and (pointer: fine) {
+        .lp-link:hover { text-decoration-thickness: 2px; }
+    }
+}

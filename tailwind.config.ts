@@ -1,4 +1,5 @@
 import type { Config } from 'tailwindcss'
+import plugin from 'tailwindcss/plugin'
 
 export default {
     // Strictly light-mode, deliberately: no .dark token block exists (see globals.css),
@@ -25,6 +26,22 @@ export default {
                 body: ['var(--font-inter, ui-sans-serif)', 'system-ui', '-apple-system', '"Segoe UI"', 'Roboto', 'sans-serif'],
                 headline: ['var(--font-space-grotesk, var(--font-inter, ui-sans-serif))', 'system-ui', 'sans-serif'],
                 code: ['monospace'],
+                // S1-01, landing only. Each var() has a fallback (see body/headline above).
+                display: ['var(--font-display, Georgia)', 'Georgia', '"Times New Roman"', 'serif'],
+                mono: ['var(--font-mono, ui-monospace)', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
+            },
+            // S1-01: the landing type scale (plan §3.1 / VIS §4). New keys only; the app's text-*
+            // sizes are untouched.
+            fontSize: {
+                'display-xl': ['clamp(2.25rem, 1.4rem + 4.2vw, 5.25rem)', { lineHeight: '1.04', letterSpacing: '-0.02em' }],
+                'display-l': ['clamp(2rem, 1.35rem + 2.6vw, 3.5rem)', { lineHeight: '1.06', letterSpacing: '-0.018em' }],
+                title: ['clamp(1.25rem, 1.1rem + 0.6vw, 1.625rem)', { lineHeight: '1.25', letterSpacing: '-0.01em' }],
+                lead: ['clamp(1.125rem, 1.05rem + 0.35vw, 1.3125rem)', { lineHeight: '1.5', letterSpacing: '-0.005em' }],
+                body: ['1rem', { lineHeight: '1.6' }],
+                small: ['0.875rem', { lineHeight: '1.5' }],
+                'figure-l': ['clamp(1.5rem, 1.2rem + 1.2vw, 2.25rem)', { lineHeight: '1.1', letterSpacing: '-0.01em' }],
+                figure: ['0.9375rem', { lineHeight: '1.4' }],
+                eyebrow: ['0.75rem', { lineHeight: '1.3', letterSpacing: '0.08em' }],
             },
             colors: {
                 background: 'hsl(var(--background))',
@@ -57,6 +74,13 @@ export default {
                     DEFAULT: 'hsl(var(--destructive))',
                     foreground: 'hsl(var(--destructive-foreground))',
                 },
+                // S1-01 landing tokens (src/app/globals.css). `signal` is the plan's `accent`.
+                paper: { DEFAULT: 'var(--paper)', 2: 'var(--paper-2)' },
+                surface: 'var(--surface)',
+                sunk: 'var(--sunk)',
+                ink: { DEFAULT: 'var(--ink)', 2: 'var(--ink-2)', 3: 'var(--ink-3)' },
+                rule: { DEFAULT: 'var(--rule)', strong: 'var(--rule-strong)' },
+                signal: { DEFAULT: 'var(--signal)', 'on-ink': 'var(--signal-on-ink)' },
                 border: 'hsl(var(--border))',
                 input: 'hsl(var(--input))',
                 ring: 'hsl(var(--ring))',
@@ -113,6 +137,13 @@ export default {
                 'card': '0 1px 2px 0 rgb(0 0 0 / 0.04), 0 1px 1px -1px rgb(0 0 0 / 0.03)',
                 'card-hover': '0 8px 24px -8px rgb(0 0 0 / 0.08), 0 2px 6px -2px rgb(0 0 0 / 0.05)',
                 'elevated': '0 1px 2px rgb(0 0 0 / 0.04), 0 12px 32px -12px rgb(0 0 0 / 0.08)',
+                // S1-01 landing elevations: e1 (frames), e2 (the hero statement slip only).
+                e1: '0 1px 2px rgb(23 23 23 / .05), 0 4px 12px -6px rgb(23 23 23 / .08)',
+                e2: '0 1px 1px rgb(23 23 23 / .04), 0 28px 56px -28px rgb(23 23 23 / .22)',
+            },
+            transitionTimingFunction: {
+                'out-soft': 'var(--ease-out)',
+                lock: 'var(--ease-lock)',
             },
             keyframes: {
                 'accordion-down': {
@@ -147,5 +178,12 @@ export default {
             },
         },
     },
-    plugins: [require('tailwindcss-animate')],
+    plugins: [
+        require('tailwindcss-animate'),
+        // S1-01: hover styles only where hover exists (plan: hoverOnlyWhenSupported, scoped to the
+        // landing so app hover behaviour on touch devices doesn't change). Use `can-hover:hover:…`.
+        plugin(({ addVariant }) => {
+            addVariant('can-hover', '@media (hover: hover) and (pointer: fine)')
+        }),
+    ],
 } satisfies Config
