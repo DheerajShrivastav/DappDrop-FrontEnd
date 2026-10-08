@@ -16,7 +16,8 @@
     "relayer:loop": "tsx worker/relayer.ts --loop",
     "webhooks": "tsx worker/webhook-dispatcher.ts",
     "webhooks:dry-run": "tsx worker/webhook-dispatcher.ts --dry-run",
-    "webhooks:loop": "tsx worker/webhook-dispatcher.ts --loop"
+    "webhooks:loop": "tsx worker/webhook-dispatcher.ts --loop",
+    "test:claims": "tsx --test tests/landing/claims-denylist.spec.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.58",

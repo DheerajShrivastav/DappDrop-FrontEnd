@@ -36,7 +36,7 @@ export function CallToAction() {
                     viewport={{ once: true }}
                     transition={{ delay: 0.1 }}
                 >
-                    Join 500+ communities growing on-chain. Create your first campaign in minutes and start rewarding genuine engagement.
+                    Run a test campaign on Sepolia: fund the reward into escrow before it opens. No platform fee during beta.
                 </motion.p>
 
                 <motion.div

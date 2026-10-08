@@ -4,12 +4,10 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
     Twitter,
-    CreditCard,
     Bot,
     ShieldCheck,
     DollarSign,
     Image as ImageIcon,
-    Award,
     Zap,
     Check,
 } from 'lucide-react'
@@ -29,12 +27,6 @@ const userUseCases: UseCase[] = [
         title: 'Social Follows',
         description: 'Discover new projects and grow your community on X (Twitter).',
         color: 'text-sky-500',
-    },
-    {
-        icon: CreditCard,
-        title: 'X402 Paywall',
-        description: 'Monetize exclusive community with crypto payments directly through X402 protocol.',
-        color: 'text-orange-500',
     },
     {
         icon: Bot,
@@ -62,12 +54,6 @@ const projectUseCases: UseCase[] = [
         title: 'Cryptocurrency',
         description: 'Distribute your project native token or stablecoins (ERC20).',
         color: 'text-green-500',
-    },
-    {
-        icon: Award,
-        title: 'Exclusive Roles',
-        description: 'Grant special Discord roles or access to token-gated content.',
-        color: 'text-purple-500',
     },
     {
         icon: Zap,
@@ -141,7 +127,7 @@ export function UseCasesTabs() {
                                             <div>
                                                 <h4 className="font-bold text-slate-900 mb-1 flex items-center gap-2">
                                                     {item.title}
-                                                    {activeTab === 'users' && index === 3 && (
+                                                    {activeTab === 'users' && index === 2 && (
                                                         <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider">Verifiable</span>
                                                     )}
                                                 </h4>
@@ -156,7 +142,7 @@ export function UseCasesTabs() {
                                 {/* Bottom Footer Area */}
                                 <div className="mt-10 pt-8 border-t border-slate-100 flex justify-between items-center text-sm text-slate-500">
                                     <div className="flex gap-4">
-                                        <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-green-500" /> Free to start</span>
+                                        <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-green-500" /> No platform fee during beta</span>
                                         <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-green-500" /> No coding required</span>
                                     </div>
                                 </div>

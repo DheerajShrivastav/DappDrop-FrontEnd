@@ -17,8 +17,9 @@ const spaceGrotesk = Space_Grotesk({
 })
 
 export const metadata: Metadata = {
-    title: 'DappDrop',
-    description: 'Launch your project, engage real users, and build a thriving community on-chain.',
+    title: 'DappDrop: Web3 quest campaigns with rewards in on-chain escrow',
+    description:
+        'Run token and NFT reward campaigns with on-chain escrow. Reward lists are public for 24 hours before claims open. Public beta on Sepolia testnet.',
     icons: {
         icon: '/icon.svg',
         shortcut: '/icon.svg',

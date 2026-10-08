@@ -10,7 +10,6 @@ import {
 import { TestnetBanner } from '@/components/testnet-banner'
 import { Button } from '@/components/ui/button'
 import { InteractiveHeroBackground } from '@/components/interactive-hero-background'
-import { BentoGrid } from '@/components/BentoGrid'
 import { CallToAction } from '@/components/CallToAction'
 import { UseCasesTabs } from '@/components/UseCasesTabs'
 import { motion } from 'framer-motion'
@@ -38,20 +37,6 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/50 to-white"></div>
 
         <div className="container mx-auto px-4 py-32 md:py-40 text-center relative z-10">
-          {/* Pill Badge */}
-          <motion.div
-            className="inline-flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-full px-6 py-2.5 text-sm font-medium text-slate-700 mb-8 shadow-soft"
-            initial={{ y: -20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.6 }}
-          >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-slate-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-500"></span>
-            </span>
-            Find The Next Billion Real Users For Your Project
-          </motion.div>
-
           {/* Main Heading */}
           <motion.h1
             className="text-6xl md:text-8xl font-headline font-bold tracking-tight mb-8"
@@ -74,8 +59,7 @@ export default function Home() {
             transition={{ delay: 0.4, duration: 0.6 }}
           >
             The ultimate platform to launch your project, engage real users, and
-            build a thriving community on-chain.{' '}
-            <span className="text-foreground font-semibold">Ditch the bots, find your tribe.</span>
+            build a thriving community on-chain. Public beta on Sepolia testnet.
           </motion.p>
 
           {/* CTA Buttons */}
@@ -106,34 +90,8 @@ export default function Home() {
           </motion.div>
 
 
-          {/* Stats/Social Proof */}
-          <motion.div
-            className="mt-20 grid grid-cols-3 gap-8 max-w-2xl mx-auto relative"
-            initial={{ y: 30, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.6, duration: 0.6 }}
-          >
-            {/* Aurora Background */}
-            <div className="absolute inset-0 -z-10 bg-purple-200/30 blur-3xl rounded-full scale-150 transform translate-y-4"></div>
-
-            <div>
-              <div className="text-4xl font-extrabold text-primary">10K+</div>
-              <div className="text-sm text-slate-600 mt-1">Active Users</div>
-            </div>
-            <div>
-              <div className="text-4xl font-extrabold text-primary">500+</div>
-              <div className="text-sm text-slate-600 mt-1">Campaigns</div>
-            </div>
-            <div>
-              <div className="text-4xl font-extrabold text-primary">$2M+</div>
-              <div className="text-sm text-slate-600 mt-1">Distributed</div>
-            </div>
-          </motion.div>
         </div>
       </motion.section>
-
-      {/* Features Showcase Section (Bento Grid) */}
-      <BentoGrid />
 
       {/* How It Works Section */}
       <section className="py-24 bg-white border-b relative overflow-hidden">
@@ -193,7 +151,7 @@ export default function Home() {
                 Grow Community
               </h3>
               <p className="text-slate-600 leading-relaxed max-w-xs mx-auto">
-                Reward verified users with tokens, NFTs, or roles. Build a loyal user base.
+                Reward participants with tokens or NFTs from an on-chain escrow you fund before the campaign opens.
               </p>
             </div>
           </div>
