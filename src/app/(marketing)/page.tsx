@@ -5,6 +5,8 @@ import { ProofSlot } from '@/components/landing/proof-slot'
 import { Payouts } from '@/components/landing/payouts'
 import { HowSteps } from '@/components/landing/how-steps'
 import { TaskMatrix } from '@/components/landing/task-matrix'
+import { Security } from '@/components/landing/security'
+import { HashDetailsOpener } from '@/components/landing/hash-details-opener'
 import { StickyStartBar } from '@/components/landing/sticky-start-bar'
 
 // S1-04: the landing page is a server component and fully static (○ in the build output). Every
@@ -25,6 +27,8 @@ export default function Home() {
       <Payouts />
       <HowSteps />
       <TaskMatrix />
+      <Security />
+      <HashDetailsOpener />
       <StickyStartBar helper={network.testnet ? `${network.name} · no platform fee` : 'No platform fee during beta'} />
     </>
   )
