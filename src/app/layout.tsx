@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { siteOrigin } from '@/config/site';
 import { networkLabel } from '@/config/landing';
@@ -17,6 +17,12 @@ export const metadata: Metadata = {
     applicationName: 'DappDrop',
     // Icons: src/app/icon.png, apple-icon.png and favicon.ico (file conventions), typeset from
     // the Newsreader wordmark.
+};
+
+// QW-05: light-only, declared to the browser (form controls, scrollbars) as well as in CSS.
+export const viewport: Viewport = {
+    colorScheme: 'light',
+    themeColor: '#F6F4EF',
 };
 
 export default function RootLayout({

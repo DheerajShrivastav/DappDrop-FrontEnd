@@ -190,3 +190,62 @@
         }
     }
 }
+
+/* ---------------------------------------------------------------------------------------------
+   QW-05: accessibility base (every route).
+   --------------------------------------------------------------------------------------------- */
+@layer base {
+    :root {
+        /* Light-only by design; also declared as <meta name="color-scheme"> (root viewport). */
+        color-scheme: light;
+    }
+
+    /* Room for the sticky header (top) and the landing page's sticky phone bar (bottom), so an
+       anchor jump or a focused control is never hidden under them (WCAG 2.4.11). */
+    html {
+        scroll-padding: 5rem 0;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+        html {
+            scroll-behavior: smooth;
+        }
+    }
+
+    /* Safety net: whatever a component forgets, reduced motion means (near-)instant. 0.01ms
+       rather than 0 so animationend/transitionend still fire for code that waits on them. */
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
+}
+
+/* Skip link: visually hidden until focused, then pinned top-left above the sticky header. */
+@layer components {
+    .skip-link {
+        position: absolute;
+        left: 0.75rem;
+        top: 0.75rem;
+        z-index: 100;
+        transform: translateY(-200%);
+        padding: 0.75rem 1rem;
+        border-radius: 0.25rem;
+        border: 2px solid transparent;
+        background: #171717;
+        color: #fff;
+        font-weight: 600;
+        text-decoration: underline;
+    }
+
+    .skip-link:focus {
+        transform: none;
+        outline: 2px solid #2338C6;
+        outline-offset: 2px;
+    }
+}
