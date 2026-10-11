@@ -2,6 +2,7 @@ import MarketingHeader from '@/components/marketing-header';
 import { SiteFooter } from '@/components/landing/site-footer';
 import { Analytics } from '@/components/landing/analytics';
 import { StatusStrip } from '@/components/landing/status-strip';
+import { JsonLd } from '@/components/landing/json-ld';
 import { display, mono } from './fonts';
 
 export default function MarketingLayout({
@@ -25,6 +26,7 @@ export default function MarketingLayout({
             </main>
             <SiteFooter />
             <Analytics />
+            <JsonLd />
         </div>
     );
 }

@@ -1,0 +1,1 @@
+DappDrop: “Quest campaigns with the reward locked in up front.” Beside it, an example escrow statement on sepolia testnet with the reward list public for 24 hours before claims open.
