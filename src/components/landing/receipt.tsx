@@ -8,7 +8,9 @@ import { RECEIPTS, receiptTarget, receiptVisible, type ReceiptId } from '@/confi
  * deployed code to point at. The link's accessible name is its visible text plus the rule, the
  * network and the version (F28; the sr-only suffix keeps WCAG 2.5.3 label-in-name).
  */
-export function Receipt({ id, className = '' }: { id: ReceiptId; className?: string }) {
+/** `compact`: only "Check ↗" is visible (where the surrounding text already says the rules are
+ * enforced by the contract); the accessible name is unchanged. */
+export function Receipt({ id, className = '', compact = false }: { id: ReceiptId; className?: string; compact?: boolean }) {
   if (!receiptVisible(id, claims)) return null
   const def = RECEIPTS[id]
   const base = `inline whitespace-nowrap font-mono text-[0.75rem] leading-5 text-ink-3 ${className}`
@@ -30,7 +32,7 @@ export function Receipt({ id, className = '' }: { id: ReceiptId; className?: str
   if (!target) return null
   return (
     <span className={base}>
-      Enforced by the contract ·{' '}
+      {compact ? <span className="sr-only">Enforced by the contract · </span> : <>Enforced by the contract ·{' '}</>}
       <a
         href={target.href}
         target="_blank"

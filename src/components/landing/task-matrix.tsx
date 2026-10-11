@@ -103,7 +103,7 @@ export function TaskMatrix() {
           </p>
           <p>Pay in your token or a stablecoin (ERC-20), NFTs (ERC-721) or multi-edition NFTs (ERC-1155).</p>
         </div>
-        <div className="rounded-lg border border-rule bg-surface p-5">
+        <div className="hidden rounded-lg border border-rule bg-surface p-5 md:block">
           <h3 className="text-small font-semibold md:text-body">Will bots farm my budget?</h3>
           <p className="mt-1.5 text-small text-ink-2">
             No tool stops every bot. For reward-list campaigns, turn on “Humanity-verified wallets only” and unverified wallets are

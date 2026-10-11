@@ -42,10 +42,10 @@ export function Participants() {
             </li>
           )}
         </ul>
-        <div className="grid gap-3 md:grid-cols-3 lg:col-span-6 lg:grid-cols-1">
+        <div className="hidden gap-3 md:grid md:grid-cols-3 lg:col-span-6 lg:grid-cols-1">
           <ExampleCampaignCard state="open" tag={tag} title="Example campaign: join the launch" lines={['3 tasks · ends in 5 days', 'Reward: equal split of 1,000 EXAMPLE']} />
-          <ExampleCampaignCard className="hidden md:block" state="claimable" tag={tag} title="Example campaign: community week" lines={['List public since yesterday · claims open', 'Your reward: 250 EXAMPLE']} />
-          <ExampleCampaignCard className="hidden md:block" state="closed" tag={tag} title="Example campaign: testnet sprint" lines={['Closed · 30 days left to claim']} />
+          <ExampleCampaignCard state="claimable" tag={tag} title="Example campaign: community week" lines={['List public since yesterday · claims open', 'Your reward: 250 EXAMPLE']} />
+          <ExampleCampaignCard state="closed" tag={tag} title="Example campaign: testnet sprint" lines={['Closed · 30 days left to claim']} />
         </div>
       </div>
     </Section>

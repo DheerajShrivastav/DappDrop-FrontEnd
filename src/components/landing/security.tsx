@@ -57,7 +57,7 @@ export function Security() {
       title="Check our work."
       dek="Not audited by a third party yet. Here’s what we do instead, and what we can and can’t do with your tokens."
     >
-      <p className="mt-6 max-w-[44rem] text-small text-ink-2 md:text-body">
+      <p className="mt-6 hidden max-w-[44rem] text-ink-2 md:block md:text-body">
         Your reward never sits in a DappDrop wallet. In an emergency, our admin key can pause the contract; while it&apos;s paused,
         nobody can move the rewards, including us. Timers keep running during a pause.
         {claims.adminHardeningCommitted && ' Before mainnet: separate keys, a multisig and a time delay.'}
@@ -67,7 +67,11 @@ export function Security() {
 
       <div className="mt-10 grid gap-8 lg:grid-cols-12 lg:gap-12">
         <div className="lg:col-span-7">
-          <h3 className="text-title font-semibold">How we build it</h3>
+          <details className="lp-details" data-open-desktop data-detail="how_we_build">
+          <summary className="flex min-h-11 items-center justify-between gap-4">
+            <h3 className="text-title font-semibold">How we build it</h3>
+            <span aria-hidden="true" className="lp-chevron text-ink-3 lg:hidden">›</span>
+          </summary>
           <ul className="mt-3 border-b border-rule text-small text-ink-2 md:text-body">
             <Fact>
               {claims.licenseFile ? 'Open source (MIT): the app and the contracts.' : 'Public code: the app and the contracts.'}{' '}
@@ -99,6 +103,7 @@ export function Security() {
             </Fact>
             <Fact>Static analysis (Slither, Aderyn) for every security change, with results published.</Fact>
           </ul>
+          </details>
         </div>
 
         <div className="space-y-6 lg:col-span-5">

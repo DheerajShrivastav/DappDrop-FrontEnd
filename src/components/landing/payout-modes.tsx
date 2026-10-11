@@ -19,9 +19,9 @@ function Chip({ children }: { children: React.ReactNode }) {
 
 function Mode({ name, children }: { name: React.ReactNode; children: React.ReactNode }) {
   return (
-    <li className="grid gap-1.5 border-t border-rule py-4 md:grid-cols-12 md:gap-6 md:py-5">
-      <h4 className="font-mono text-[0.8125rem] font-medium uppercase tracking-[0.04em] text-ink md:col-span-4">{name}</h4>
-      <div className="space-y-2 md:col-span-8">{children}</div>
+    <li className="grid gap-0.5 border-t border-rule py-3 md:grid-cols-12 md:gap-6 md:py-5">
+      <h4 className="text-small font-semibold text-ink md:col-span-4 md:font-mono md:text-[0.8125rem] md:font-medium md:uppercase md:tracking-[0.04em]">{name}</h4>
+      <div className="space-y-1.5 md:col-span-8">{children}</div>
     </li>
   )
 }

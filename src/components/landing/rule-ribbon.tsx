@@ -84,7 +84,7 @@ export function RuleRibbon() {
         <h3 className="text-title font-semibold">The rules, stop by stop</h3>
         <p className="mt-1 font-mono text-[0.75rem] uppercase tracking-[0.06em] text-ink-2">For reward-list campaigns</p>
         <p className="mt-2 max-w-[40rem] text-small text-ink-2">
-          For your engineer: each “Check ↗” opens the code that enforces the rule.
+          Each rule is enforced by the contract. For your engineer: each “Check ↗” opens the code.
         </p>
         <ol className="mt-5 grid gap-x-6 gap-y-0 md:grid-cols-2 lg:grid-cols-4" aria-label="Rules R1 to R7">
           {stops.map((s) => (
@@ -97,7 +97,7 @@ export function RuleRibbon() {
                 {s.n} · {s.when}
               </p>
               <p className="mt-1 text-small text-ink">
-                {s.body} <Receipt id={s.receipt} />
+                {s.body} <Receipt id={s.receipt} compact />
               </p>
               {s.chip && (
                 <p className="mt-2 inline-flex rounded-full border border-ink-3 px-2.5 py-0.5 font-mono text-[0.75rem] text-ink-2">

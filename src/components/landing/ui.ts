@@ -3,7 +3,7 @@
  * `border border-transparent` so they keep an edge in forced-colours mode (QW-05).
  */
 const base =
-  'inline-flex items-center justify-center gap-2 rounded-sm border font-semibold leading-none transition-colors duration-[var(--dur-micro)] active:translate-y-px'
+  'inline-flex items-center justify-center gap-2 rounded-sm border font-semibold leading-none transition-colors [transition-duration:var(--dur-micro)] active:translate-y-px'
 
 /** Filled ink button on paper: the one host action per screen. 48 px tall. */
 export const primaryButton = `${base} h-12 px-5 text-body border-transparent bg-ink text-paper can-hover:hover:bg-black`

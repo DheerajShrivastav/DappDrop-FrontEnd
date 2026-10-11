@@ -64,9 +64,9 @@ export function HowSteps() {
                   </>
                 )}
               </p>
-              {/* Phone: only the Fund replica (the funding breakdown and the transactions you'll
-                  sign) stays inline, for the page-height budget; desktop shows all four. */}
-              <div className={`lp-how-inline mt-4 ${n === '2' ? '' : 'hidden'}`}>
+              {/* Phone (< 768 px): text-only steps, for the page-height budget; tablets show each
+                  replica inline; ≥ 1024 × 700 uses the sticky panel. */}
+              <div className="lp-how-inline mt-4 hidden md:block">
                 <Replica />
               </div>
             </li>

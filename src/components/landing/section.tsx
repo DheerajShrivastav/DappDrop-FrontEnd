@@ -35,7 +35,7 @@ export function Section({
         <h2 id={`${id}-title`} tabIndex={-1} className="mt-3 max-w-[24ch] font-display text-display-l font-normal outline-none">
           {title}
         </h2>
-        {dek && <p className={`mt-4 max-w-[40rem] text-lead ${band === 'ink' ? 'text-paper-2' : 'text-ink-2'}`}>{dek}</p>}
+        {dek && <p className={`mt-3 max-w-[40rem] text-body md:mt-4 md:text-lead ${band === 'ink' ? 'text-paper-2' : 'text-ink-2'}`}>{dek}</p>}
         {children}
       </div>
       {after}
