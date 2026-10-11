@@ -35,14 +35,16 @@ const BANNED_TEXT = [
   'All Systems Operational',
   'Join 500+',
   // Never-say list (fact sheet §5 and §4 corrections).
-  'audited by',
-  'Audited by',
   'immutable',
   'Immutable',
   'production-ready',
   'trusted by',
   'Trusted by',
 ]
+
+/** Claims that need context: "audited by …" is banned, the approved "Not audited by a third
+ * party yet" (TRS F53) is not. */
+const BANNED_PATTERNS: RegExp[] = [/(?<![Nn]ot )\b[Aa]udited by\b/, /\bfully audited\b/i, /\bsecurity audited\b/i]
 
 const BANNED_HREFS = ['t.me/dappdrop', 'discord.gg/dappdrop', 'twitter.com/dappdrop', 'x.com/dappdrop']
 
@@ -53,7 +55,7 @@ function landingHtml(): string {
 
 test('the built landing page contains none of the banned claims', () => {
   const html = landingHtml()
-  const hits = BANNED_TEXT.filter((s) => html.includes(s))
+  const hits = [...BANNED_TEXT.filter((s) => html.includes(s)), ...BANNED_PATTERNS.filter((re) => re.test(html)).map(String)]
   assert.deepEqual(hits, [], `banned claim(s) found in /: ${hits.join(', ')}`)
 })
 
@@ -97,6 +99,9 @@ test('no source file under src/ carries a banned claim or link (comments exclude
     const code = stripComments(readFileSync(file, 'utf8'))
     for (const s of [...BANNED_TEXT, ...BANNED_HREFS]) {
       if (code.includes(s)) hits.push(`${path.relative(process.cwd(), file)}: "${s}"`)
+    }
+    for (const re of BANNED_PATTERNS) {
+      if (re.test(code)) hits.push(`${path.relative(process.cwd(), file)}: ${re}`)
     }
   }
   assert.deepEqual(hits, [], `banned claim(s) in source:\n${hits.join('\n')}`)
