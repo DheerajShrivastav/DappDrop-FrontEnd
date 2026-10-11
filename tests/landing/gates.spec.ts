@@ -77,7 +77,8 @@ test.describe('layout', () => {
       return {
         ctaBottom: document.getElementById('hero-cta')!.getBoundingClientRect().bottom,
         h1Lines: Math.round(h1.getBoundingClientRect().height / parseFloat(getComputedStyle(h1).lineHeight)),
-        height: document.documentElement.scrollHeight,
+        // The budget is "through #start" (plan §2; PRF): the footer isn't counted.
+        height: Math.round((document.getElementById('start') ?? document.querySelector('footer') ?? document.body).getBoundingClientRect().bottom + scrollY),
         nodes: document.querySelectorAll('*').length,
       }
     })
@@ -186,4 +187,47 @@ test.describe('accessibility (axe, WCAG 2.2 AA)', () => {
       expect(violations).toEqual([])
     })
   }
+})
+
+test.describe('pass 2 behaviours', () => {
+  test('deep links open their <details>: #faq-beta and #can-cant (phone)', async ({ page }) => {
+    await page.setViewportSize(PHONE)
+    await page.goto('/#faq-beta', { waitUntil: 'networkidle' })
+    expect(await page.evaluate(() => (document.getElementById('faq-beta') as HTMLDetailsElement).open)).toBe(true)
+    await page.goto('/#can-cant', { waitUntil: 'networkidle' })
+    expect(await page.evaluate(() => (document.querySelector('#can-cant details') as HTMLDetailsElement).open)).toBe(true)
+  })
+
+  test('the can/can\'t card is closed on phone and open on desktop', async ({ page }) => {
+    await page.setViewportSize(PHONE)
+    await open(page)
+    expect(await page.evaluate(() => (document.querySelector('#can-cant details') as HTMLDetailsElement).open)).toBe(false)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await open(page)
+    expect(await page.evaluate(() => (document.querySelector('#can-cant details') as HTMLDetailsElement).open)).toBe(true)
+  })
+
+  test('"Continue to the app" prefetches /create-campaign only on intent', async ({ page }) => {
+    const hits: string[] = []
+    page.on('request', (r) => {
+      if (r.url().includes('create-campaign')) hits.push(r.url())
+    })
+    await open(page)
+    await page.locator('#start').scrollIntoViewIfNeeded()
+    await page.waitForTimeout(1500)
+    expect(hits).toEqual([])
+    await page.locator('[data-cta="continue_to_app"]').hover()
+    await page.waitForTimeout(1500)
+    expect(hits.length).toBeGreaterThan(0)
+  })
+
+  test('receipts point at deployed code only (explorer source or a tag, never dev)', async ({ page }) => {
+    await open(page)
+    const hrefs = await page.locator('[data-receipt]').evaluateAll((els) => els.map((e) => e.getAttribute('href') || ''))
+    expect(hrefs.length).toBeGreaterThan(0)
+    for (const h of hrefs) {
+      expect(h).toMatch(/^https:\/\/(sepolia\.etherscan\.io\/address\/0x[0-9a-fA-F]{40}#code|github\.com\/.+\/blob\/v[^/]+\/)/)
+      expect(h).not.toMatch(/\/(blob|tree)\/dev\//)
+    }
+  })
 })
