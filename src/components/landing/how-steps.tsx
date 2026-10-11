@@ -66,7 +66,7 @@ export function HowSteps() {
               </p>
               {/* Phone (< 768 px): text-only steps, for the page-height budget; tablets show each
                   replica inline; ≥ 1024 × 700 uses the sticky panel. */}
-              <div className="lp-how-inline mt-4 hidden md:block">
+              <div className="lp-how-inline mt-4 hidden md:block [@media(min-width:1024px)_and_(min-height:700px)]:hidden">
                 <Replica />
               </div>
             </li>
