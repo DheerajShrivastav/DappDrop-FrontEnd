@@ -209,6 +209,21 @@ test.describe('pass 2 behaviours', () => {
     expect(await page.evaluate(() => (document.querySelector('#can-cant details') as HTMLDetailsElement).open)).toBe(true)
   })
 
+  test('phone collapses (founder decision 2026-10-11): closed below 768, open from 768, deep links open', async ({ page }) => {
+    const states = () => page.evaluate(() => [...document.querySelectorAll<HTMLDetailsElement>('details[data-collapse-mobile]')].map((d) => d.open))
+    await page.setViewportSize(PHONE)
+    await open(page)
+    const phone = await states()
+    expect(phone.length).toBeGreaterThanOrEqual(20)
+    expect(phone.every((o) => !o)).toBe(true)
+    await page.setViewportSize({ width: 768, height: 1024 })
+    await open(page)
+    expect((await states()).every((o) => o)).toBe(true)
+    await page.setViewportSize(PHONE)
+    await page.goto('/#rule-r4', { waitUntil: 'networkidle' })
+    expect(await page.evaluate(() => (document.querySelector('#rule-r4 details') as HTMLDetailsElement).open)).toBe(true)
+  })
+
   test('"Continue to the app" prefetches /create-campaign only on intent', async ({ page }) => {
     const hits: string[] = []
     page.on('request', (r) => {
