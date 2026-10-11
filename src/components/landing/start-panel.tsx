@@ -2,6 +2,7 @@ import { claims } from '@/config/claims'
 import { network, networkLabel, repos } from '@/config/landing'
 import { IntentPrefetch } from './intent-prefetch'
 import { LeadForm } from './lead-form'
+import { PhoneDetails } from './phone-details'
 
 /**
  * S1-14: #start, "Here's what you'll need" (plan §2.10; TRS F78–F81), on the ink band that runs
@@ -64,10 +65,10 @@ export function StartPanel() {
         </h2>
         <p className="mt-3 text-lead text-paper-2">Four steps from here to a funded test campaign.</p>
 
-        <div className="mt-8 grid gap-10 lg:grid-cols-12 lg:gap-12">
-          <ol className="space-y-4 lg:col-span-7">
+        <div className="mt-6 grid gap-8 md:mt-8 lg:grid-cols-12 lg:gap-12">
+          <ol className="space-y-3 md:space-y-4 lg:col-span-7">
             {steps.map((s, i) => (
-              <li key={s.title} className="flex gap-4 border-t border-[#3A3834] pt-4" data-step={i + 1}>
+              <li key={s.title} className="flex gap-4 border-t border-[#3A3834] pt-3 md:pt-4" data-step={i + 1}>
                 <span className="font-mono text-[0.875rem] text-paper-2" aria-hidden="true">
                   0{i + 1}
                 </span>
@@ -80,11 +81,15 @@ export function StartPanel() {
           </ol>
 
           <div className="lg:col-span-5">
-            <p className="text-small text-paper-2">No platform fee during beta. Gas is paid in {gas}.</p>
-            <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-paper-2 px-2.5 py-1 font-mono text-[0.75rem] uppercase text-paper">
-              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-paper" />
-              Public beta · {networkLabel}
-            </p>
+            {/* Founder decision 2026-10-11: below 768 px the cost detail is one tap away (#pricing
+                carries it too). Expanded from 768 px. */}
+            <PhoneDetails onDark detail="start_cost" summary={<span className="text-small font-semibold text-paper">No platform fee during beta.</span>}>
+              <p className="text-small text-paper-2">Gas is paid in {gas}.</p>
+              <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-paper-2 px-2.5 py-1 font-mono text-[0.75rem] uppercase text-paper">
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-paper" />
+                Public beta · {networkLabel}
+              </p>
+            </PhoneDetails>
             <div className="mt-5">
               <IntentPrefetch
                 href="/create-campaign"

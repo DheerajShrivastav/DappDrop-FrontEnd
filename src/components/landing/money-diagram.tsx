@@ -46,7 +46,7 @@ export function MoneyDiagram() {
         ))}
       </svg>
       {/* Vertical (< 640 px): compact, value falls downward. */}
-      <svg viewBox="0 0 300 250" role="img" aria-label={ALT} className="mx-auto block h-auto w-full max-w-[18rem] sm:hidden">
+      <svg viewBox="0 0 300 250" role="img" aria-label={ALT} className="mx-auto block h-auto w-full max-w-[15rem] sm:hidden">
         <defs>
           <Arrowhead id="mdv" />
         </defs>

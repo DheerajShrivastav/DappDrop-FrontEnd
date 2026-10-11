@@ -65,7 +65,7 @@ export function Security() {
 
       <CanCantCard />
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-12 lg:gap-12">
+      <div className="mt-8 grid gap-6 md:mt-10 md:gap-8 lg:grid-cols-12 lg:gap-12">
         <div className="lg:col-span-7">
           <details className="lp-details" data-open-desktop data-detail="how_we_build">
           <summary className="flex min-h-11 items-center justify-between gap-4">
@@ -106,7 +106,7 @@ export function Security() {
           </details>
         </div>
 
-        <div className="space-y-6 lg:col-span-5">
+        <div className="space-y-5 md:space-y-6 lg:col-span-5">
           <div>
             <h3 className="text-title font-semibold">Status today</h3>
             <p className="mt-3 rounded border border-rule bg-sunk px-3 py-2 font-mono text-[0.75rem] leading-6 text-ink">
@@ -121,7 +121,7 @@ export function Security() {
           </p>
           <SecurityLog />
 
-          <div className="rounded-lg border border-rule bg-surface p-5 text-small text-ink-2">
+          <div className="rounded-lg border border-rule bg-surface p-4 text-small text-ink-2 md:p-5">
             <h3 className="font-semibold text-ink md:text-body">Stay safe</h3>
             <p className="mt-1.5">
               <strong className="font-semibold text-ink">We will never ask for your seed phrase or private key.</strong> DappDrop only asks
@@ -133,7 +133,7 @@ export function Security() {
         </div>
       </div>
 
-      <p className="mt-8">
+      <p className="mt-6 md:mt-8">
         <a href="#start" className="lp-link inline-flex min-h-11 items-center font-medium" data-cta="security_to_start" data-loc="security">
           Seen enough? Here&apos;s what you&apos;ll need to start ↓
         </a>

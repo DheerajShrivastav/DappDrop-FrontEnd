@@ -115,10 +115,10 @@ export function Faq() {
 
   return (
     <Section id="faq" track="faq" title="Fair questions." dek="The things growth leads ask before they put a budget into a campaign.">
-      <div className="mt-8 border-b border-rule">
+      <div className="mt-6 border-b border-rule md:mt-8">
         {qs.map((x) => (
           <details key={x.id} id={x.id} className="lp-details lp-target scroll-mt-24 border-t border-rule" data-faq={x.id.replace('faq-', '')}>
-            <summary className="flex min-h-11 items-center justify-between gap-4 py-3">
+            <summary className="flex min-h-11 items-center justify-between gap-4 py-2 md:py-3">
               <h3 className="text-small font-semibold md:text-body">{x.q}</h3>
               <span aria-hidden="true" className="lp-chevron shrink-0 text-ink-3">
                 ›
@@ -128,7 +128,7 @@ export function Faq() {
           </details>
         ))}
       </div>
-      <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row md:mt-8 sm:items-center sm:gap-6">
         <a href="#start" className={primaryButton} data-cta="faq_start" data-loc="faq">
           Start a test campaign
         </a>

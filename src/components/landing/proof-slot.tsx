@@ -76,7 +76,7 @@ export function ProofSlot() {
               rel="noopener noreferrer"
               data-dest={`proof_${c.id}`}
               data-proof={c.id}
-              className="group flex h-full min-h-11 flex-col justify-center gap-1 px-3 py-4 sm:px-5"
+              className="group flex h-full min-h-11 flex-col justify-center gap-1 px-3 py-3 sm:px-5 sm:py-4"
             >
               <span className="text-small font-semibold text-ink underline decoration-signal decoration-1 underline-offset-[3px] can-hover:group-hover:decoration-2">
                 {c.title}

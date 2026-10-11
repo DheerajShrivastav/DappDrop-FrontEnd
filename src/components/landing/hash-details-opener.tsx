@@ -7,18 +7,26 @@ import { track } from '@/lib/track'
  * D-X14 (≈0.3 KB): opens a <details> when the URL hash points at it (or at an element that
  * contains one), on load and on hash change: #faq-beta, #can-cant, any #faq-* item. Also opens
  * details[data-open-desktop] at ≥ 1024 px (the can/can't card is open on desktop, closed on
- * phone). Fires detail_open / faq_open when a reader opens one.
+ * phone), and closes details[data-collapse-mobile] below 768 px (founder decision 2026-10-11).
+ * Fires detail_open / faq_open when a reader opens one.
  */
 export function HashDetailsOpener() {
   useEffect(() => {
     if (matchMedia('(min-width: 1024px)').matches) {
       document.querySelectorAll<HTMLDetailsElement>('details[data-open-desktop]').forEach((d) => (d.open = true))
     }
+    // Founder decision 2026-10-11: these are server-rendered open and collapse below 768 px.
+    if (!matchMedia('(min-width: 768px)').matches) {
+      document.querySelectorAll<HTMLDetailsElement>('details[data-collapse-mobile]').forEach((d) => (d.open = false))
+    }
     const open = () => {
       const id = decodeURIComponent(location.hash.slice(1))
       const el = id ? document.getElementById(id) : null
-      const d = el && (el.tagName === 'DETAILS' ? (el as HTMLDetailsElement) : el.querySelector('details'))
+      if (!el) return
+      const d = el.tagName === 'DETAILS' ? (el as HTMLDetailsElement) : el.querySelector('details')
       if (d) d.open = true
+      // A target inside collapsed blocks (e.g. #rule-r4): open every enclosing <details>.
+      for (let p = el.parentElement?.closest('details'); p; p = p.parentElement?.closest('details')) p.open = true
     }
     open()
     addEventListener('hashchange', open)

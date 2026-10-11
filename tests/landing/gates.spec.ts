@@ -12,7 +12,9 @@ import { test, expect, type Page } from '@playwright/test'
 const AXE = require.resolve('axe-core/axe.min.js')
 
 const PHONE = { width: 375, height: 812 }
-const HEIGHT_HARD = 7300
+// Founder decision 2026-10-11: the hard cap at 375 px is 9,000 px through #start (was 7,300),
+// with the rule stops, task rows, payout modes and two smaller blocks collapsible below 768 px.
+const HEIGHT_HARD = 9000
 const HEIGHT_WARN = 7000
 const DOM_MAX = 1200
 

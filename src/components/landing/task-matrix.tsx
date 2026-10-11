@@ -1,5 +1,6 @@
 import { claims } from '@/config/claims'
 import { Receipt } from './receipt'
+import { PhoneDetails } from './phone-details'
 import { Section } from './section'
 import { StatusChip, type ChipKind } from './status-chip'
 
@@ -71,17 +72,26 @@ export function TaskMatrix() {
       title="Every task says how it’s checked."
       dek="By our bot, by our app, by the chain, or self-reported. We label each one, so you know what you’re rewarding."
     >
-      <ul className="mt-8 border-b border-rule" aria-label="Task types, strongest check first">
+      <ul className="mt-6 border-b border-rule md:mt-8" aria-label="Task types, strongest check first">
         {rows.map((r) => (
-          <li key={r.task} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 border-t border-rule py-2.5 md:grid-cols-12 md:items-baseline md:gap-6 md:py-3">
-            <h3 className="text-small font-semibold md:col-span-3 md:text-body">{r.task}</h3>
-            <p className="col-start-2 row-start-1 md:order-last md:col-span-4 md:col-start-auto md:row-start-auto md:text-right">
-              <StatusChip kind={r.chips[0][0]}>{r.chips[0][1]}</StatusChip>
-            </p>
-            <p className="col-span-2 text-small text-ink-2 md:col-span-5">
-              {r.how}
-              {r.chips[1] && <span className="text-ink-2"> {r.chips[1][1]}.</span>}
-            </p>
+          <li key={r.task} className="border-t border-rule">
+            {/* Founder decision 2026-10-11: below 768 px each row is the task + its chip; how it's
+                checked is one tap away. Expanded from 768 px. */}
+            <PhoneDetails
+              detail={`task_${r.task.toLowerCase().replace(/[^a-z]+/g, '_')}`}
+              summaryClassName="py-1.5 md:py-2"
+              summary={
+                <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className="text-small font-semibold md:text-body">{r.task}</span>
+                  <StatusChip kind={r.chips[0][0]}>{r.chips[0][1]}</StatusChip>
+                </span>
+              }
+            >
+              <p className="max-w-[48rem] pb-3 text-small text-ink-2">
+                {r.how}
+                {r.chips[1] && <span> {r.chips[1][1]}.</span>}
+              </p>
+            </PhoneDetails>
           </li>
         ))}
       </ul>

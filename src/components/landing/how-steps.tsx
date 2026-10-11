@@ -45,8 +45,8 @@ export function HowSteps() {
       title="Build it, fund it, run it, settle it."
       dek="Four steps in one guided flow. No code, and you see every transaction before you sign."
     >
-      <div className="lp-how mt-8 lg:mt-10 lg:grid lg:grid-cols-12 lg:gap-12">
-        <ol className="space-y-6 lg:col-span-5 lg:space-y-0">
+      <div className="lp-how mt-6 lg:mt-10 lg:grid lg:grid-cols-12 lg:gap-12">
+        <ol className="space-y-5 lg:col-span-5 lg:space-y-0">
           {STEPS.map(({ n, title, body, Replica }) => (
             <li key={n} className="lp-how-step lg:flex lg:min-h-[60vh] lg:flex-col lg:justify-center" data-step={n}>
               <h3 className="flex items-baseline gap-3 text-title font-semibold">

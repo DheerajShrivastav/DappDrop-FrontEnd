@@ -1,4 +1,5 @@
 import { claims } from '@/config/claims'
+import { PhoneDetails } from './phone-details'
 import { Receipt } from './receipt'
 
 /**
@@ -17,11 +18,16 @@ function Chip({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** Founder decision 2026-10-11: below 768 px each mode is its name, one tap from the detail. */
 function Mode({ name, children }: { name: React.ReactNode; children: React.ReactNode }) {
   return (
-    <li className="grid gap-0.5 border-t border-rule py-3 md:grid-cols-12 md:gap-6 md:py-5">
-      <h4 className="text-small font-semibold text-ink md:col-span-4 md:font-mono md:text-[0.8125rem] md:font-medium md:uppercase md:tracking-[0.04em]">{name}</h4>
-      <div className="space-y-1.5 md:col-span-8">{children}</div>
+    <li className="border-t border-rule">
+      <PhoneDetails
+        summaryClassName="py-1.5 md:py-3"
+        summary={<span className="text-small font-semibold text-ink md:font-mono md:text-[0.8125rem] md:font-medium md:uppercase md:tracking-[0.04em]">{name}</span>}
+      >
+        <div className="space-y-1.5 pb-3 md:pb-5">{children}</div>
+      </PhoneDetails>
     </li>
   )
 }
@@ -31,9 +37,9 @@ export function PayoutModes() {
   const pointsLive = claims.tierModuleFixed
 
   return (
-    <div className="mt-12">
+    <div className="mt-8 md:mt-12">
       <h3 className="text-title font-semibold">Three ways to pay</h3>
-      <ul className="mt-4 border-b border-rule">
+      <ul className="mt-3 border-b border-rule md:mt-4">
         <Mode name="Equal split">
           <p className="text-small text-ink-2 md:text-body">
             Our app proposes an equal split among wallets that finished every required task. You review and publish it;

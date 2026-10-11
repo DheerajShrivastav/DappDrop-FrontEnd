@@ -281,7 +281,7 @@
     --ease-lock: linear(0, 0.057, 0.188, 0.344, 0.498, 0.635, 0.749, 0.837, 0.903, 0.949, 0.98, 0.999, 1.009, 1.014, 1.015, 1.014, 1.012, 1.01, 1.008, 1.005, 1.004, 1.002, 1.001, 1.001, 1);
 
     /* Layout */
-    --section-y: clamp(3rem, 2rem + 6vw, 8rem); /* 48–55 px on phones (height budget), 128 px desktop */
+    --section-y: clamp(2.75rem, 1.75rem + 6vw, 8rem); /* ~44–50 px on phones (height budget), 128 px desktop */
     --sticky-bar-h: 4.5rem;
 }
 

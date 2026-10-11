@@ -29,7 +29,7 @@ export function Payouts() {
       after={
         <>
           <RuleRibbon />
-          <div className="lp-container flex flex-col gap-4 pb-[var(--section-y)] pt-10 sm:flex-row sm:items-center">
+          <div className="lp-container flex flex-col gap-4 pb-[var(--section-y)] pt-8 sm:flex-row md:pt-10 sm:items-center">
             <a href="#start" className={primaryButton} data-cta="payouts_primary" data-loc="payouts">
               Start a test campaign
             </a>

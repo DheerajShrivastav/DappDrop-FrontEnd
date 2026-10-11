@@ -1,6 +1,7 @@
 import { claims } from '@/config/claims'
 import { network } from '@/config/landing'
 import { ExampleCampaignCard } from './example-campaign-card'
+import { PhoneDetails } from './phone-details'
 import { Receipt } from './receipt'
 import { Section } from './section'
 
@@ -30,10 +31,15 @@ export function Participants() {
           {claims.relayerLive && <li>We can cover the gas for your claim, within each campaign&apos;s budget.</li>}
           <li>Clear statuses: open, ended, results being finalised, claims open at a set time, closed.</li>
           <li>
-            Projects create their own campaigns, and the host publishes the reward list. DappDrop doesn&apos;t vet hosts during the
-            beta. <strong className="font-semibold text-ink">Never pay to take part unless you trust the project.</strong>
+            {/* Founder decision 2026-10-11: one tap away below 768 px (FAQ Q8 repeats it). */}
+            <PhoneDetails detail="who_hosts" summary={<span className="font-semibold text-ink">Who runs these campaigns?</span>}>
+              <p className="pb-1">
+                Projects create their own campaigns, and the host publishes the reward list. DappDrop doesn&apos;t vet hosts during
+                the beta. <strong className="font-semibold text-ink">Never pay to take part unless you trust the project.</strong>
+              </p>
+              <p className="mt-2.5">During the beta, most participants will come from your own channels. Share your campaign anywhere.</p>
+            </PhoneDetails>
           </li>
-          <li>During the beta, most participants will come from your own channels. Share your campaign anywhere.</li>
           {claims.campaignsCurated && (
             <li>
               <a href="/campaigns" className="lp-link inline-flex min-h-11 items-center text-ink" data-cta="participants_browse" data-loc="participants">
