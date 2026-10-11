@@ -8,6 +8,8 @@ import { TaskMatrix } from '@/components/landing/task-matrix'
 import { Security } from '@/components/landing/security'
 import { Participants } from '@/components/landing/participants'
 import { Pricing } from '@/components/landing/pricing'
+import { Faq } from '@/components/landing/faq'
+import { StartPanel } from '@/components/landing/start-panel'
 import { HashDetailsOpener } from '@/components/landing/hash-details-opener'
 import { StickyStartBar } from '@/components/landing/sticky-start-bar'
 
@@ -15,8 +17,8 @@ import { StickyStartBar } from '@/components/landing/sticky-start-bar'
 // status-dependent line reads src/config/claims.ts at build time: no cookies(), headers() or
 // searchParams here, or / turns dynamic.
 //
-// Pass 1 builds the chrome, hero, statement slip, trace and proof row. Sections #payouts, #how,
-// #verification, #security, #participants, #pricing, #faq and #start come in pass 2 (S1-08+).
+// Order (UXA): hero → proof row → #payouts → #how → #verification → #security →
+// #participants → #pricing → #faq → #start (ink band, continuous with the footer).
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
 }
@@ -32,6 +34,8 @@ export default function Home() {
       <Security />
       <Participants />
       <Pricing />
+      <Faq />
+      <StartPanel />
       <HashDetailsOpener />
       <StickyStartBar helper={network.testnet ? `${network.name} · no platform fee` : 'No platform fee during beta'} />
     </>

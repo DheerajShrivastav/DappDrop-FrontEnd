@@ -1,5 +1,5 @@
 import MarketingHeader from '@/components/marketing-header';
-import Footer from '@/components/footer';
+import { SiteFooter } from '@/components/landing/site-footer';
 import { Analytics } from '@/components/landing/analytics';
 import { StatusStrip } from '@/components/landing/status-strip';
 import { display, mono } from './fonts';
@@ -23,7 +23,7 @@ export default function MarketingLayout({
             <main id="main" tabIndex={-1} className="flex-grow outline-none">
                 {children}
             </main>
-            <Footer />
+            <SiteFooter />
             <Analytics />
         </div>
     );

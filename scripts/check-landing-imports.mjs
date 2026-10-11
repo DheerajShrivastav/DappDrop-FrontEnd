@@ -10,7 +10,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
-const ROOTS = ['src/components/landing', 'src/app/(marketing)/page.tsx', 'src/app/(marketing)/layout.tsx', 'src/components/marketing-header.tsx', 'src/components/footer.tsx']
+const ROOTS = ['src/components/landing', 'src/app/(marketing)/page.tsx', 'src/app/(marketing)/layout.tsx', 'src/components/marketing-header.tsx']
 const BANNED = [/^@\/app\/\(app\)\//, /^wagmi(\/|$)/, /^viem(\/|$)/, /^@rainbow-me\//, /^ethers(\/|$)/, /^framer-motion(\/|$)/, /^next\/link$/]
 
 const files = []
