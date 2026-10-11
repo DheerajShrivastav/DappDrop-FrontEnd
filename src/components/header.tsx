@@ -25,10 +25,10 @@ export default function Header() {
                     <Link href="/campaigns" className='text-slate-600 hover:text-primary transition-colors font-semibold'>
                         Campaigns
                     </Link>
-                    <Link href="/about" className='text-slate-600 hover:text-primary transition-colors'>
+                    <Link href="/about" prefetch={false} className='text-slate-600 hover:text-primary transition-colors'>
                         About
                     </Link>
-                    <Link href="/changelog" className='text-slate-600 hover:text-primary transition-colors'>
+                    <Link href="/changelog" prefetch={false} className='text-slate-600 hover:text-primary transition-colors'>
                         Changelog
                     </Link>
                     {role === 'host' && (
