@@ -367,9 +367,17 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   const rig = new Rig(camera, KEYS, { parallax: 0.12, portraitFit: 0.42, portraitFov: 38 / 32, portraitDolly: 1.45, lambda: 2.8, breathe: Q.breathe })
   const pointer = new Pointer()
   stage.onDegrade(() => { post.setBloomEnabled(false); FU.uReflect.value = 0 })
+  // Phone framing: keep the vault clear of the hero copy, which runs to ~64 % on a 320 x 640 screen
+  // (layout.md designed for 52 %). Measured from the hero's text block, relative to the fixed stage.
+  const heroSafeTop = (h) => {
+    const block = document.querySelector('[data-beat="hero"]')?.firstElementChild
+    if (!block) return 0
+    return (block.getBoundingClientRect().bottom + window.scrollY + 16) / h
+  }
   stage.onResize((w, h, dpr) => {
     post.setSize(Math.round(w * dpr), Math.round(h * dpr))
     rig.resize(w, h)
+    rig.setSafeTop(w < h ? heroSafeTop(h) : 0)
     for (const o of [chamber, marks, trails, heads, points, core, dust]) o.resize(w, h, dpr)
     if (Q.reflect) floor.getRenderTarget().setSize(Math.round(w * dpr * Q.reflect), Math.round(h * dpr * Q.reflect))
   })

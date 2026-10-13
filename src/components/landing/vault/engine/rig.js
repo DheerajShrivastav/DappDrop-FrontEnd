@@ -6,6 +6,11 @@ import { CatmullRomCurve3, Vector3, MathUtils } from 'three'
 
 const { clamp, lerp, smoothstep, degToRad, radToDeg } = MathUtils
 const damp = (a, b, lambda, dt) => lerp(a, b, 1 - Math.exp(-lambda * dt))
+// Phone composition (layout.md): copy in the top 52 %; the glass starts ~60 % down and its band ends ~97 %,
+// and the vault (plus its glow) is about 0.2 of the stage height from its centre to its bottom edge.
+const DESIGN_TOP = 0.58
+const BAND_BOTTOM = 0.97
+const HALF_H = 0.2
 
 export class Pointer {
   constructor() {
@@ -36,6 +41,8 @@ export class Rig {
     this.portraitFit = portraitFit
     this.portraitFov = portraitFov
     this.portraitDolly = portraitDolly // phones: pull the camera back rather than widen the lens
+    this.fitK = 1 // phones: extra scale-down when the hero copy runs past the designed 52 % (short screens)
+    this.fitDy = 0 // ...and the matching lens shift, so the vault keeps its bottom edge and drops clear of the copy
     this.lambda = lambda
     this.breathe = breathe
     this.posCurve = new CatmullRomCurve3(keys.map((k) => new Vector3(...k.pos)), false, 'centripetal')
@@ -54,6 +61,15 @@ export class Rig {
     this.w = w
     this.h = h
     this.camera.aspect = w / h
+  }
+
+  // Phone framing. safeTop = the fraction of the stage height where the hero copy ends (plus a gap).
+  // The composition holds up to 0.58 (copy ending ~0.56, the glass ~0.6); past that (320 x 640, 375 x 667) the vault shrinks into
+  // the band that is left and slides down by the same amount, keeping its bottom edge where it was.
+  setSafeTop(safeTop) {
+    const k = clamp((BAND_BOTTOM - safeTop) / (BAND_BOTTOM - DESIGN_TOP), 0.6, 1)
+    this.fitK = k
+    this.fitDy = -HALF_H * (1 - k)
   }
 
   snap(T) { this.Ts = T }
@@ -78,9 +94,10 @@ export class Rig {
     const s0 = (portrait && k0.shiftP) || k0.shift || [0, 0]
     const s1 = (portrait && k1.shiftP) || k1.shift || [0, 0]
     const sx = lerp(s0[0], s1[0], sf)
-    const sy = lerp(s0[1], s1[1], sf)
+    const sy = lerp(s0[1], s1[1], sf) + (portrait ? this.fitDy : 0)
 
-    if (portrait && this.portraitDolly !== 1) this.pos.sub(this.tgt).multiplyScalar(this.portraitDolly).add(this.tgt)
+    const dolly = portrait ? this.portraitDolly / this.fitK : 1
+    if (dolly !== 1) this.pos.sub(this.tgt).multiplyScalar(dolly).add(this.tgt)
     const b = this.breathe
     this.pos.x += Math.sin(time * 0.13) * 0.08 * b
     this.pos.y += Math.sin(time * 0.17 + 1.3) * 0.05 * b
