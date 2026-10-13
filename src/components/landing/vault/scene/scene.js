@@ -543,7 +543,7 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
     labels.set('escrow', lab.set(W / 2, LOCK_Y, D / 2), win(T, 1.55, 1.75) * (1 - win(T, 2.1, 2.3)), camera, w, h, 18, -12)
     const ra = ring * Math.PI * 2
     labels.set('ring', lab.set(Math.sin(ra) * RING_R, 0, Math.cos(ra) * RING_R), win(prove, 0.42, 0.48) * (1 - win(rel, 0.0, 0.08)), camera, w, h, 12, -10)
-    labels.set('example', lab.copy(wallets[order[3]]), win(rel, 0.3, 0.4), camera, w, h, 10, 8)
+    labels.set('example', lab.copy(wallets[order[3]]), win(rel, 0.3, 0.4) * (1 - win(rel, 0.9, 0.98)), camera, w, h, 10, 8)
 
     dust.material.uniforms.uTime.value = time
     post.render(scene, camera, time)
@@ -561,8 +561,25 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
     if (next !== themeKey) { applyTheme(next); stage.requestRender() }
   }
   window.addEventListener('dappdrop:themechange', onTheme)
+  // After the claim beat the stage scrolls away *with* the claim section (no dead stretch of a fixed,
+  // emptying stage before the next section on phones): translate it by how far the claim section's
+  // bottom has passed the viewport bottom.
+  const claimEl = document.querySelector('[data-beat="claim"]')
+  let lastShift = -1
+  const follow = () => {
+    if (!claimEl) return
+    const shift = Math.max(0, Math.round(innerHeight - claimEl.getBoundingClientRect().bottom))
+    if (shift === lastShift) return
+    lastShift = shift
+    stageEl.style.transform = shift ? `translate3d(0, ${-shift}px, 0)` : ''
+    // feather the stage's bottom edge while it leaves, so there is no seam against the page
+    const mask = shift ? 'linear-gradient(to bottom, #000 72%, transparent)' : ''
+    stageEl.style.maskImage = mask
+    stageEl.style.webkitMaskImage = mask
+  }
+  follow()
   // while paused the loop is stopped, but the story still follows the visitor's scroll
-  const onScroll = () => { if (stage.paused) stage.requestRender() }
+  const onScroll = () => { follow(); if (stage.paused) stage.requestRender() }
   window.addEventListener('scroll', onScroll, { passive: true })
 
   return {
@@ -577,6 +594,9 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
     dispose() {
       window.removeEventListener('dappdrop:themechange', onTheme)
       window.removeEventListener('scroll', onScroll)
+      stageEl.style.transform = ''
+      stageEl.style.maskImage = ''
+      stageEl.style.webkitMaskImage = ''
       story.dispose()
       pointer.dispose()
       post.dispose()

@@ -11,7 +11,9 @@ export function createLabels(root) {
       const L = els[name]
       if (!L) return
       const o = Math.round(opacity * 100) / 100
-      if (o <= 0.001) { if (L.o !== 0) { L.el.style.opacity = '0'; L.o = 0 } return }
+      // fully hidden once its beat is over (no ghost pill behind later sections)
+      if (o <= 0.001) { if (L.o !== 0) { L.el.style.opacity = '0'; L.el.style.visibility = 'hidden'; L.o = 0 } return }
+      if (L.o === 0 || L.o === -1) L.el.style.visibility = 'visible'
       v.copy(pos).project(camera)
       if (!L.w) L.w = L.el.offsetWidth || 120
       // keep the pill fully on screen (flip to the left of the point if it would clip)

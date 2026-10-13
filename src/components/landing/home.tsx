@@ -181,7 +181,7 @@ export function HomeModes() {
   const payouts = ['Equal split', 'By rank', ...(claims.tierModuleFixed ? ['By points'] : []), ...(claims.nftCustodyFixed ? ['NFTs'] : [])]
   return (
     <section id="modes" data-beat="after" data-section="modes" aria-labelledby="modes-title" className="mh-after-first">
-      <div className="lp-container pb-16 pt-28 md:pb-24 md:pt-40">
+      <div className="lp-container pb-16 pt-12 md:pb-24 md:pt-40">
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
           <div className="lg:col-span-5">
             <h2 id="modes-title" tabIndex={-1} className="mh-display mh-h2 text-ink outline-none">
