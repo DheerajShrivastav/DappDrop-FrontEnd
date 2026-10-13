@@ -705,7 +705,7 @@ html[data-theme="porcelain"] .lp-tt .lp-tt-moon {
 }
 .mh-display {
     font-family: var(--font-display, Georgia), Georgia, "Times New Roman", serif;
-    font-weight: 450;
+    font-weight: 300; /* the Monolith display weight: 300 on Obsidian, 340 on Porcelain (below) */
     letter-spacing: -0.025em;
     text-wrap: balance;
 }
@@ -715,6 +715,9 @@ html[data-theme="porcelain"] .lp-tt .lp-tt-moon {
     align-items: center;
     min-height: calc(100svh - 4rem);
     padding-block: 2.5rem 6rem;
+}
+html[data-theme="porcelain"] .mh-display {
+    font-weight: 340;
 }
 .mh-h1 {
     font-size: clamp(2.875rem, 5.8vw, 6rem);
