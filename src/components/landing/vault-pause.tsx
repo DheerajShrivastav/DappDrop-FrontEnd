@@ -2,12 +2,7 @@
 
 import { useState } from 'react'
 import { track } from '@/lib/track'
-
-declare global {
-  interface Window {
-    __vault?: { setPaused?: (paused: boolean) => void; ready?: boolean; fallback?: string }
-  }
-}
+// window.__vault is declared by the vault island (src/components/landing/vault/island.tsx).
 
 /**
  * The 3D's motion toggle (copy §4.2; WCAG 2.2.2), in the hero's CTA row after the CTA and link.
