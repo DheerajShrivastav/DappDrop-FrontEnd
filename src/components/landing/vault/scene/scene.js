@@ -81,6 +81,11 @@ const SKY = /* glsl */ `
     return c;
   }`
 
+// Mount is split into short tasks (QA M1: one 80-150 ms task under 4x throttle). Between construction
+// steps we yield to the main thread: scheduler.yield() where available, else a 0 ms timeout.
+const yieldTask = () => (globalThis.scheduler?.yield ? globalThis.scheduler.yield() : new Promise((r) => setTimeout(r, 0)))
+const mark = (n) => { try { performance.mark(`vault:${n}`) } catch {} }
+
 /**
  * Mount the vault scene.
  * @param {{ stage: HTMLElement, canvasHost: HTMLElement, tier?: 'high'|'medium'|'low', still?: number|null,
@@ -92,7 +97,9 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   let themeKey = themeName(document.documentElement.dataset.theme)
   let TH = THEMES[themeKey]
   const C = {} // linear colours of the current theme, read every frame
+  mark('mount-start')
   const story = createStory({ still })
+  await yieldTask()
   const stage = new Stage(canvasHost, { tier, track: story.sections, onFail, watchdog, dprCap: Q.dprCap, toneMapping: AgXToneMapping, exposure: 1.1 })
   // shared theme uniforms
   const SU = { uSkyBase: { value: new Vector3() }, uSkyHaze: { value: new Vector3() }, uSkyHalo: { value: new Vector3() }, uSkyBack: { value: new Vector3() } }
@@ -104,6 +111,8 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   // Env: a procedural studio (softboxes/cards placed for the camera angles), built per theme in applyTheme().
   scene.environmentIntensity = 1.0
 
+  mark('stage')
+  await yieldTask()
   // ---------- backdrop ----------
   const dome = new Mesh(
     new SphereGeometry(80, 48, 24),
@@ -126,6 +135,8 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   )
   scene.add(dome)
 
+  mark('backdrop')
+  await yieldTask()
   // ---------- floor (glossy black; real-time reflection on desktop only) ----------
   const floorShader = {
     name: 'Floor',
@@ -212,6 +223,8 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   const FU = floor.material.uniforms
   Object.assign(FU, SU) // the Reflector clones uniforms: re-share the sky ones
 
+  mark('floor')
+  await yieldTask()
   // ---------- the block ----------
   const block = new Group()
   scene.add(block)
@@ -268,6 +281,8 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   }
   block.add(chamber)
 
+  mark('block')
+  await yieldTask()
   // ---------- the reward: 12 thin discs of ember light ----------
   const discGeo = new CylinderGeometry(DISC_R, DISC_R, DISC_T, 56, 1)
   discGeo.setAttribute('aGlow', new InstancedBufferAttribute(new Float32Array(DISCS), 1))
@@ -309,6 +324,8 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   const markX = (i) => 0.12 + i * 0.065
   const MY0 = LOCK_Y + 0.13, MY1 = LOCK_Y + 0.36
 
+  mark('reward')
+  await yieldTask()
   // ---------- wallets, host, arcs ----------
   let seed = 11
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
@@ -347,6 +364,8 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
       .addScaledVector(c[2], 3 * u * s * s).addScaledVector(c[3], s * s * s)
   }
 
+  mark('wallets')
+  await yieldTask()
   // ---------- air ----------
   const dustI = []
   const dust = new GlowPoints(Q.dust, { scale: 4, core: 0.2, drift: tier === 'low' ? 0 : 0.12 })
@@ -362,6 +381,8 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   for (const o of [trails, heads, dust]) o.layers.set(1)
   camera.layers.enable(1)
 
+  mark('air')
+  await yieldTask()
   // ---------- post, rig, story ----------
   const post = new Post(renderer, Q.post)
   const rig = new Rig(camera, KEYS, { parallax: 0.12, portraitFit: 0.42, portraitFov: 38 / 32, portraitDolly: 1.45, lambda: 2.8, breathe: Q.breathe })
@@ -549,9 +570,15 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
     post.render(scene, camera, time)
   })
 
+  mark('post')
+  await yieldTask()
   applyTheme(themeKey)
+  mark('theme')
+  await yieldTask()
   rig.update(story.T(), 0, 0, null)
   await stage.compile(scene, camera, post.passes())
+  mark('compiled')
+  await yieldTask()
   stage.onFrame(() => { if (onFirstFrame) { const f = onFirstFrame; onFirstFrame = null; f() } })
   stage.start()
 

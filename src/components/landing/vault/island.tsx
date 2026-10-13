@@ -107,7 +107,14 @@ export function VaultIsland() {
 
     const start = async () => {
       try {
+        // Evaluate the heavy modules in separate tasks, yielding in between (QA M1: no task > 50 ms).
+        const yieldTask = () => new Promise<void>((r) => setTimeout(r, 0))
+        await import('./engine/warm-three.js')
+        await yieldTask()
+        await import('./engine/warm-motion.js')
+        await yieldTask()
         const mod = await import('./scene/scene.js')
+        await yieldTask()
         if (disposed) return
         // ?vaultposter: capture mode for rendering the posters (frozen hero, no grain)
         const posterMode = new URLSearchParams(location.search).has('vaultposter')
