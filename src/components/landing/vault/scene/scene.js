@@ -228,7 +228,7 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   // ---------- the block ----------
   const block = new Group()
   scene.add(block)
-  const sweep = { y: { value: -10 }, amt: { value: 0 }, col: { value: new Vector3() }, rim: { value: new Vector3() }, ink: { value: 0 }, edge: { value: 0 }, edgeCol: { value: new Vector3() } }
+  const sweep = { y: { value: -10 }, amt: { value: 0 }, col: { value: new Vector3() }, rim: { value: new Vector3() }, ink: { value: 0 }, edge: { value: 0 }, edgePow: { value: 1.6 }, edgeCol: { value: new Vector3() } }
   const injectSweep = (mat, fakeGlass) => {
     mat.onBeforeCompile = (s) => {
       s.uniforms.uSweepY = sweep.y
@@ -238,13 +238,14 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
       s.uniforms.uInkG = sweep.ink
       s.uniforms.uEdge = sweep.edge
       s.uniforms.uEdgeCol = sweep.edgeCol
+      s.uniforms.uEdgePow = sweep.edgePow
       s.vertexShader = s.vertexShader.replace('#include <common>', '#include <common>\nvarying float vSweepY;')
         .replace('#include <project_vertex>', '#include <project_vertex>\nvSweepY = (modelMatrix * vec4(transformed, 1.0)).y;')
-      s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uSweepY, uSweepAmt, uInkG, uEdge; uniform vec3 uSweepCol, uRimCol, uEdgeCol; varying float vSweepY;')
+      s.fragmentShader = s.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uSweepY, uSweepAmt, uInkG, uEdge, uEdgePow; uniform vec3 uSweepCol, uRimCol, uEdgeCol; varying float vSweepY;')
         .replace('#include <opaque_fragment>', `
           float frS = pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 3.0);
           // light themes: tinted, darker edges (fresnel-weighted), so the glass is drawn by its edges on paper
-          outgoingLight = mix(outgoingLight, uEdgeCol, clamp(uEdge * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), 1.6), 0.0, 1.0));
+          outgoingLight = mix(outgoingLight, uEdgeCol, clamp(uEdge * pow(1.0 - saturate(dot(normal, normalize(vViewPosition))), uEdgePow), 0.0, 1.0));
           float bd = (vSweepY - uSweepY) / 0.035; float band = exp(-bd * bd); // never pow() a negative base
           outgoingLight += uSweepCol * band * (0.05 + 0.5 * frS) * uSweepAmt;
           ${fakeGlass ? 'float rim = pow(frS, 1.6); outgoingLight = mix(outgoingLight + uRimCol * rim * 0.9, mix(outgoingLight, uRimCol, rim * 0.9), uInkG); diffuseColor.a = clamp(diffuseColor.a + rim * 0.6 + band * uSweepAmt * 0.3, 0.0, 1.0);' : ''}
@@ -426,10 +427,11 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
     const G = TH.glass
     if (Q.glass === 'transmission') {
       glassMat.attenuationColor.set(G.atten); glassMat.attenuationDistance = G.attenDist
+      glassMat.roughness = G.rough ?? 0.035; glassMat.clearcoat = G.clearcoat ?? 0.6; glassMat.dispersion = G.dispersion ?? 3
     } else glassMat.opacity = G.fakeOpacity
     glassMat.envMapIntensity = G.env
     v3(sweep.col, lin(G.sweep)); v3(sweep.rim, lin(G.rim)); sweep.ink.value = TH.ink ? 1 : 0
-    sweep.edge.value = G.edge || 0; v3(sweep.edgeCol, lin(G.edgeCol || '#000000'))
+    sweep.edge.value = G.edge || 0; sweep.edgePow.value = G.edgePow || 1.6; v3(sweep.edgeCol, lin(G.edgeCol || '#000000'))
     v3(discMat.uniforms.uCol, C.reward); discMat.uniforms.uBase.value = TH.rewardBase; discMat.uniforms.uRim.value = TH.rewardRim
     discMat.uniforms.uTopK.value = TH.coinTop; discMat.uniforms.uEdgeK.value = TH.coinEdge
     for (const o of [chamber, marks, trails, heads, points, core]) o.setInk(TH.ink)

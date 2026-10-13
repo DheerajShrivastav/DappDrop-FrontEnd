@@ -17,7 +17,7 @@ export const THEMES = {
     ],
     skyLin: { base: [0.0015, 0.0015, 0.0018], haze: [0.003, 0.0034, 0.0044], halo: [0.006, 0.0068, 0.0085], back: [0.02, 0.022, 0.027], blade: [0.007, 0.0075, 0.009] },
     floorLin: { base: [0.0013, 0.0013, 0.0016], reflAdd: 0.38, reflMix: 0, shadow: 0, pool: 0.05 },
-    glass: { atten: '#CFD8E3', attenDist: 2.4, env: 1.25, edge: 0, edgeCol: '#000000', sweep: '#E9EEF5', rim: '#E9EEF5', fakeOpacity: 0.035 },
+    glass: { atten: '#CFD8E3', attenDist: 2.4, env: 1.25, rough: 0.035, clearcoat: 0.6, dispersion: 3.0, edge: 0, edgePow: 1.6, edgeCol: '#000000', sweep: '#E9EEF5', rim: '#E9EEF5', fakeOpacity: 0.035 },
     reward: '#F2B45E', rewardBase: 0.55, rewardRim: 2.6, coinTop: 1.3, coinEdge: 0.5, core: 1,
     ring: '#E9EEF5', lock: '#F2B45E', mark: '#E9EEF5', chamber: '#E9EEF5', chamberI: 0.035,
     arc: '#F2B45E', head: '#F2B45E', walletIdle: '#E9EEF5', walletLanded: '#F7E6C8', host: '#F7E6C8',
@@ -33,14 +33,15 @@ export const THEMES = {
       { color: '#FFFFFF', intensity: 9, pos: [6, 2.4, 2.4], size: [0.22, 6] }, // white strip beside the card: edge + glint
       { color: '#000000', intensity: 0, pos: [-6, 1.5, 3], size: [1.2, 8] },
       { color: '#000000', intensity: 0, pos: [2.2, 2.5, -7], size: [2.2, 10] },
-      { color: '#FFFFFF', intensity: 1.0, pos: [3.5, 5, 6], size: [2.6, 1.8], soft: [0.5, 0.5] },
+      { color: '#FFFFFF', intensity: 0.4, pos: [3.5, 5, 6], size: [2.6, 1.8], soft: [0.5, 0.5] }, // dim window: no veil on the face
       { color: '#FFFFFF', intensity: 8.0, pos: [0.3, 7, -1.5], size: [3, 0.35] },
       { color: '#4A463F', intensity: 1, pos: [0, -5, 0], size: [16, 16] },
     ],
-    skyLin: { base: [0.83, 0.8, 0.735], haze: [0.03, 0.028, 0.024], halo: [0, 0, 0], back: [0.05, 0.046, 0.038], blade: [0, 0, 0] },
+    skyLin: { base: [0.83, 0.8, 0.735], haze: [0.02, 0.019, 0.016], halo: [0, 0, 0], back: [-0.085, -0.082, -0.074], blade: [0, 0, 0] },
     floorLin: { base: [0.69, 0.662, 0.6], reflAdd: 0, reflMix: 0.42, shadow: 0.75, pool: 0.16 },
-    // clear glass: near-neutral attenuation (no green body), neutral warm-grey fresnel edges
-    glass: { atten: '#F5F3EF', attenDist: 9, env: 0.8, edge: 0.62, edgeCol: '#57534D', sweep: '#FFFFFF', rim: '#2A2620', fakeOpacity: 0.05 },
+    // clear, thick glass: no roughness (the coins and paper stay sharp through it), little env haze,
+    // neutral attenuation, and a crisp (high-exponent) fresnel edge instead of a broad grey falloff
+    glass: { atten: '#F7F5F1', attenDist: 12, env: 0.55, rough: 0, clearcoat: 0.25, dispersion: 0.6, edge: 0.75, edgePow: 3.2, edgeCol: '#4A4640', sweep: '#FFFFFF', rim: '#2A2620', fakeOpacity: 0.05 },
     reward: '#C08032', rewardBase: 0.9, rewardRim: -0.5, coinTop: 1.08, coinEdge: 0.55, core: 0, // bronze: lit amber tops, darker bronze edges
     ring: '#2E2A24', lock: '#A35E10', mark: '#2B2721', chamber: '#57534D', chamberI: 0.36,
     arc: '#7A4609', head: '#B86A12', walletIdle: '#4A443A', walletLanded: '#A35F12', host: '#6E5130',
