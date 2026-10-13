@@ -200,10 +200,10 @@
         color-scheme: light;
     }
 
-    /* Room for the sticky header (top) and the landing page's sticky phone bar (bottom), so an
-       anchor jump or a focused control is never hidden under them (WCAG 2.4.11). */
+    /* Room for the sticky header, so an anchor jump or a focused control is never hidden under
+       it (WCAG 2.4.11). */
     html {
-        scroll-padding: 5rem 0;
+        scroll-padding: 5rem 0 1rem;
     }
 
     @media (prefers-reduced-motion: no-preference) {
@@ -282,7 +282,6 @@
 
     /* Layout */
     --section-y: clamp(2.75rem, 1.75rem + 6vw, 8rem); /* ~44–50 px on phones (height budget), 128 px desktop */
-    --sticky-bar-h: 4.5rem;
 }
 
 @layer components {
@@ -347,14 +346,6 @@
     background: rgb(23 23 23 / 0.45);
 }
 
-/* S1-03: the sticky phone bar slides in from below; hidden (and inert) by default. */
-.lp-sticky {
-    transform: translateY(100%);
-    transition: transform var(--dur-short) var(--ease-out);
-}
-.lp-sticky[data-on] {
-    transform: none;
-}
 
 /* ---------------------------------------------------------------------------------------------
    S1-05: the Escrow Statement slip.
@@ -451,6 +442,7 @@
    On ink: paper / paper-2 text, signal-on-ink for links and focus. Never ink-3 or signal here.
    --------------------------------------------------------------------------------------------- */
 .lp-ink {
+    --rule: rgb(58 56 52);
     background: var(--ink);
     color: var(--paper);
 }
@@ -504,7 +496,6 @@
         box-shadow: none;
         font-size: 11pt;
     }
-    .lp-sticky,
     .skip-link {
         display: none !important;
     }
@@ -529,5 +520,334 @@
     }
     .lp-how-step {
         min-height: 0 !important;
+    }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   07-wow: the Monolith themes (founder decision 2026-10-13). Source of truth:
+   landing-studio/07-wow/prototypes/src/page.css. Obsidian (dark + gold) is the default for
+   everyone, whatever the OS preference; Porcelain (light) sits behind the header toggle.
+   - <html data-theme> is set before paint by THEME_SCRIPT (src/components/landing/theme.ts).
+   - Scope: only inside .lp-theme (the (landing) layout: /, /how-it-works, /security). The app
+     routes, /about and /changelog keep the light tokens above, even though <html> carries
+     data-theme everywhere.
+   - The tokens are declared as --ob-* / --pc-* hex values so scripts/contrast-check.mjs can read
+     them; the legacy names (--paper, --ink…) are remapped below, so every landing component
+     re-skins without per-component colour classes.
+   - The "ink band" (#start, the footer) becomes --band in both themes: a raised dark surface in
+     Obsidian, an inverted dark band in Porcelain.
+   --------------------------------------------------------------------------------------------- */
+:root {
+    /* Obsidian */
+    --ob-paper: #050506;       /* page (prototype --bg) */
+    --ob-surface: #141417;     /* cards (prototype --bg-3) */
+    --ob-sunk: #0C0C0E;        /* the rules band */
+    --ob-ink: #F3F1EC;
+    --ob-ink-2: #A6A4A0;
+    --ob-ink-3: #8A8884;
+    --ob-rule: #2A2A2C;        /* hairline (prototype rgba .16 over the page) */
+    --ob-rule-strong: #6B6966; /* control borders, ≥ 3:1 */
+    --ob-signal: #F2B45E;      /* ember gold: the reward, links, focus, the 24-hour line */
+    --ob-band: #141417;
+    --ob-band-text: #F3F1EC;
+    --ob-band-text-2: #A6A4A0;
+    --ob-band-signal: #F2B45E;
+
+    /* Porcelain */
+    --pc-paper: #F4F1EA;
+    --pc-surface: #FBFAF7;
+    --pc-sunk: #E8E3D8;
+    --pc-ink: #1B1916;
+    --pc-ink-2: #4A453D;
+    --pc-ink-3: #5F594F;
+    --pc-rule: #D3CCBF;
+    --pc-rule-strong: #857E73;
+    --pc-signal: #8F530C;      /* deep amber */
+    --pc-band: #1B1916;
+    --pc-band-text: #F4F1EA;
+    --pc-band-text-2: #B8B1A5;
+    --pc-band-signal: #F2B45E;
+}
+
+.lp-theme {
+    --paper: var(--ob-paper);
+    --surface: var(--ob-surface);
+    --sunk: var(--ob-sunk);
+    --ink: var(--ob-ink);
+    --ink-2: var(--ob-ink-2);
+    --ink-3: var(--ob-ink-3);
+    --rule: var(--ob-rule);
+    --rule-strong: var(--ob-rule-strong);
+    --signal: var(--ob-signal);
+    --band: var(--ob-band);
+    --band-text: var(--ob-band-text);
+    --band-text-2: var(--ob-band-text-2);
+    --band-signal: var(--ob-band-signal);
+    --paper-2: var(--ob-band-text-2);
+    --signal-on-ink: var(--ob-band-signal);
+    color-scheme: dark;
+}
+html[data-theme="porcelain"] .lp-theme {
+    --paper: var(--pc-paper);
+    --surface: var(--pc-surface);
+    --sunk: var(--pc-sunk);
+    --ink: var(--pc-ink);
+    --ink-2: var(--pc-ink-2);
+    --ink-3: var(--pc-ink-3);
+    --rule: var(--pc-rule);
+    --rule-strong: var(--pc-rule-strong);
+    --signal: var(--pc-signal);
+    --band: var(--pc-band);
+    --band-text: var(--pc-band-text);
+    --band-text-2: var(--pc-band-text-2);
+    --band-signal: var(--pc-band-signal);
+    --paper-2: var(--pc-band-text-2);
+    --signal-on-ink: var(--pc-band-signal);
+    color-scheme: light;
+}
+/* The canvas behind the page (overscroll, the gap before the stage paints) and the UA's own
+   controls follow the theme too. */
+html:has(.lp-theme),
+html:has(.lp-theme) body {
+    background: var(--ob-paper);
+    color-scheme: dark;
+}
+html[data-theme="porcelain"]:has(.lp-theme),
+html[data-theme="porcelain"]:has(.lp-theme) body {
+    background: var(--pc-paper);
+    color-scheme: light;
+}
+/* The ink band: inverted region. Components on it use bg-ink / text-paper / text-paper-2. */
+.lp-theme .lp-ink {
+    --ink: var(--band);
+    --paper: var(--band-text);
+    --paper-2: var(--band-text-2);
+    --signal-on-ink: var(--band-signal);
+    --rule: color-mix(in srgb, var(--band-text) 18%, var(--band));
+}
+/* Printed objects (the example statement, the app replicas) stay paper in both themes: they
+   depict the light app and a printed slip. */
+.lp-theme .lp-paper-object {
+    --paper: var(--pc-paper);
+    --surface: var(--pc-surface);
+    --sunk: var(--pc-sunk);
+    --ink: var(--pc-ink);
+    --ink-2: var(--pc-ink-2);
+    --ink-3: var(--pc-ink-3);
+    --rule: var(--pc-rule);
+    --rule-strong: var(--pc-rule-strong);
+    --signal: var(--pc-signal);
+    color: var(--ink);
+    color-scheme: light;
+}
+/* Theme swap: colours crossfade for one beat (the toggle adds .lp-theme-swap for ~450 ms). */
+@media (prefers-reduced-motion: no-preference) {
+    .lp-theme-swap .lp-theme,
+    .lp-theme-swap .lp-theme * {
+        transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, fill 0.4s ease, stroke 0.4s ease !important;
+    }
+}
+/* Header: solid by default (and with JS off); transparent while the page is at the very top,
+   so the stage reads full-bleed on the first screen. No blur, no glass. */
+.lp-header {
+    transition: background-color var(--dur-short) linear, border-color var(--dur-short) linear;
+}
+.lp-theme .lp-header[data-top] {
+    background-color: transparent;
+    border-color: transparent;
+}
+/* The theme toggle shows the theme you'd switch to: a sun in Obsidian, a moon in Porcelain. */
+.lp-tt .lp-tt-moon,
+html[data-theme="porcelain"] .lp-tt .lp-tt-sun {
+    display: none;
+}
+html[data-theme="porcelain"] .lp-tt .lp-tt-moon {
+    display: block;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   07-wow: the Monolith homepage (/). Layout per prototypes/c1.html + src/page.css: the 3D stage
+   (<VaultStage/>, owned by the 3D build) is a fixed full-viewport layer behind the track; the
+   copy column sits left (~40 %) on desktop and on top on phones, the object on the right /
+   in the bottom half. Beats carry data-beat for the scene's ScrollTrigger.
+   --------------------------------------------------------------------------------------------- */
+.mh-track {
+    position: relative;
+    z-index: 2;
+}
+.mh-display {
+    font-family: var(--font-display, Georgia), Georgia, "Times New Roman", serif;
+    font-weight: 450;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+}
+.mh-hero {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-height: calc(100svh - 4rem);
+    padding-block: 2.5rem 6rem;
+}
+.mh-h1 {
+    font-size: clamp(2.875rem, 6.2vw, 6.25rem);
+    line-height: 0.98;
+}
+.mh-h2 {
+    font-size: clamp(2.125rem, 3.9vw, 3.875rem);
+    line-height: 1.02;
+}
+.mh-sub {
+    max-width: 34ch;
+    font-size: clamp(1.0625rem, 1.3vw, 1.1875rem);
+    line-height: 1.55;
+}
+.mh-eyebrow {
+    font-family: var(--font-mono, ui-monospace), ui-monospace, monospace;
+    font-size: 0.75rem;
+    line-height: 1;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.mh-pill {
+    border-radius: 999px;
+}
+.mh-textlink {
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rule-strong);
+    padding-bottom: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+    .mh-textlink:hover {
+        border-bottom-color: var(--signal);
+    }
+}
+.mh-cue {
+    position: absolute;
+    bottom: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.mh-cue::before {
+    content: "";
+    width: 1px;
+    height: 34px;
+    background: linear-gradient(var(--ink-3), transparent);
+}
+/* The 3D's motion toggle sits in the hero; the vault module un-hides and wires it. */
+.mh-pause[hidden] {
+    display: none;
+}
+.mh-pause .i-play,
+.mh-pause[aria-pressed="true"] .i-pause {
+    display: none;
+}
+.mh-pause[aria-pressed="true"] .i-play {
+    display: block;
+}
+
+.mh-beat {
+    position: relative;
+    height: 220vh;
+}
+.mh-pin {
+    position: sticky;
+    top: 0;
+    display: flex;
+    align-items: center;
+    height: 100vh;
+    height: 100svh;
+}
+.mh-beat--top .mh-pin {
+    align-items: flex-start;
+    padding-top: 17vh;
+}
+.mh-copy {
+    max-width: 27.5rem;
+}
+/* The sections after the claim beat: the scene settles behind a fade to the page colour. */
+.mh-after-first {
+    background: linear-gradient(to bottom, transparent, var(--paper) 10rem);
+}
+.mh-after {
+    background: var(--paper);
+}
+.mh-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0.25rem 0.75rem;
+    border: 1px solid var(--rule-strong);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 0.9375rem;
+    line-height: 1.3;
+}
+.mh-chip--dashed {
+    border-style: dashed;
+    background: transparent;
+}
+
+/* Phone (AD §5): text on top, the object in the bottom half. Mirrors the prototype's breakpoint. */
+@media (max-width: 760px), (orientation: portrait) and (max-width: 900px) {
+    .mh-hero {
+        align-items: flex-start;
+        min-height: calc(100svh - 4rem);
+        padding-block: 1.75rem 2.5rem;
+    }
+    .mh-h1 {
+        font-size: clamp(2.5rem, 12vw, 3.125rem);
+    }
+    .mh-h2 {
+        font-size: 2.125rem;
+    }
+    .mh-sub {
+        font-size: 1.03125rem;
+    }
+    .mh-beat {
+        height: 150vh;
+    }
+    .mh-pin,
+    .mh-beat--top .mh-pin {
+        align-items: flex-start;
+        padding-top: 13vh;
+    }
+    .mh-cue {
+        display: none;
+    }
+}
+
+/* Subtle copy reveal on scroll: CSS only (no JS), never on the H1, and none at all under reduced
+   motion or where scroll-driven animations aren't supported (the copy is simply there). */
+@media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+        .mh-reveal {
+            animation: mh-rise linear both;
+            animation-timeline: view();
+            animation-range: entry 0% entry 70%;
+        }
+    }
+}
+@keyframes mh-rise {
+    from {
+        opacity: 0;
+        transform: translateY(1.5rem);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+    }
+}
+/* Reduced motion: no scene (the poster stays), so the beats don't need scroll room. */
+@media (prefers-reduced-motion: reduce) {
+    .mh-beat {
+        height: auto;
+    }
+    .mh-pin {
+        position: relative;
+        height: auto;
+        min-height: 70svh;
     }
 }

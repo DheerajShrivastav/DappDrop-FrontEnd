@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { siteOrigin } from '@/config/site';
 import { networkLabel } from '@/config/landing';
+import { THEME_SCRIPT } from '@/components/landing/theme';
 
 // The root layout is deliberately thin: it renders on every route, including the landing page,
 // which has a hard JS and font budget. App-only pieces live where they're used:
@@ -25,7 +26,8 @@ export const metadata: Metadata = {
     // the Newsreader wordmark.
 };
 
-// QW-05: light-only, declared to the browser (form controls, scrollbars) as well as in CSS.
+// QW-05: the app is light-only, declared to the browser (form controls, scrollbars) as well as in
+// CSS. The Monolith pages override this in src/app/(landing)/layout.tsx.
 export const viewport: Viewport = {
     colorScheme: 'light',
     themeColor: '#F6F4EF',
@@ -37,7 +39,13 @@ export default function RootLayout({
     children: React.ReactNode;
 }>) {
     return (
-        <html lang="en" suppressHydrationWarning>
+        <html lang="en" data-theme="obsidian" suppressHydrationWarning>
+            <head>
+                {/* 07-wow: sets <html data-theme> before first paint (no flash of the wrong theme).
+                    Obsidian by default for everyone; Porcelain only when the visitor chose it.
+                    The themed tokens apply only inside the (landing) pages' .lp-theme wrapper. */}
+                <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+            </head>
             <body className="font-body antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
                 {children}
             </body>

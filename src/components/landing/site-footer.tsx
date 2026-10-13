@@ -1,11 +1,11 @@
 import { claims } from '@/config/claims'
 import { analyticsDomain, copyrightHolder, explorerCodeUrl, network, networkLabel, officialDomain, officialLinks, repos } from '@/config/landing'
-import { browseCampaigns, START_HREF } from './nav'
+import { participantsLink, START_HREF } from './nav'
 import { Wordmark } from './wordmark'
 
 /**
- * S1-14: the marketing footer (plan §2.11; TRS F82–F85; CPY §4.7). A server component on the ink
- * band, continuous with #start (no seam). No status light, no unverified socials, no back-to-top
+ * S1-14 / 07-wow IA §4.3: the marketing footer (TRS F82–F85): Brand · Product · Trust · Company.
+ * A server component on the ink band (a raised dark band in both Monolith themes). No status light, no unverified socials, no back-to-top
  * script, no next/link. "Official links" render only once the founder confirms handles (C3).
  * The app keeps its own footer (src/components/footer.tsx), because the privacy line below
  * ("loads no wallet code") is only true on marketing pages.
@@ -35,7 +35,7 @@ export function SiteFooter() {
   const source = explorerCodeUrl(network.entrypoint)
   return (
     <footer className="lp-ink">
-      <div className="lp-container border-t border-[#3A3834] pb-10 pt-12 lg:pb-12">
+      <div className="lp-container pb-10 pt-12 lg:pb-12">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-12">
           <div className="lg:col-span-4">
             <a href="/" className="text-paper" aria-label="DappDrop home">
@@ -44,7 +44,7 @@ export function SiteFooter() {
             <p className="mt-3 text-small text-paper">Quest campaigns, settled on-chain.</p>
             <p className="mt-1 text-small text-paper-2">Public beta on {networkLabel}. Not audited yet.</p>
           </div>
-          <div className="grid grid-cols-2 gap-6 sm:grid-cols-4 lg:col-span-8">
+          <div className="grid grid-cols-2 gap-6 sm:grid-cols-3 lg:col-span-8">
             <Col title="Product">
               <li>
                 <a href={START_HREF} className={linkCls} data-cta="footer_start" data-loc="footer">
@@ -52,8 +52,13 @@ export function SiteFooter() {
                 </a>
               </li>
               <li>
-                <a href={browseCampaigns.href} className={linkCls} data-cta="footer_browse" data-loc="footer">
-                  Browse campaigns
+                <a href="/how-it-works" className={linkCls}>
+                  How it works
+                </a>
+              </li>
+              <li>
+                <a href={participantsLink.href} className={linkCls} data-cta="footer_browse" data-loc="footer">
+                  {participantsLink.label}
                 </a>
               </li>
               <li>
@@ -62,11 +67,16 @@ export function SiteFooter() {
                 </a>
               </li>
             </Col>
-            <Col title="Check our work">
+            <Col title="Trust">
+              <li>
+                <a href="/security" className={linkCls}>
+                  Security
+                </a>
+              </li>
               {source && (
                 <li>
                   <Ext href={source} name={`the verified source on ${network.explorerName}`}>
-                    Contracts on Etherscan ↗
+                    Contracts on {network.explorerName} ↗
                   </Ext>
                 </li>
               )}
@@ -77,28 +87,21 @@ export function SiteFooter() {
               </li>
               <li>
                 <Ext href={repos.contracts} name="the contracts repository on GitHub">
-                  Contracts code ↗
-                </Ext>
-              </li>
-              <li>
-                <Ext href={repos.app} name="the app repository on GitHub">
-                  App code ↗
+                  Code on GitHub ↗
                 </Ext>
               </li>
             </Col>
-            <Col title="Learn">
-              <li>
-                <a href="/#faq" className={linkCls}>
-                  FAQ
-                </a>
-              </li>
+            <Col title="Company">
               <li>
                 <a href="/about" className={linkCls}>
                   About
                 </a>
               </li>
-            </Col>
-            <Col title="Contact">
+              <li>
+                <a href="/how-it-works#faq" className={linkCls}>
+                  FAQ
+                </a>
+              </li>
               {claims.founderContact && (
                 <li>
                   <Ext href={claims.founderContact.url} name="talk to the founder">
@@ -131,7 +134,7 @@ export function SiteFooter() {
           </nav>
         )}
 
-        <div className="mt-10 space-y-1.5 border-t border-[#3A3834] pt-5 text-[0.8125rem] text-paper-2">
+        <div className="mt-10 space-y-1.5 border-t border-rule pt-5 text-[0.8125rem] text-paper-2">
           {claims.contractsDeployedOn && (
             <p>
               Contracts last deployed: {claims.contractsDeployedOn} ·{' '}

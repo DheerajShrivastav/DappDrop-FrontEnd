@@ -109,6 +109,53 @@ for (const [fg, bg, floor, use] of BANNED) {
   rows.push({ pair: `${fg} on ${bg}`, use: `BANNED: ${use}`, ratio: +r.toFixed(2), floor: `< ${floor}`, ok })
 }
 
+// 07-wow: the Monolith themes. Tokens --ob-* (Obsidian) and --pc-* (Porcelain) in globals.css;
+// the ink band is --band / --band-text / --band-text-2 / --band-signal in both themes, and the
+// printed objects (the example statement, the replicas) use the Porcelain tokens everywhere.
+const THEME_PAIRS = [
+  ['ink', 'paper', TEXT, 'body text'],
+  ['ink', 'surface', TEXT, 'card text'],
+  ['ink', 'sunk', TEXT, 'rules band text'],
+  ['ink-2', 'paper', TEXT, 'secondary text'],
+  ['ink-2', 'surface', TEXT, 'secondary text on cards'],
+  ['ink-2', 'sunk', TEXT, 'secondary text on the rules band'],
+  ['ink-3', 'paper', TEXT, 'captions, eyebrows'],
+  ['ink-3', 'surface', TEXT, 'captions on cards'],
+  ['ink-3', 'sunk', TEXT, 'captions on the rules band'],
+  ['signal', 'paper', TEXT, 'links, the 24-hour line, eyebrow numbers'],
+  ['signal', 'surface', TEXT, 'links on cards'],
+  ['signal', 'sunk', TEXT, 'the 24-hour stop on the rules band'],
+  ['paper', 'ink', TEXT, 'filled button label'],
+  ['paper', 'ink-2', TEXT, 'filled button label, hover'],
+  ['band-text', 'band', TEXT, 'ink band text'],
+  ['band-text-2', 'band', TEXT, 'ink band secondary text'],
+  ['band-signal', 'band', TEXT, 'links on the ink band'],
+  ['band', 'band-text', TEXT, 'inverted button on the band'],
+  ['rule-strong', 'paper', UI, 'control borders (pills, toggle, chips)'],
+  ['rule-strong', 'surface', UI, 'control borders on cards'],
+  ['signal', 'paper', UI, 'focus ring'],
+  ['signal', 'surface', UI, 'focus ring on cards'],
+  ['band-signal', 'band', UI, 'focus ring on the ink band'],
+]
+for (const [prefix, theme] of [
+  ['ob', 'Obsidian'],
+  ['pc', 'Porcelain'],
+]) {
+  for (const [fg, bg, floor, use] of THEME_PAIRS) {
+    const a = tokens[`${prefix}-${fg}`]
+    const b = tokens[`${prefix}-${bg}`]
+    if (!a || !b) {
+      failed++
+      rows.push({ pair: `${prefix}-${fg} on ${prefix}-${bg}`, use: `${theme}: ${use}`, ratio: 'missing token', floor, ok: false })
+      continue
+    }
+    const r = ratio(a, b)
+    const ok = r >= floor
+    if (!ok) failed++
+    rows.push({ pair: `${prefix}-${fg} on ${prefix}-${bg}`, use: `${theme}: ${use}`, ratio: +r.toFixed(2), floor, ok })
+  }
+}
+
 console.table(rows)
 if (failed) {
   console.error(`contrast-check: ${failed} pair(s) failed`)

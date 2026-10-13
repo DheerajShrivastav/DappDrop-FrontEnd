@@ -4,13 +4,13 @@
  * ESLint no-restricted-imports rule, as a script: the repo has no ESLint config, and adding one
  * would make `next build` lint the whole app).
  *
- * Blocks, in src/components/landing/** and src/app/(marketing)/page.tsx:
+ * Blocks, in src/components/landing/**, src/app/(landing)/** and the marketing layout:
  *   @/app/(app)/*, wagmi, viem, @rainbow-me/*, ethers, framer-motion, next/link.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
-const ROOTS = ['src/components/landing', 'src/app/(marketing)/page.tsx', 'src/app/(marketing)/layout.tsx', 'src/components/marketing-header.tsx']
+const ROOTS = ['src/components/landing', 'src/app/(landing)', 'src/app/(marketing)/layout.tsx']
 const BANNED = [/^@\/app\/\(app\)\//, /^wagmi(\/|$)/, /^viem(\/|$)/, /^@rainbow-me\//, /^ethers(\/|$)/, /^framer-motion(\/|$)/, /^next\/link$/]
 
 const files = []

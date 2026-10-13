@@ -56,7 +56,7 @@ export function MenuDialog({ children }: { children: ReactNode }) {
         aria-expanded={open}
         aria-controls="site-menu"
         aria-haspopup="dialog"
-        className="inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-sm border border-rule-strong px-3 text-small font-semibold text-ink can-hover:hover:border-ink"
+        className="inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full border border-rule-strong px-3 text-small max-[359px]:px-2 font-medium text-ink can-hover:hover:border-ink"
       >
         Menu
       </button>

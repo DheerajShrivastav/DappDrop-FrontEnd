@@ -4,11 +4,27 @@ import { useRouter } from 'next/navigation'
 import { useRef, type MouseEvent } from 'react'
 
 /**
- * S1-14 / CD ruling (CR-28, D19 default): "Continue to the app" prefetches /create-campaign only
- * on intent (pointerenter, focus, touchstart): 0 idle bytes on phone data. A plain click then
- * navigates client-side, so the prefetch isn't wasted; modified clicks open normally.
+ * S1-14 / CD ruling (CR-28, D19 default): app CTAs prefetch their route only on intent
+ * (pointerenter, focus, touchstart): 0 idle bytes on phone data. A plain click then navigates
+ * client-side, so the prefetch isn't wasted; modified clicks open normally. 07-wow: every
+ * "Start a campaign" CTA uses it (they go straight to /create-campaign).
  */
-export function IntentPrefetch({ href, className, children }: { href: string; className: string; children: React.ReactNode }) {
+export function IntentPrefetch({
+  href,
+  className,
+  children,
+  cta,
+  loc,
+  id,
+}: {
+  href: string
+  className: string
+  children: React.ReactNode
+  /** cta_id for analytics (src/lib/track.ts, IA §5.1). */
+  cta: string
+  loc: string
+  id?: string
+}) {
   const router = useRouter()
   const done = useRef(false)
   const prefetch = () => {
@@ -22,7 +38,7 @@ export function IntentPrefetch({ href, className, children }: { href: string; cl
     router.push(href)
   }
   return (
-    <a href={href} className={className} onPointerEnter={prefetch} onFocus={prefetch} onTouchStart={prefetch} onClick={onClick} data-cta="continue_to_app" data-loc="start">
+    <a id={id} href={href} className={className} onPointerEnter={prefetch} onFocus={prefetch} onTouchStart={prefetch} onClick={onClick} data-cta={cta} data-loc={loc}>
       {children}
     </a>
   )

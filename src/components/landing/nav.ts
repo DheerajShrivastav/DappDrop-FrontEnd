@@ -2,23 +2,22 @@ import { claims } from '@/config/claims'
 import { repos } from '@/config/landing'
 
 /**
- * The landing page's in-page anchors (plan §2.0). Hrefs are "/#id" so the same header works on
- * /about and /changelog; on / they're same-document jumps (no navigation, nothing prefetched).
+ * 07-wow IA §4: page navigation (≤ 4 items + the CTA). Plain <a> everywhere in the marketing
+ * chrome: nothing is prefetched, and next/link's client chunk stays off the landing pages.
  */
-export const SECTION_LINKS = [
-  { label: 'How the money moves', href: '/#payouts' },
-  { label: 'How it works', href: '/#how' },
-  { label: 'Security', href: '/#security' },
-  { label: 'Pricing', href: '/#pricing' },
-  { label: 'FAQ', href: '/#faq' },
-] as const
+export const START_HREF = '/create-campaign'
 
-/** "Browse campaigns" stays on the page until /campaigns is curated (D-X1, C11). */
-export const browseCampaigns = claims.campaignsCurated
+/** Item 4: "Browse campaigns" once /campaigns is curated (C11); until then "For participants". */
+export const participantsLink = claims.campaignsCurated
   ? { label: 'Browse campaigns', href: '/campaigns' }
-  : { label: 'Browse campaigns', href: '/#participants' }
+  : { label: 'For participants', href: '/how-it-works#participants' }
 
-export const START_HREF = '/#start'
+export const NAV_LINKS = [
+  { label: 'How it works', href: '/how-it-works' },
+  { label: 'Security', href: '/security' },
+  { label: 'FAQ', href: '/how-it-works#faq' },
+  participantsLink,
+] as const
 
 /** Extra links in the phone menu only. */
 export const MENU_EXTRA_LINKS = [
