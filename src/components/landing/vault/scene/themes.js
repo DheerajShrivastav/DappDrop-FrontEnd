@@ -18,7 +18,7 @@ export const THEMES = {
     skyLin: { base: [0.0015, 0.0015, 0.0018], haze: [0.003, 0.0034, 0.0044], halo: [0.006, 0.0068, 0.0085], back: [0.02, 0.022, 0.027], blade: [0.007, 0.0075, 0.009] },
     floorLin: { base: [0.0013, 0.0013, 0.0016], reflAdd: 0.38, reflMix: 0, shadow: 0, pool: 0.05 },
     glass: { atten: '#CFD8E3', attenDist: 2.4, env: 1.25, edge: 0, edgeCol: '#000000', sweep: '#E9EEF5', rim: '#E9EEF5', fakeOpacity: 0.035 },
-    reward: '#F2B45E', rewardBase: 0.55, rewardRim: 2.6, core: 1,
+    reward: '#F2B45E', rewardBase: 0.55, rewardRim: 2.6, coinTop: 1.3, coinEdge: 0.5, core: 1,
     ring: '#E9EEF5', lock: '#F2B45E', mark: '#E9EEF5', chamber: '#E9EEF5', chamberI: 0.035,
     arc: '#F2B45E', head: '#F2B45E', walletIdle: '#E9EEF5', walletLanded: '#F7E6C8', host: '#F7E6C8',
     ink: false, arcK: 1, arcW: 1, dust: 1, dustCol: '#F3F6FF',
@@ -41,7 +41,7 @@ export const THEMES = {
     floorLin: { base: [0.69, 0.662, 0.6], reflAdd: 0, reflMix: 0.42, shadow: 0.75, pool: 0.16 },
     // clear glass: near-neutral attenuation (no green body), neutral warm-grey fresnel edges
     glass: { atten: '#F5F3EF', attenDist: 9, env: 0.8, edge: 0.62, edgeCol: '#57534D', sweep: '#FFFFFF', rim: '#2A2620', fakeOpacity: 0.05 },
-    reward: '#BE7A1E', rewardBase: 0.9, rewardRim: -0.66, core: 0, // bronze: bright faces, darker rims
+    reward: '#C08032', rewardBase: 0.9, rewardRim: -0.5, coinTop: 1.08, coinEdge: 0.55, core: 0, // bronze: lit amber tops, darker bronze edges
     ring: '#2E2A24', lock: '#A35E10', mark: '#2B2721', chamber: '#57534D', chamberI: 0.36,
     arc: '#7A4609', head: '#B86A12', walletIdle: '#4A443A', walletLanded: '#A35F12', host: '#6E5130',
     ink: true, arcK: 0.62, arcW: 1.7, dust: 0, dustCol: '#000000',

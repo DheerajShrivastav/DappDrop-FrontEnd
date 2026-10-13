@@ -32,9 +32,9 @@ const lin = (hex) => new Color(hex).toArray() // Color() converts sRGB hex to li
 // ---- dimensions (AD units) ----
 const W = 1, H = 1.45, D = 0.62, BEVEL = 0.05
 const LOCK_Y = 0.62 * H
-const DISCS = 12, DISC_R = 0.16, DISC_T = 0.012, DISC_GAP = 0.018, DISC_Y0 = 0.15
+const DISCS = 12, DISC_R = 0.16, DISC_T = 0.022, DISC_GAP = 0.008, DISC_Y0 = 0.14
 const RING_R = 0.95
-const HERO_LIFT = 0.6 // hero: the stack floats in the upper chamber (bottom at ~0.75, top ~1.11 < chamber top 1.33)
+const HERO_LIFT = 0.07 // hero: the stack sits just above the chamber floor (soft glow beneath); Fund seats it
 const WALLETS = 24
 const SEGS = 28, TAIL = 0.42
 
@@ -58,8 +58,8 @@ const QUALITY = {
 // Camera keys on the story axis T (0 hero, 1-2 fund, 2-3 prove, 3-4 claim).
 // shift = lens shift (fraction of viewport): vault right of the copy on desktop, bottom half on phone.
 const KEYS = [
-  { T: 0.0, pos: [1.6, 1.1, 4.6], tgt: [0, 0.72, 0], fov: 32, shift: [0.2, 0], shiftP: [0, -0.3] },
-  { T: 1.0, pos: [1.25, 1.12, 3.95], tgt: [0, 0.86, 0], fov: 32, shift: [0.2, 0], shiftP: [0, -0.24] },
+  { T: 0.0, pos: [1.6, 1.75, 4.5], tgt: [0, 0.62, 0], fov: 32, shift: [0.2, 0], shiftP: [0, -0.3] },
+  { T: 1.0, pos: [1.25, 1.45, 3.95], tgt: [0, 0.72, 0], fov: 32, shift: [0.2, 0], shiftP: [0, -0.24] },
   { T: 1.6, pos: [0.9, 0.9, 3.4], tgt: [0, 0.72, 0], fov: 32, shift: [0.2, 0], shiftP: [0, -0.17] },
   { T: 1.92, pos: [0.88, 0.9, 3.42], tgt: [0, 0.72, 0], fov: 32, shift: [0.2, 0], shiftP: [0, -0.17] }, // holds through the Seal
   { T: 2.45, pos: [-1.4, 1.0, 3.6], tgt: [0, 0.62, 0], fov: 32, shift: [0.2, 0], shiftP: [0, -0.17] },
@@ -272,19 +272,23 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   const discGeo = new CylinderGeometry(DISC_R, DISC_R, DISC_T, 56, 1)
   discGeo.setAttribute('aGlow', new InstancedBufferAttribute(new Float32Array(DISCS), 1))
   const discMat = new ShaderMaterial({
-    uniforms: { uCol: { value: new Vector3() }, uBase: { value: 0.55 }, uRim: { value: 2.6 } },
+    uniforms: { uCol: { value: new Vector3() }, uBase: { value: 0.55 }, uRim: { value: 2.6 }, uTopK: { value: 1.25 }, uEdgeK: { value: 0.55 } },
     vertexShader: /* glsl */ `
-      attribute float aGlow; varying float vGlow; varying vec3 vN; varying vec3 vV;
+      attribute float aGlow; varying float vGlow; varying vec3 vN; varying vec3 vV; varying float vTop;
       void main(){
         vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-        vN = normalize(normalMatrix * mat3(instanceMatrix) * normal); vV = -mv.xyz; vGlow = aGlow;
+        vN = normalize(normalMatrix * mat3(instanceMatrix) * normal); vV = -mv.xyz; vGlow = aGlow; vTop = abs(normal.y);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `
-      uniform vec3 uCol; uniform float uBase, uRim; varying float vGlow; varying vec3 vN; varying vec3 vV;
+      uniform vec3 uCol; uniform float uBase, uRim, uTopK, uEdgeK; varying float vGlow; varying vec3 vN; varying vec3 vV; varying float vTop;
       void main(){
         float fr = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);
-        vec3 c = uCol * (uBase + fr * uRim) * vGlow;
+        // coin read: a brighter top face (an ellipse from above), a darker, rim-shaded edge band
+        float top = smoothstep(0.5, 0.9, vTop);
+        vec3 face = uCol * (uBase + fr * uRim) * uTopK;
+        vec3 edge = uCol * (uBase + fr * uRim) * uEdgeK;
+        vec3 c = mix(edge, face, top) * vGlow;
         gl_FragColor = vec4(c, 1.0);
       }`,
   })
@@ -398,6 +402,7 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
     v3(sweep.col, lin(G.sweep)); v3(sweep.rim, lin(G.rim)); sweep.ink.value = TH.ink ? 1 : 0
     sweep.edge.value = G.edge || 0; v3(sweep.edgeCol, lin(G.edgeCol || '#000000'))
     v3(discMat.uniforms.uCol, C.reward); discMat.uniforms.uBase.value = TH.rewardBase; discMat.uniforms.uRim.value = TH.rewardRim
+    discMat.uniforms.uTopK.value = TH.coinTop; discMat.uniforms.uEdgeK.value = TH.coinEdge
     for (const o of [chamber, marks, trails, heads, points, core]) o.setInk(TH.ink)
     for (let i = 0; i < 12; i++) { chamber.C.set([...C.chamber, TH.chamberI], i * 4); chamber.W.fill(TH.ink ? 0.85 : 0.55) }
     chamber.commit()
@@ -436,9 +441,9 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
 
     // --- the reward stack ---
     const drop = glide(win(fund, 0, 0.6))
-    const spread = Math.sin(drop * Math.PI) * 0.05 + (1 - drop) * 0.03 // the stack breathes open as it travels
+    const spread = Math.sin(drop * Math.PI) * 0.012 // a compact stack at rest; it eases open slightly as it seats
     // Hero: the stack rests, glowing, in the upper chamber (visible on the first screen); Fund: it settles.
-    const lift = (1 - drop) * HERO_LIFT + Math.sin(time * 0.6) * 0.012 * (1 - drop)
+    const lift = (1 - drop) * HERO_LIFT + Math.sin(time * 0.6) * 0.006 * (1 - drop)
     const seal = win(fund, 0.6, 0.75)
     const flare = fund >= 0.75 ? Math.exp(-(fund - 0.75) * 30) : 0
     let inCount = 0
