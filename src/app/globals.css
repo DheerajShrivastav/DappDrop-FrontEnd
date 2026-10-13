@@ -605,6 +605,25 @@ html[data-theme="porcelain"] .lp-theme {
     --signal-on-ink: var(--pc-band-signal);
     color-scheme: light;
 }
+/* The vault stage's tokens (07-wow/build-notes/layout.md): --bg, --bg-3, --ink, --ink-2, --line,
+   --accent on the themed <html>, for both themes. Only on pages with .lp-theme, so the app's
+   shadcn --accent and the light --ink elsewhere are untouched. */
+html:has(.lp-theme) {
+    --bg: var(--ob-paper);
+    --bg-3: var(--ob-surface);
+    --ink: var(--ob-ink);
+    --ink-2: var(--ob-ink-2);
+    --line: rgba(243, 241, 236, 0.16);
+    --accent: var(--ob-signal);
+}
+html[data-theme="porcelain"]:has(.lp-theme) {
+    --bg: var(--pc-paper);
+    --bg-3: var(--pc-sunk);
+    --ink: var(--pc-ink);
+    --ink-2: var(--pc-ink-2);
+    --line: rgba(27, 25, 22, 0.2);
+    --accent: var(--pc-signal);
+}
 /* The canvas behind the page (overscroll, the gap before the stage paints) and the UA's own
    controls follow the theme too. */
 html:has(.lp-theme),
@@ -639,6 +658,15 @@ html[data-theme="porcelain"]:has(.lp-theme) body {
     --signal: var(--pc-signal);
     color: var(--ink);
     color-scheme: light;
+}
+/* Lenis (owned by the vault module, desktop fine pointer only, never under reduced motion). */
+html.lenis,
+html.lenis body {
+    height: auto;
+}
+html.lenis,
+.lenis.lenis-smooth {
+    scroll-behavior: auto !important;
 }
 /* Theme swap: colours crossfade for one beat (the toggle adds .lp-theme-swap for ~450 ms). */
 @media (prefers-reduced-motion: no-preference) {
@@ -689,7 +717,7 @@ html[data-theme="porcelain"] .lp-tt .lp-tt-moon {
     padding-block: 2.5rem 6rem;
 }
 .mh-h1 {
-    font-size: clamp(2.875rem, 6.2vw, 6.25rem);
+    font-size: clamp(2.875rem, 5.8vw, 6rem);
     line-height: 0.98;
 }
 .mh-h2 {
@@ -735,9 +763,12 @@ html[data-theme="porcelain"] .lp-tt .lp-tt-moon {
     height: 34px;
     background: linear-gradient(var(--ink-3), transparent);
 }
-/* The 3D's motion toggle sits in the hero; the vault module un-hides and wires it. */
-.mh-pause[hidden] {
+/* The 3D's motion toggle sits in the hero row; shown only while the live scene runs. */
+.mh-pause {
     display: none;
+}
+html.vault-live:not(.vault-fallback) .mh-pause {
+    display: grid;
 }
 .mh-pause .i-play,
 .mh-pause[aria-pressed="true"] .i-pause {
@@ -795,10 +826,10 @@ html[data-theme="porcelain"] .lp-tt .lp-tt-moon {
     .mh-hero {
         align-items: flex-start;
         min-height: calc(100svh - 4rem);
-        padding-block: 1.75rem 2.5rem;
+        padding-block: 1.5rem 2.5rem;
     }
     .mh-h1 {
-        font-size: clamp(2.5rem, 12vw, 3.125rem);
+        font-size: clamp(2.375rem, 11vw, 3rem);
     }
     .mh-h2 {
         font-size: 2.125rem;

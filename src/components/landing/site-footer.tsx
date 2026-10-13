@@ -34,7 +34,7 @@ export function SiteFooter() {
   const ref = claims.deployedTag ?? 'dev'
   const source = explorerCodeUrl(network.entrypoint)
   return (
-    <footer className="lp-ink">
+    <footer className="lp-ink relative z-[1]">
       <div className="lp-container pb-10 pt-12 lg:pb-12">
         <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-12">
           <div className="lg:col-span-4">

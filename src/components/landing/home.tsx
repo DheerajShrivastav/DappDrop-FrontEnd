@@ -3,6 +3,7 @@ import { explorerCodeUrl, network, networkLabel } from '@/config/landing'
 import { IntentPrefetch } from './intent-prefetch'
 import { START_HREF } from './nav'
 import { pillButton } from './ui'
+import { VaultPause } from './vault-pause'
 
 /**
  * 07-wow: the Monolith homepage sections (copy: landing-studio/07-wow/copy/homepage-copy.md,
@@ -17,7 +18,7 @@ const startLabel = network.testnet ? 'Start a test campaign' : 'Start a campaign
 
 function Eyebrow({ n, children }: { n: string; children: React.ReactNode }) {
   return (
-    <p className="mh-eyebrow mb-5 text-ink-3 md:mb-6">
+    <p className="mh-eyebrow mb-4 text-ink-3 md:mb-6">
       <span aria-hidden="true" className="mr-2.5 text-signal">
         {n}
       </span>
@@ -36,11 +37,11 @@ export function HomeHero() {
 
   return (
     <section id="top" data-beat="hero" data-section="hero" aria-labelledby="hero-title" className="mh-hero lp-container">
-      <div className="max-w-[40rem]">
+      <div className="max-w-[33rem]">
         {/* Beta chip: the only beta signal above the fold; the dot never pulses (TRS C47). */}
         <a
           href="/how-it-works#faq-beta"
-          className="mh-eyebrow mh-pill mb-6 inline-flex items-center gap-2.5 max-[359px]:text-[0.6875rem] max-[359px]:tracking-[0.06em] border border-rule-strong px-3 py-2 text-ink-2 no-underline can-hover:hover:text-ink md:mb-8"
+          className="mh-eyebrow mh-pill mb-4 inline-flex items-center gap-2.5 max-[359px]:text-[0.6875rem] max-[359px]:tracking-[0.06em] border border-rule-strong px-3 py-2 text-ink-2 no-underline can-hover:hover:text-ink md:mb-8"
           data-cta="beta_chip"
           data-loc="hero"
         >
@@ -53,41 +54,27 @@ export function HomeHero() {
           {guarded ? 'Don’t promise rewards. Lock them in.' : 'Quest campaigns, settled on-chain.'}
         </h1>
 
-        <p className="mh-sub mb-6 text-ink-2 md:mb-9">
+        <p className="mh-sub mb-5 text-ink-2 md:mb-9">
           {guarded
             ? 'Fund your quest campaign’s reward into on-chain escrow before it opens. Whoever earns it claims it from there.'
             : 'Fund the reward into on-chain escrow before your campaign opens. Whoever earns it claims it from there.'}
         </p>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-4">
-          <IntentPrefetch id="hero-cta" href={START_HREF} className={pillButton} cta="hero_primary" loc="hero">
+        <div className="flex items-center gap-x-4 sm:gap-x-6">
+          <IntentPrefetch id="hero-cta" href={START_HREF} className={`${pillButton} shrink-0 max-sm:px-5`} cta="hero_primary" loc="hero">
             {startLabel}
           </IntentPrefetch>
           {secondary.external ? (
-            <a href={secondary.href} target="_blank" rel="noopener noreferrer" className="mh-textlink text-body" data-cta="hero_secondary" data-loc="hero">
+            <a href={secondary.href} target="_blank" rel="noopener noreferrer" className="mh-textlink whitespace-nowrap text-small max-[359px]:hidden sm:text-body" data-cta="hero_secondary" data-loc="hero">
               {secondary.label} <span aria-hidden="true">↗</span>
               <span className="sr-only"> (opens in a new tab)</span>
             </a>
           ) : (
-            <a href={secondary.href} className="mh-textlink text-body" data-cta="hero_secondary" data-loc="hero">
+            <a href={secondary.href} className="mh-textlink whitespace-nowrap text-small max-[359px]:hidden sm:text-body" data-cta="hero_secondary" data-loc="hero">
               {secondary.label} <span aria-hidden="true">→</span>
             </a>
           )}
-          {/* The 3D motion toggle (copy §4.2; WCAG 2.2.2). Hidden until the vault module mounts a
-              live scene, un-hides it and wires it (data-wow-pause, as in the prototype). */}
-          <button
-            type="button"
-            className="mh-pause grid h-11 w-11 place-items-center rounded-full border border-rule-strong text-ink-2"
-            data-wow-pause
-            aria-pressed="false"
-            aria-label="Pause animation"
-            hidden
-          >
-            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="currentColor">
-              <path className="i-pause" d="M4 3h3v10H4zM9 3h3v10H9z" />
-              <path className="i-play" d="M5 3l8 5-8 5z" />
-            </svg>
-          </button>
+          <VaultPause />
         </div>
       </div>
       <p aria-hidden="true" className="mh-cue mh-eyebrow text-[0.6875rem] tracking-[0.2em] text-ink-3">
@@ -117,7 +104,7 @@ function Beat({
       <div className="mh-pin lp-container">
         <div className="mh-copy mh-reveal">
           <Eyebrow n={n}>{label}</Eyebrow>
-          <h2 id={`${id}-title`} tabIndex={-1} className="mh-display mh-h2 mb-5 text-ink outline-none">
+          <h2 id={`${id}-title`} tabIndex={-1} className="mh-display mh-h2 mb-4 text-ink outline-none md:mb-5">
             {title}
           </h2>
           {children}
@@ -144,7 +131,7 @@ export function HomeBeats() {
             : 'The reward stays there until it’s claimed or you take it back.'}
         </p>
         {source && (
-          <a href={source} target="_blank" rel="noopener noreferrer" className="mh-textlink mt-6 inline-block text-small text-ink-2" data-dest="explorer_escrow">
+          <a href={source} target="_blank" rel="noopener noreferrer" className="mh-textlink mt-4 inline-block text-small text-ink-2 md:mt-6" data-dest="explorer_escrow">
             Read the contract <span aria-hidden="true">↗</span>
             <span className="sr-only">: the escrow contract&apos;s verified source on {network.explorerName} (opens in a new tab)</span>
           </a>
@@ -163,7 +150,7 @@ export function HomeBeats() {
           Each reward is bound to the wallet that earned it. Claims stay open 30 days after you close; then you can reclaim what&apos;s
           left.
         </p>
-        <a href={participant.href} className="mh-textlink mt-6 inline-block text-small text-ink-2" data-cta="claim_participant" data-loc="claim">
+        <a href={participant.href} className="mh-textlink mt-4 inline-block text-small text-ink-2 md:mt-6" data-cta="claim_participant" data-loc="claim">
           {participant.label} <span aria-hidden="true">→</span>
         </a>
       </Beat>
