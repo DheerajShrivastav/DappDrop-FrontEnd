@@ -3,7 +3,8 @@
  *
  * Every string below was a false or unsupported claim on the old landing page (fact sheet §5) or
  * a link to a channel we don't own (§6). Two scans:
- * - the prerendered HTML of `/` from the production build (what visitors get);
+ * - the prerendered HTML of the Monolith pages `/`, `/how-it-works` and `/security` from the
+ *   production build (what visitors get);
  * - every source file under src/, with comments stripped (so a dead component or another page
  *   can't keep a false claim around to be re-rendered later).
  *
@@ -14,7 +15,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
-const HTML_PATH = path.join(process.cwd(), '.next/server/app/index.html')
+const PAGES = ['index', 'how-it-works', 'security'].map((p) => path.join(process.cwd(), `.next/server/app/${p}.html`))
 
 const BANNED_TEXT = [
   '10K+',
@@ -49,24 +50,43 @@ const BANNED_PATTERNS: RegExp[] = [/(?<![Nn]ot )\b[Aa]udited by\b/, /\bfully aud
 const BANNED_HREFS = ['t.me/dappdrop', 'discord.gg/dappdrop', 'twitter.com/dappdrop', 'x.com/dappdrop']
 
 function landingHtml(): string {
-  assert.ok(existsSync(HTML_PATH), `${HTML_PATH} not found: run \`npm run build\` first (and keep / static).`)
-  return readFileSync(HTML_PATH, 'utf8')
+  for (const p of PAGES) assert.ok(existsSync(p), `${p} not found: run \`npm run build\` first (and keep the pages static).`)
+  return PAGES.map((p) => readFileSync(p, 'utf8')).join('\n')
 }
 
-test('the built landing page contains none of the banned claims', () => {
+/** Visible text only (scripts, styles and tags dropped), for the wording rules below. */
+function landingText(): string {
+  return landingHtml()
+    .replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#x27;|&apos;/g, "'")
+    .replace(/\s+/g, ' ')
+}
+
+test('the built landing pages contain none of the banned claims', () => {
   const html = landingHtml()
   const hits = [...BANNED_TEXT.filter((s) => html.includes(s)), ...BANNED_PATTERNS.filter((re) => re.test(html)).map(String)]
-  assert.deepEqual(hits, [], `banned claim(s) found in /: ${hits.join(', ')}`)
+  assert.deepEqual(hits, [], `banned claim(s) found: ${hits.join(', ')}`)
 })
 
-test('the built landing page links to no unowned social channel', () => {
+test('the built landing pages link to no unowned social channel', () => {
   const html = landingHtml()
   const hits = BANNED_HREFS.filter((s) => html.includes(s))
-  assert.deepEqual(hits, [], `unowned channel link(s) found in /: ${hits.join(', ')}`)
+  assert.deepEqual(hits, [], `unowned channel link(s) found: ${hits.join(', ')}`)
 })
 
-test('nothing on the landing page pings', () => {
-  assert.ok(!landingHtml().includes('animate-ping'), 'animate-ping found in /')
+test('nothing on the landing pages pings', () => {
+  assert.ok(!landingHtml().includes('animate-ping'), 'animate-ping found')
+})
+
+test('07-wow truth rules: "audited" only as a disclosure, no "open source" without a LICENSE', async () => {
+  const text = landingText()
+  // Allowed: "Not audited yet", "Not audited by a third party yet", "not an audit", and the FAQ
+  // question "Is DappDrop audited?" (answered "Not yet.").
+  const audited = [...text.matchAll(/.{0,24}\baudited\b.{0,4}/gi)].map((m) => m[0]).filter((m) => !/\b[Nn]ot audited\b/.test(m) && !/Is DappDrop audited\?/.test(m))
+  assert.deepEqual(audited, [], `"audited" outside the disclosure: ${audited.join(' | ')}`)
+  const { claims } = await import('../../src/config/claims')
+  if (!claims.licenseFile) assert.ok(!/open[ -]source/i.test(text), '"open source" shown without a LICENSE file (C6)')
 })
 
 // ---------------------------------------------------------------------------------------------
