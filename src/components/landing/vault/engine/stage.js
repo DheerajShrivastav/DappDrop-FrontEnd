@@ -212,6 +212,8 @@ export class Stage {
       frameP95: pick(0.95),
       degradeLevel: this.degradeLevel,
       failed: this.failed,
+      running: !!this.running, // false while off-screen, the tab is hidden, or failed
+      frameCount: this.frameCount,
     }
   }
 
