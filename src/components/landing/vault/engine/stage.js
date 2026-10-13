@@ -85,7 +85,7 @@ export class Stage {
     this.renderer.setPixelRatio(this.dpr)
     this.renderer.setSize(w, h, false)
     for (const cb of this.resizeCbs) cb(w, h, this.dpr)
-    if (!this.running && this.lastRender) this.renderOnce()
+    if (!this.running && this.lastRender) this.requestRender()
   }
 
   // Compile every program before the first visible frame. compileAsync uses KHR_parallel_shader_compile,
@@ -110,7 +110,7 @@ export class Stage {
   }
 
   sync() {
-    const should = this.started && this.inView && !document.hidden && !this.failed
+    const should = this.started && this.inView && !document.hidden && !this.failed && !this.paused
     if (should && !this.running) {
       this.running = true
       this.last = performance.now()
@@ -154,6 +154,23 @@ export class Stage {
   }
 
   renderOnce() { this.renderFrame(0) }
+
+  // Pause (WCAG 2.2.2 control): stop the rAF loop entirely. Time freezes; nothing renders until
+  // requestRender() (theme change, resize, scroll while paused) or resume.
+  setPaused(p) {
+    this.paused = !!p
+    this.timeScale = this.paused ? 0 : 1
+    this.sync()
+  }
+
+  // One coalesced frame while the loop is stopped. dt = 1 s lets damped values (camera, story) settle.
+  requestRender() {
+    if (this.running || this.failed || !this.started || this._req) return
+    this._req = requestAnimationFrame(() => {
+      this._req = 0
+      if (!this.running && !this.failed) { this.renderFrame(1); this.oneOffRenders = (this.oneOffRenders || 0) + 1 }
+    })
+  }
 
   checkWatchdog(raw) {
     if (!this.watchdog || this.failed) return
@@ -214,6 +231,8 @@ export class Stage {
       failed: this.failed,
       running: !!this.running, // false while off-screen, the tab is hidden, or failed
       frameCount: this.frameCount,
+      paused: !!this.paused,
+      oneOffRenders: this.oneOffRenders || 0,
     }
   }
 
@@ -222,6 +241,7 @@ export class Stage {
   dispose() {
     this.running = false
     cancelAnimationFrame(this.raf)
+    cancelAnimationFrame(this._req)
     this.ro.disconnect()
     this.io.disconnect()
     document.removeEventListener('visibilitychange', this.onVis)

@@ -558,9 +558,12 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
   // live re-colour from the page's theme toggle
   const onTheme = (e) => {
     const next = themeName(e?.detail?.theme ?? document.documentElement.dataset.theme)
-    if (next !== themeKey) applyTheme(next)
+    if (next !== themeKey) { applyTheme(next); stage.requestRender() }
   }
   window.addEventListener('dappdrop:themechange', onTheme)
+  // while paused the loop is stopped, but the story still follows the visitor's scroll
+  const onScroll = () => { if (stage.paused) stage.requestRender() }
+  window.addEventListener('scroll', onScroll, { passive: true })
 
   return {
     stats: () => ({ ...stage.stats(), counts: { discs: DISCS, wallets: WALLETS, arcs: ARCS, trailSegments: ARCS * SEGS, dust: Q.dust } }),
@@ -568,11 +571,12 @@ export async function mount({ stage: stageEl, canvasHost, tier = 'high', still =
     glide: (T, d) => story.glide(T, d),
     snap: () => rig.snap(story.T()),
     skipIntro: () => { sweepT = 99 },
-    setPaused: (p) => { stage.timeScale = p ? 0 : 1 },
-    setTheme: (name) => applyTheme(name),
+    setPaused: (p) => stage.setPaused(p),
+    setTheme: (name) => { applyTheme(name); stage.requestRender() },
     resetFrames: () => stage.resetFrames(),
     dispose() {
       window.removeEventListener('dappdrop:themechange', onTheme)
+      window.removeEventListener('scroll', onScroll)
       story.dispose()
       pointer.dispose()
       post.dispose()
