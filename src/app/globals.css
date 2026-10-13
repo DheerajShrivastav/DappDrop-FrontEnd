@@ -848,6 +848,17 @@ html.vault-live:not(.vault-fallback) .mh-pause {
     .mh-cue {
         display: none;
     }
+    /* The CTA + link + 44 px pause don't fit one row at 360-414 px (the button was squeezed to 16 px
+       and pushed the page 4 px wide). On phones the pause sits in the hero's bottom-right corner,
+       beside the vault, instead; it stays after the CTA row in the tab order. */
+    .mh-pause {
+        position: absolute;
+        right: 1.25rem;
+        bottom: 1.25rem;
+    }
+}
+.mh-pause {
+    flex-shrink: 0;
 }
 
 /* Subtle copy reveal on scroll: CSS only (no JS), never on the H1, and none at all under reduced
