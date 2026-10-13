@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 /**
- * S1-15 / AS-6: renders the 1200×630 share card from HTML with the landing fonts, into
- * src/app/opengraph-image.png and twitter-image.png (+ .alt.txt). Never built from
- * public/banner.png. Re-run when the H1, the network or the 24-hour line changes:
- *   node scripts/generate-og-image.mjs [--network "Sepolia testnet"]
+ * S1-15 → 07-wow: renders the 1200×630 share cards (Obsidian, dark + gold) from HTML with the
+ * landing fonts, at build-prep time only (static PNGs; nothing dynamic on /):
+ *   /              → src/app/opengraph-image.png + twitter-image.png (+ .alt.txt)
+ *   /how-it-works  → src/app/(landing)/how-it-works/opengraph-image.png + twitter-image.png
+ *   /security      → src/app/(landing)/security/opengraph-image.png + twitter-image.png
+ * The vault is drawn in CSS (glass block + abstract gold discs): no amounts, no wallet stubs, no
+ * logos (copy §4.1, §5). Swap in the 3D build's poster still with --still <file> once it lands.
+ * Re-run when the H1, the network or the page titles change:
+ *   node scripts/generate-og-image.mjs [--network "Sepolia testnet"] [--still path/to/poster.avif]
  * Uses Playwright's Chromium (dev dependency) or CHROME_PATH.
  */
 import { chromium } from '@playwright/test'
@@ -11,42 +16,69 @@ import { readFileSync, writeFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 const root = process.cwd()
-const net = (process.argv.includes('--network') ? process.argv[process.argv.indexOf('--network') + 1] : 'Sepolia testnet').toUpperCase()
+const arg = (k) => (process.argv.includes(k) ? process.argv[process.argv.indexOf(k) + 1] : null)
+const net = arg('--network') ?? 'Sepolia testnet'
+const still = arg('--still')
 const font = (f) => readFileSync(path.join(root, 'src/fonts', f)).toString('base64')
-const H1 = 'Quest campaigns with the reward locked in up front.'
-const LINE = 'Reward lists are public for 24 hours before claims open.'
-const ALT = `DappDrop: “${H1}” Beside it, an example escrow statement on ${net.toLowerCase()} with the reward list public for 24 hours before claims open.`
 
-const html = `<!doctype html><meta charset="utf-8"><style>
+const CARDS = [
+  {
+    dir: 'src/app',
+    eyebrow: `Public beta · ${net}`,
+    title: 'Don’t promise rewards. Lock them in.',
+    alt: `DappDrop: Don’t promise rewards. Lock them in. Public beta on ${net}.`,
+  },
+  {
+    dir: 'src/app/(landing)/how-it-works',
+    eyebrow: 'How it works',
+    title: 'How a campaign runs, start to finish.',
+    alt: `DappDrop, how it works: how a campaign runs, start to finish. Public beta on ${net}.`,
+  },
+  {
+    dir: 'src/app/(landing)/security',
+    eyebrow: 'Security · Not audited yet',
+    title: 'Check our work.',
+    alt: `DappDrop security: check our work. Not audited yet. Public beta on ${net}.`,
+  },
+]
+
+const vault = still
+  ? `<img class="still" src="data:image/${path.extname(still).slice(1)};base64,${readFileSync(still).toString('base64')}" alt="">`
+  : `<div class="stage"><div class="glow"></div><div class="glass"><div class="coins">${[0, 1, 2, 3, 4, 5]
+      .map((i) => `<i style="bottom:${18 + i * 15}px"></i>`)
+      .join('')}</div><div class="seam"></div></div><div class="floor"></div></div>`
+
+const page = (c) => `<!doctype html><meta charset="utf-8"><style>
 @font-face{font-family:N;src:url(data:font/woff2;base64,${font('newsreader-opsz72-wght450-latin1.woff2')}) format('woff2');font-weight:450}
 @font-face{font-family:M;src:url(data:font/woff2;base64,${font('jetbrains-mono-wght400-500-latin1.woff2')}) format('woff2');font-weight:400 500}
 *{box-sizing:border-box;margin:0}
-body{width:1200px;height:630px;background:#F6F4EF;color:#171717;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;display:grid;grid-template-columns:600px 1fr;gap:48px;padding:64px 64px}
-.wm{font-family:N;font-weight:450;font-size:40px;letter-spacing:-.02em}
-h1{font-family:N;font-weight:450;font-size:60px;line-height:1.04;letter-spacing:-.02em;margin-top:48px}
-.line{margin-top:28px;font-size:24px;line-height:1.4;color:#4F4B45}
-.slip{background:#fff;border-radius:4px;box-shadow:0 1px 1px rgb(23 23 23/.04),0 28px 56px -28px rgb(23 23 23/.22);padding:28px 28px 24px;align-self:center;font-size:17px}
-.eb{font-family:M;font-size:14px;letter-spacing:.08em;text-transform:uppercase}
-.wmk{margin:14px -28px 10px;background:#ECE8DF;text-align:center;padding:6px 0;font-family:M;font-size:14px;letter-spacing:.08em;color:#4F4B45}
-.row{display:flex;justify-content:space-between;gap:16px;white-space:nowrap;padding:9px 0;border-bottom:1px solid #DCD6CA}
-.row b{font-family:M;font-weight:500}
-.tot{border-top:3px double #171717;border-bottom:3px double #171717;font-weight:600}
-.h24{margin-top:14px;font-family:M;font-size:20px;font-weight:500;color:#2338C6;border-bottom:3px solid #2338C6;display:inline-block;padding-bottom:4px}
-.sub{margin-top:8px;color:#4F4B45;font-size:15px}
-</style><body><div><div class="wm">DappDrop</div><h1>${H1}</h1><p class="line">${LINE}</p></div>
-<div class="slip"><div class="eb">Escrow statement</div><div class="wmk">EXAMPLE · ${net}</div>
-<div class="row"><span>Platform fee</span><b>None during beta</b></div>
-<div class="row tot"><span>Escrowed for rewards</span><b>1,000 EXAMPLE</b></div>
-<div class="h24">List public · 24 h</div><p class="sub">Then claims open. 30 days after you close it, take back what’s left.</p></div></body>`
+body{width:1200px;height:630px;overflow:hidden;background:radial-gradient(60% 80% at 76% 40%,#16161a 0%,#050506 70%);color:#F3F1EC;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;position:relative}
+.copy{position:absolute;left:72px;top:64px;width:620px;height:502px;display:flex;flex-direction:column}
+.wm{font-family:N;font-size:38px;letter-spacing:-.02em}
+.chip{margin-top:auto;align-self:flex-start;display:inline-flex;align-items:center;gap:12px;font-family:M;font-size:17px;letter-spacing:.12em;text-transform:uppercase;color:#A6A4A0;border:1px solid #3a3a3d;border-radius:999px;padding:10px 16px}
+.chip:before{content:"";width:8px;height:8px;border-radius:50%;background:#F2B45E}
+h1{font-family:N;font-weight:450;font-size:76px;line-height:1;letter-spacing:-.025em;margin-top:26px}
+.stage{position:absolute;right:120px;top:70px;width:300px;height:480px}
+.glow{position:absolute;left:-80px;right:-80px;top:120px;height:300px;background:radial-gradient(closest-side,rgba(242,180,94,.22),transparent);filter:blur(10px)}
+.glass{position:absolute;inset:0 0 40px 0;border-radius:22px;border:1.5px solid rgba(243,241,236,.55);background:linear-gradient(160deg,rgba(255,255,255,.10),rgba(255,255,255,.02) 40%,rgba(255,255,255,.05));box-shadow:inset 0 0 0 10px rgba(255,255,255,.025),inset 0 1px 0 rgba(255,255,255,.4),0 40px 80px -30px rgba(0,0,0,.9)}
+.glass:after{content:"";position:absolute;left:18px;top:14px;width:2px;bottom:14px;background:linear-gradient(rgba(255,255,255,.5),transparent 70%);border-radius:2px}
+.coins{position:absolute;left:50%;bottom:0;width:150px;height:140px;transform:translateX(-50%)}
+.coins i{position:absolute;left:0;width:150px;height:22px;border-radius:50%;background:linear-gradient(#FFD99A,#F2B45E 45%,#9A6420);box-shadow:0 2px 0 #6d4512,0 0 24px rgba(242,180,94,.35)}
+.seam{position:absolute;left:24px;right:24px;top:36%;height:2px;background:linear-gradient(90deg,transparent,#F2B45E,transparent);opacity:.85}
+.floor{position:absolute;left:-60px;right:-60px;bottom:0;height:60px;background:radial-gradient(closest-side,rgba(242,180,94,.18),transparent)}
+.still{position:absolute;right:0;top:0;width:620px;height:630px;object-fit:cover;-webkit-mask:linear-gradient(90deg,transparent,#000 30%)}
+</style><body>${vault}<div class="copy"><div class="wm">DappDrop</div><p class="chip">${c.eyebrow}</p><h1>${c.title}</h1></div></body>`
 
 const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {})
-const page = await browser.newPage({ viewport: { width: 1200, height: 630 } })
-await page.setContent(html)
-await page.evaluate(() => document.fonts.ready)
-for (const name of ['opengraph-image', 'twitter-image']) {
-  const out = path.join(root, 'src/app', `${name}.png`)
-  await page.screenshot({ path: out })
-  writeFileSync(path.join(root, 'src/app', `${name}.alt.txt`), ALT)
-  console.log(out, Math.round(statSync(out).size / 1024) + ' KB')
+const tab = await browser.newPage({ viewport: { width: 1200, height: 630 } })
+for (const c of CARDS) {
+  await tab.setContent(page(c))
+  await tab.evaluate(() => document.fonts.ready)
+  for (const name of ['opengraph-image', 'twitter-image']) {
+    const out = path.join(root, c.dir, `${name}.png`)
+    await tab.screenshot({ path: out })
+    writeFileSync(path.join(root, c.dir, `${name}.alt.txt`), c.alt)
+    console.log(path.relative(root, out), Math.round(statSync(out).size / 1024) + ' KB')
+  }
 }
 await browser.close()

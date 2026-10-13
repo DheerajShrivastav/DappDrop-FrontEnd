@@ -1,0 +1,1 @@
+DappDrop security: check our work. Not audited yet. Public beta on Sepolia testnet.
