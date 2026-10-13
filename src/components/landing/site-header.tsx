@@ -54,7 +54,7 @@ export function SiteHeader({ themed = false }: { themed?: boolean }) {
         <div className="ml-auto flex shrink-0 items-center gap-1 min-[360px]:gap-1.5 sm:gap-2 lg:ml-0">
           <span className="lg:hidden">
             <IntentPrefetch href={START_HREF} className={headerButton} cta="header_start" loc="header">
-              Start
+              Start<span className="sr-only"> a campaign</span>
             </IntentPrefetch>
           </span>
           {themed && <ThemeToggle />}
