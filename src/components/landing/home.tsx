@@ -60,7 +60,7 @@ export function HomeHero() {
             : 'Fund the reward into on-chain escrow before your campaign opens. Whoever earns it claims it from there.'}
         </p>
 
-        <div className="flex items-center gap-x-4 sm:gap-x-6">
+        <div className="flex items-center gap-x-3 min-[380px]:gap-x-4 sm:gap-x-6">
           <IntentPrefetch id="hero-cta" href={START_HREF} className={`${pillButton} shrink-0 max-sm:px-5`} cta="hero_primary" loc="hero">
             {startLabel}
           </IntentPrefetch>
