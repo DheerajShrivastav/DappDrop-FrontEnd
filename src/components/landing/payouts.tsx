@@ -8,39 +8,21 @@ import { Section } from './section'
 import { primaryButton } from './ui'
 
 /**
- * S1-08: #payouts, the signature section (plan §2.3; CD-revisions §2.3; TRS F09–F28).
+ * S1-08 on /how-it-works (07-wow IA §2): #payouts (custody, the escrow read, the money diagram),
+ * #modes (three ways to pay + reward types) and #rules (R1–R7 on the sunk band), three sections.
  * Flag paths: escrowBalanceOnCampaignPage (V1 wording, RED-23), plus those in PayoutModes and
  * RuleRibbon. "Read the payout rules" points at REWARD_SYSTEM.md at the deployed tag, else the
- * verified source (F27, D-X11: never at undeployed code).
+ * verified source (F27, D-X11: never at undeployed code). The custody pair always travels with the
+ * pause line (O7).
  */
 export function Payouts() {
-  const rulesHref = claims.deployedTag
-    ? `${repos.contracts}/blob/${claims.deployedTag}/docs/REWARD_SYSTEM.md`
-    : explorerCodeUrl(network.entrypoint)
-  const rulesWhere = claims.deployedTag ? `at ${claims.deployedTag} on GitHub` : `the verified contract source on ${network.explorerName}`
-
   return (
     <Section
       id="payouts"
       track="payouts"
-      eyebrow="01 — How the money moves"
+      eyebrow="How the money moves"
       title="Ask where the reward sits."
       dek="Ask before your campaign starts, before your community does a single task. Here, the answer is a contract you can read."
-      after={
-        <>
-          <RuleRibbon />
-          <div className="lp-container flex flex-col gap-4 pb-[var(--section-y)] pt-8 sm:flex-row md:pt-10 sm:items-center">
-            <a href="#start" className={primaryButton} data-cta="payouts_primary" data-loc="payouts">
-              Start a test campaign
-            </a>
-            {rulesHref && (
-              <a href={rulesHref} target="_blank" rel="noopener noreferrer" className="lp-link inline-flex min-h-11 items-center" data-dest="read_contracts">
-                Read the payout rules ↗<span className="sr-only">: {rulesWhere} (opens in a new tab)</span>
-              </a>
-            )}
-          </div>
-        </>
-      }
     >
       <div className="mt-8 grid items-center gap-6 lg:mt-10 lg:grid-cols-12 lg:gap-12">
         <div className="lg:col-span-6">
@@ -48,8 +30,8 @@ export function Payouts() {
           <p className="mt-3 text-small text-ink-2 md:text-body">
             Your reward never sits in a DappDrop wallet. In an emergency, our admin key can pause the contract; while it&apos;s
             paused, nobody can move the rewards, including us. Timers keep running during a pause.{' '}
-            <a href="#can-cant" className="lp-link text-ink">
-              See what our keys can do ↓
+            <a href="/security#can-cant" className="lp-link text-ink">
+              See what our keys can do →
             </a>
           </p>
           <p className="mt-3 text-small text-ink-2 md:text-body">
@@ -64,7 +46,36 @@ export function Payouts() {
           <MoneyDiagram />
         </div>
       </div>
+    </Section>
+  )
+}
+
+export function Modes() {
+  return (
+    <Section id="modes" track="modes" eyebrow="Payouts" title="Three ways to pay" className="border-t border-rule">
       <PayoutModes />
     </Section>
+  )
+}
+
+export function Rules() {
+  const rulesHref = claims.deployedTag
+    ? `${repos.contracts}/blob/${claims.deployedTag}/docs/REWARD_SYSTEM.md`
+    : explorerCodeUrl(network.entrypoint)
+  const rulesWhere = claims.deployedTag ? `at ${claims.deployedTag} on GitHub` : `the verified contract source on ${network.explorerName}`
+  return (
+    <section aria-labelledby="rules-title" data-section="rules" className="bg-sunk">
+      <RuleRibbon />
+      <div className="lp-container flex flex-col gap-4 pb-[var(--section-y)] pt-2 sm:flex-row sm:items-center md:pt-4">
+        <a href="#start" className={primaryButton} data-cta="payouts_primary" data-loc="rules">
+          Start a test campaign
+        </a>
+        {rulesHref && (
+          <a href={rulesHref} target="_blank" rel="noopener noreferrer" className="lp-link inline-flex min-h-11 items-center" data-dest="read_contracts">
+            Read the payout rules ↗<span className="sr-only">: {rulesWhere} (opens in a new tab)</span>
+          </a>
+        )}
+      </div>
+    </section>
   )
 }

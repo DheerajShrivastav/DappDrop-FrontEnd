@@ -1,14 +1,13 @@
 import { claims } from '@/config/claims'
 import { network } from '@/config/landing'
 import { ExampleCampaignCard } from './example-campaign-card'
-import { PhoneDetails } from './phone-details'
 import { Receipt } from './receipt'
 import { Section } from './section'
 
 /**
  * S1-13: #participants (plan §2.7; TRS F64–F68, RED-20). Flag paths: relayerLive adds the
  * sponsored-gas line (V11; never gated on Humanity, founder decision 2026-10-01);
- * campaignsCurated adds "Browse campaigns →". One example card on phone, three from md.
+ * campaignsCurated adds "Browse campaigns →". Example cards from md. On /how-it-works (07-wow).
  */
 export function Participants() {
   const tag = `Example · ${network.name}${network.testnet ? ' testnet' : ''}`
@@ -16,7 +15,7 @@ export function Participants() {
     <Section
       id="participants"
       track="participants"
-      eyebrow="05 — For participants"
+      eyebrow="For participants"
       title="Your community claims straight to their own wallet."
       dek={
         <>
@@ -31,14 +30,13 @@ export function Participants() {
           {claims.relayerLive && <li>We can cover the gas for your claim, within each campaign&apos;s budget.</li>}
           <li>Clear statuses: open, ended, results being finalised, claims open at a set time, closed.</li>
           <li>
-            {/* Founder decision 2026-10-11: one tap away below 768 px (FAQ Q8 repeats it). */}
-            <PhoneDetails detail="who_hosts" summary={<span className="font-semibold text-ink">Who runs these campaigns?</span>}>
-              <p className="pb-1">
-                Projects create their own campaigns, and the host publishes the reward list. DappDrop doesn&apos;t vet hosts during
-                the beta. <strong className="font-semibold text-ink">Never pay to take part unless you trust the project.</strong>
-              </p>
-              <p className="mt-2.5">During the beta, most participants will come from your own channels. Share your campaign anywhere.</p>
-            </PhoneDetails>
+            {/* IA #66 (RED-20): the anyone-can-host warning is open at every width on /how-it-works. */}
+            <p className="font-semibold text-ink">Who runs these campaigns?</p>
+            <p className="mt-1">
+              Projects create their own campaigns, and the host publishes the reward list. DappDrop doesn&apos;t vet hosts during the
+              beta. <strong className="font-semibold text-ink">Never pay to take part unless you trust the project.</strong>
+            </p>
+            <p className="mt-2.5">During the beta, most participants will come from your own channels. Share your campaign anywhere.</p>
           </li>
           {claims.campaignsCurated && (
             <li>

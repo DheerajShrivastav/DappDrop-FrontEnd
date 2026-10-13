@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, type FormEvent } from 'react'
-import { submitLead, type LeadState } from '@/app/(marketing)/actions'
+import { submitLead, type LeadState } from '@/app/(landing)/actions'
 import { track } from '@/lib/track'
 
 /**

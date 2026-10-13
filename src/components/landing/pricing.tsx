@@ -27,7 +27,7 @@ const FOUNDING_FIELDS: Field[] = [
 export function Pricing() {
   const founding = claims.foundingHosts.open && claims.privacyNoticeUrl
   return (
-    <Section id="pricing" track="pricing" eyebrow="06 — Beta terms" title="No platform fee during the beta.">
+    <Section id="pricing" track="pricing" eyebrow="Beta terms" title="No platform fee during the beta.">
       <div className="mt-6 max-w-[44rem] space-y-3 text-small text-ink-2 md:text-body">
         <p>
           No platform fee while we&apos;re in beta. You pay normal network gas for your own transactions: creating, funding and

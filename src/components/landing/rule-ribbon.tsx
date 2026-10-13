@@ -86,9 +86,11 @@ export function RuleRibbon() {
   ]
 
   return (
-    <div className="bg-sunk" id="rules">
-      <div className="lp-container py-8 md:py-12">
-        <h3 className="text-title font-semibold">The rules, stop by stop</h3>
+    <div id="rules" className="scroll-mt-20">
+      <div className="lp-container pb-8 pt-[var(--section-y)] md:pb-10">
+        <h2 id="rules-title" tabIndex={-1} className="font-display text-display-l font-normal outline-none">
+          The rules, stop by stop
+        </h2>
         <p className="mt-1 font-mono text-[0.75rem] uppercase tracking-[0.06em] text-ink-2">For reward-list campaigns</p>
         <p className="mt-2 max-w-[40rem] text-small text-ink-2">
           For your engineer: each “Check ↗” opens the code that enforces the rule.

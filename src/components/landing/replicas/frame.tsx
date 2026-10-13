@@ -6,7 +6,7 @@
 export function Frame({ fig, caption, children }: { fig: number; caption: string; children: React.ReactNode }) {
   return (
     <figure className="m-0">
-      <div className="overflow-hidden rounded-lg border border-rule bg-surface shadow-e1">
+      <div className="lp-paper-object overflow-hidden rounded-lg border border-rule bg-surface shadow-e1">
         <div className="flex items-center justify-between border-b border-rule px-3 py-1.5 font-mono text-[0.6875rem] uppercase text-ink-3">
           <span>DappDrop</span>
           <span>Example</span>

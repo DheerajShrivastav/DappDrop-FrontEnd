@@ -99,7 +99,8 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: '/:path*', headers: SECURITY_HEADERS },
-      { source: '/', headers: [{ key: 'Content-Security-Policy-Report-Only', value: LANDING_CSP }] },
+      // The Monolith pages (07-wow): same report-only policy on all three.
+      ...['/', '/how-it-works', '/security'].map((source) => ({ source, headers: [{ key: 'Content-Security-Policy-Report-Only', value: LANDING_CSP }] })),
     ]
   },
 

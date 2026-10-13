@@ -66,9 +66,9 @@ export function TaskMatrix() {
 
   return (
     <Section
-      id="verification"
-      track="verification"
-      eyebrow="03 — Tasks"
+      id="tasks"
+      track="tasks"
+      eyebrow="Tasks"
       title="Every task says how it’s checked."
       dek="By our bot, by our app, by the chain, or self-reported. We label each one, so you know what you’re rewarding."
     >
@@ -111,7 +111,6 @@ export function TaskMatrix() {
               </strong>
             )}
           </p>
-          <p>Pay in your token or a stablecoin (ERC-20), NFTs (ERC-721) or multi-edition NFTs (ERC-1155).</p>
         </div>
         <div className="hidden rounded-lg border border-rule bg-surface p-5 md:block">
           <h3 className="text-small font-semibold md:text-body">Will bots farm my budget?</h3>
@@ -123,11 +122,6 @@ export function TaskMatrix() {
           </p>
         </div>
       </div>
-      <p className="mt-6">
-        <a href="#start" className="lp-link inline-flex min-h-11 items-center" data-cta="verification_start" data-loc="verification">
-          Start a campaign
-        </a>
-      </p>
     </Section>
   )
 }

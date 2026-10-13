@@ -5,9 +5,9 @@ import { LeadForm } from './lead-form'
 import { PhoneDetails } from './phone-details'
 
 /**
- * S1-14: #start, "Here's what you'll need" (plan §2.10; TRS F78–F81), on the ink band that runs
- * into the footer. Flag paths:
- * - hostCloseGuarded → the band line "Don't promise rewards. Lock them in." (S2-05; RED-03);
+ * S1-14: #start on /how-it-works, "Here's what you'll need" (plan §2.10; TRS F78–F81), on the
+ * ink band that runs into the footer. The band line now lives on / (the H1), so it isn't repeated
+ * here (07-wow IA #83). Flag paths:
  * - faucetUrl / testToken (C9) → steps 2–3 link the faucet / offer the token, else the fallbacks;
  * - founderContact (C2) / foundingHosts.open (C1) → the exits; privacyNoticeUrl (D11) → waitlist.
  * The phone note (F80) waits for the UXA app test. On ink: paper / paper-2 text and
@@ -57,10 +57,7 @@ export function StartPanel() {
   return (
     <section id="start" aria-labelledby="start-title" data-section="start" className="lp-ink scroll-mt-20">
       <div className="lp-container section-y">
-        {claims.hostCloseGuarded && (
-          <p className="font-display text-[1.75rem] leading-tight text-paper md:text-[2.25rem]">Don&apos;t promise rewards. Lock them in.</p>
-        )}
-        <h2 id="start-title" tabIndex={-1} className="mt-4 font-display text-display-l font-normal text-paper outline-none">
+        <h2 id="start-title" tabIndex={-1} className="font-display text-display-l font-normal text-paper outline-none">
           Here&apos;s what you&apos;ll need.
         </h2>
         <p className="mt-3 text-lead text-paper-2">Four steps from here to a funded test campaign.</p>
@@ -93,6 +90,8 @@ export function StartPanel() {
             <div className="mt-5">
               <IntentPrefetch
                 href="/create-campaign"
+                cta="continue_to_app"
+                loc="start"
                 className="inline-flex h-12 w-full items-center justify-center rounded-sm border border-transparent bg-paper px-5 text-body font-semibold leading-none text-ink active:translate-y-px sm:w-auto"
               >
                 Continue to the app

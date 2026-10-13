@@ -39,9 +39,9 @@ const STEPS = [
 export function HowSteps() {
   return (
     <Section
-      id="how"
-      track="how"
-      eyebrow="02 — How it works"
+      id="steps"
+      track="steps"
+      eyebrow="The flow"
       title="Build it, fund it, run it, settle it."
       dek="Four steps in one guided flow. No code, and you see every transaction before you sign."
     >
@@ -59,7 +59,7 @@ export function HowSteps() {
                   <>
                     {' '}
                     <a href="#rules" className="lp-link text-ink">
-                      See the money rules ↑
+                      See the money rules ↓
                     </a>
                   </>
                 )}

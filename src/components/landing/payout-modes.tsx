@@ -37,9 +37,8 @@ export function PayoutModes() {
   const pointsLive = claims.tierModuleFixed
 
   return (
-    <div className="mt-8 md:mt-12">
-      <h3 className="text-title font-semibold">Three ways to pay</h3>
-      <ul className="mt-3 border-b border-rule md:mt-4">
+    <div>
+      <ul className="mt-6 border-b border-rule md:mt-8">
         <Mode name="Equal split">
           <p className="text-small text-ink-2 md:text-body">
             Our app proposes an equal split among wallets that finished every required task. You review and publish it;
@@ -92,13 +91,16 @@ export function PayoutModes() {
           </p>
           {!claims.nftCustodyFixed && (
             <p>
-              <a href="#can-cant" className="lp-link text-small">
-                What our admin key can do with NFTs ↓
+              <a href="/security#can-cant" className="lp-link text-small">
+                What our admin key can do with NFTs →
               </a>
             </p>
           )}
         </Mode>
       </ul>
+      <p className="mt-6 max-w-[44rem] text-small text-ink-2 md:text-body">
+        Pay in your token or a stablecoin (ERC-20), NFTs (ERC-721) or multi-edition NFTs (ERC-1155).
+      </p>
     </div>
   )
 }

@@ -42,8 +42,8 @@ export function Faq() {
           In DappDrop, you fund an on-chain escrow contract before your campaign opens; the reward stays there until it&apos;s
           claimed or you take it back. Your reward never sits in a DappDrop wallet. In an emergency, our admin key can pause the
           contract; while it&apos;s paused, nobody can move the rewards, including us. Timers keep running during a pause.{' '}
-          <a href="#can-cant" className="lp-link text-ink">
-            See exactly what our keys can do ↓
+          <a href="/security#can-cant" className="lp-link text-ink">
+            See exactly what our keys can do →
           </a>
         </>
       ),
@@ -57,6 +57,9 @@ export function Faq() {
           suites, and static analysis for every security change.{' '}
           <a href={`${repos.contracts}/blob/${ref}/docs/SECURITY_FINDINGS.md`} target="_blank" rel="noopener noreferrer" className="lp-link text-ink" data-dest="security_notes">
             Our security notes ↗<span className="sr-only">: an internal review, not an audit, on GitHub (opens in a new tab)</span>
+          </a>{' '}
+          <a href="/security#build" className="lp-link text-ink">
+            How we build it →
           </a>
         </>
       ),
@@ -97,6 +100,11 @@ export function Faq() {
       ),
     },
     {
+      id: 'faq-host',
+      q: 'Why do I sign a transaction to become a host?',
+      a: <>It registers your wallet as a host on the contract, once. After that, you can create campaigns.</>,
+    },
+    {
       id: 'faq-cost',
       q: 'What does it cost, and do I need a developer?',
       a: <>No platform fee during the beta; gas applies. No code: four guided steps, optional AI drafting, and every transaction shown before you sign.</>,
@@ -114,7 +122,7 @@ export function Faq() {
   ]
 
   return (
-    <Section id="faq" track="faq" title="Fair questions." dek="The things growth leads ask before they put a budget into a campaign.">
+    <Section id="faq" track="faq" eyebrow="FAQ" title="Fair questions." dek="The things growth leads ask before they put a budget into a campaign.">
       <div className="mt-6 border-b border-rule md:mt-8">
         {qs.map((x) => (
           <details key={x.id} id={x.id} className="lp-details lp-target scroll-mt-24 border-t border-rule" data-faq={x.id.replace('faq-', '')}>

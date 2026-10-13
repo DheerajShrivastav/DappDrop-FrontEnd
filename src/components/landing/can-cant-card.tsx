@@ -15,15 +15,14 @@ import { PrintCardButton } from './print-card-button'
  * - adminHardeningCommitted → the C5b line; relayerLive → the claim-gas line.
  * The "can't" list stays the four TRS-approved items (F52); it's only extended with TRS wording.
  *
- * A closed <details> on phone and open on desktop (PRF phone-height fix; opened by
- * HashDetailsOpener), a :target highlight, and a print path (AS-10).
+ * On /security (07-wow IA §3): open at every width, a :target highlight, and a print path (AS-10).
  */
 function Col({ title, items, link }: { title: string; items: React.ReactNode[]; link?: React.ReactNode }) {
   return (
     <div>
-      <h4 className="font-mono text-[0.8125rem] font-medium uppercase tracking-[0.04em] text-ink">
+      <h3 className="font-mono text-[0.8125rem] font-medium uppercase tracking-[0.04em] text-ink">
         {title} {link}
-      </h4>
+      </h3>
       <ul className="mt-2 space-y-1.5 text-small text-ink-2">
         {items.map((it, i) => (
           <li key={i} className="flex gap-2">
@@ -107,11 +106,15 @@ export function CanCantCard() {
   ) : null
 
   return (
-    <div id="can-cant" className="lp-target lp-print-card mt-10 scroll-mt-24 rounded-lg border border-rule bg-surface">
-      <details className="lp-details group" data-open-desktop data-detail="can_cant">
+    <div id="can-cant" className="lp-target lp-print-card scroll-mt-24 rounded-lg border border-rule bg-surface">
+      {/* 07-wow: on /security the card is the page's point, so it's server-rendered open at every
+          width (founder decision 3), with the page's <h2>. Still a <details>, so it can fold away. */}
+      <details className="lp-details group" open data-detail="can_cant">
         <summary className="flex min-h-11 items-center justify-between gap-4 px-5 py-4 sm:px-7">
-          <h3 className="text-title font-semibold">What DappDrop can and can&apos;t do with your tokens</h3>
-          <span aria-hidden="true" className="lp-chevron shrink-0 text-ink-3 lg:hidden">
+          <h2 id="can-cant-title" tabIndex={-1} className="font-display text-title font-normal outline-none md:text-[2rem] md:leading-tight">
+            What DappDrop can and can&apos;t do with your tokens
+          </h2>
+          <span aria-hidden="true" className="lp-chevron shrink-0 text-ink-3">
             ›
           </span>
         </summary>
@@ -141,7 +144,7 @@ export function CanCantCard() {
             <PrintCardButton />
           </div>
           <p className="mt-4 hidden font-mono text-[0.75rem] text-ink-3 print:block">
-            {siteOrigin}/#can-cant · as of {asOf}
+            {siteOrigin}/security#can-cant · as of {asOf}
           </p>
         </div>
       </details>

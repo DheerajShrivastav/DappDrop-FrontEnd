@@ -60,7 +60,7 @@ export function StatementSlip() {
     <figure
       id="slip"
       aria-labelledby="slip-title"
-      className="slip relative rounded bg-surface text-ink shadow-e2"
+      className="slip lp-paper-object relative rounded bg-surface text-ink shadow-e2"
     >
       <div className="slip-perf" aria-hidden="true" />
       <div className="px-5 pb-5 pt-6 sm:px-7 sm:pb-7">
