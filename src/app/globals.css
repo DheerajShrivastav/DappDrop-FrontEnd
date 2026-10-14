@@ -896,3 +896,101 @@ html.vault-live:not(.vault-fallback) .mh-pause {
         min-height: 70svh;
     }
 }
+
+/* ---------------------------------------------------------------------------------------------
+   The statement footer's signature wordmark (founder brief 2026-10-14). "DappDrop" in the display
+   face, fit to the content width (container query units; never wider than the container, and the
+   footer clips), cropped by the page edge. The letters are filled with the vault's gold light:
+   layered gradients + an inline SVG grain, no images, no fonts. Layers (top → bottom):
+     1. the cursor light (--mx / --my, moved by FooterLight; a resting sheen otherwise);
+     2. grain;
+     3. the "empty" cover with a bright meniscus, which slides up as the gold rises (scroll-driven);
+     4. the gold itself: lit from below, as if by the coin stack.
+   Under reduced motion, or without scroll-driven animations, the fill is static and complete.
+   --------------------------------------------------------------------------------------------- */
+.ft-mark-wrap {
+    container-type: inline-size;
+}
+.ft-mark {
+    /* Porcelain / light pages: amber and bronze on paper (the light-theme coins). */
+    --ft-empty: #E2D9C7;
+    --ft-meniscus: rgba(255, 226, 168, 0.95);
+    --ft-light: rgba(255, 238, 200, 0.55);
+    --ft-hot: radial-gradient(75% 130% at 50% 118%, rgba(255, 222, 160, 0.75) 0%, rgba(214, 150, 60, 0.35) 38%, rgba(214, 150, 60, 0) 68%);
+    --ft-gold: linear-gradient(180deg, #4E2C06 0%, #6E3F08 26%, #8F530C 52%, #A9651A 76%, #C98431 100%);
+    --ft-grain-op: 0.5;
+    /* The cursor light rests off the letters until a fine pointer moves it. */
+    --mx: 50%;
+    --my: -2em;
+    --ft-r: 4.36; /* "DappDrop" advance width in em at weight 340, letter-spacing -0.04em */
+    --ft-pos: 86%;
+
+    display: block;
+    height: 0.8em; /* the crop: the page edge cuts through the descenders */
+    overflow: hidden;
+    overflow: clip; /* not a scroll container, so view() tracks the page scroll */
+    font-family: var(--font-display, Georgia), Georgia, "Times New Roman", serif;
+    font-weight: 340;
+    font-size: 22vw;
+    font-size: calc(100cqw / var(--ft-r));
+    line-height: 1.02;
+    letter-spacing: -0.04em;
+    white-space: nowrap;
+    text-align: center;
+    user-select: none;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    background-image:
+        radial-gradient(circle 0.9em at var(--mx) var(--my), var(--ft-light) 0%, transparent 70%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .9 0 0 0 0 .7 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E"),
+        linear-gradient(to top, transparent 44%, var(--ft-meniscus) 46%, var(--ft-empty) 49%),
+        var(--ft-hot),
+        var(--ft-gold);
+    background-size: 100% 100%, 180px 180px, 100% 300%, 100% 100%, 100% 100%;
+    background-position: 0 0, 0 0, 0 var(--ft-pos), 0 0, 0 0;
+    background-repeat: no-repeat, repeat, no-repeat, no-repeat, no-repeat;
+    background-blend-mode: screen, soft-light, normal, screen, normal;
+    -webkit-background-clip: text;
+    background-clip: text;
+    filter: drop-shadow(0 0 0.1em var(--ft-glow, transparent));
+}
+/* Obsidian: molten gold, lit from below by the coin stack. */
+.lp-theme .ft-mark {
+    --ft-empty: #221A0F;
+    --ft-meniscus: rgba(255, 236, 190, 0.95);
+    --ft-light: rgba(255, 244, 222, 0.8);
+    --ft-hot: radial-gradient(75% 130% at 50% 118%, rgba(255, 246, 220, 0.95) 0%, rgba(255, 206, 120, 0.55) 32%, rgba(242, 180, 94, 0) 66%);
+    --ft-gold: linear-gradient(180deg, #3A230A 0%, #7A4C17 20%, #C4873A 44%, #F2B45E 64%, #FFD48C 84%, #FFEDC4 100%);
+    --ft-glow: rgba(242, 180, 94, 0.16);
+    --ft-r: 4.30;
+    font-weight: 300;
+}
+html[data-theme="porcelain"] .lp-theme .ft-mark {
+    --ft-empty: #E2D9C7;
+    --ft-meniscus: rgba(255, 226, 168, 0.95);
+    --ft-light: rgba(255, 238, 200, 0.55);
+    --ft-hot: radial-gradient(75% 130% at 50% 118%, rgba(255, 222, 160, 0.75) 0%, rgba(214, 150, 60, 0.35) 38%, rgba(214, 150, 60, 0) 68%);
+    --ft-gold: linear-gradient(180deg, #4E2C06 0%, #6E3F08 26%, #8F530C 52%, #A9651A 76%, #C98431 100%);
+    --ft-glow: transparent;
+    --ft-r: 4.36;
+    font-weight: 340;
+}
+/* "Fills like coins": the cover slides up as the wordmark scrolls in; complete when it's fully in
+   view (the page's last pixel). */
+@media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+        .ft-mark {
+            animation: ft-rise linear both;
+            animation-timeline: view();
+            animation-range: entry 0% entry 80%;
+        }
+    }
+}
+@keyframes ft-rise {
+    from {
+        background-position: 0 0, 0 0, 0 25%, 0 0, 0 0;
+    }
+    to {
+        background-position: 0 0, 0 0, 0 86%, 0 0, 0 0;
+    }
+}
