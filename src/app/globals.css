@@ -922,7 +922,7 @@ html.vault-live:not(.vault-fallback) .mh-pause {
     /* The cursor light rests off the letters until a fine pointer moves it. */
     --mx: 50%;
     --my: -2em;
-    --ft-r: 4.36; /* "DappDrop" advance width in em at weight 340, letter-spacing -0.04em */
+    --ft-r: 4.40; /* "DappDrop" advance width in em at weight 340, letter-spacing -0.04em (4.36 measured on macOS) + ~1% headroom for wider Linux/Windows rendering */
     --ft-pos: 86%;
 
     display: block;
@@ -962,7 +962,7 @@ html.vault-live:not(.vault-fallback) .mh-pause {
     --ft-hot: radial-gradient(75% 130% at 50% 118%, rgba(255, 246, 220, 0.95) 0%, rgba(255, 206, 120, 0.55) 32%, rgba(242, 180, 94, 0) 66%);
     --ft-gold: linear-gradient(180deg, #3A230A 0%, #7A4C17 20%, #C4873A 44%, #F2B45E 64%, #FFD48C 84%, #FFEDC4 100%);
     --ft-glow: rgba(242, 180, 94, 0.16);
-    --ft-r: 4.30;
+    --ft-r: 4.34;
     font-weight: 300;
 }
 html[data-theme="porcelain"] .lp-theme .ft-mark {
@@ -972,7 +972,7 @@ html[data-theme="porcelain"] .lp-theme .ft-mark {
     --ft-hot: radial-gradient(75% 130% at 50% 118%, rgba(255, 222, 160, 0.75) 0%, rgba(214, 150, 60, 0.35) 38%, rgba(214, 150, 60, 0) 68%);
     --ft-gold: linear-gradient(180deg, #4E2C06 0%, #6E3F08 26%, #8F530C 52%, #A9651A 76%, #C98431 100%);
     --ft-glow: transparent;
-    --ft-r: 4.36;
+    --ft-r: 4.40;
     font-weight: 340;
 }
 /* "Fills like coins": the cover slides up as the wordmark scrolls in; complete when it's fully in
