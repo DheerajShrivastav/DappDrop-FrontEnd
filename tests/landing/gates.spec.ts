@@ -328,10 +328,13 @@ test.describe('motion', () => {
     const ctx = await browser.newContext({ reducedMotion: 'no-preference', viewport: { width: 1440, height: 900 } })
     const page = await ctx.newPage()
     await open(page, '/how-it-works')
+    // The footer wordmark's scroll-driven fill is a permanent (scroll-linked) animation; not counted.
+    const timed = () =>
+      page.evaluate(() => document.getAnimations().filter((x) => !((x.effect as KeyframeEffect | null)?.target as Element | null)?.closest('footer')).length)
     await page.waitForTimeout(1300)
-    expect(await page.evaluate(() => document.getAnimations().length)).toBeGreaterThan(0)
+    expect(await timed()).toBeGreaterThan(0)
     await page.waitForTimeout(5500)
-    expect(await page.evaluate(() => document.getAnimations().length)).toBe(0)
+    expect(await timed()).toBe(0)
     await ctx.close()
   })
 
@@ -471,5 +474,85 @@ test.describe('subpage behaviours (moved from the old homepage)', () => {
       await open(page, path)
       expect(await page.locator('a[href^="/#"]').evaluateAll((els) => els.map((e) => e.getAttribute('href')))).toEqual([])
     }
+  })
+})
+
+test.describe('statement footer (founder brief 2026-10-14)', () => {
+  test('same structure on the three pages: columns, honest chips, the app CTA, a decorative wordmark', async ({ page }) => {
+    for (const path of PAGES) {
+      await open(page, path)
+      const f = page.locator('footer[data-footer]')
+      expect(await f.locator('nav h2').allTextContents()).toEqual(['Product', 'Trust', 'Developers', 'Company'])
+      const chips = (await f.locator('ul[aria-label="Status"] > li').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim())
+      expect(chips).toEqual([expect.stringMatching(/^Contracts verified on .+/), 'Public code', 'Not audited yet', expect.stringMatching(/^Public beta/)])
+      await expect(f.locator('[data-cta="footer_primary"]')).toHaveAttribute('href', '/create-campaign')
+      await expect(f).toContainText('We will never ask for your seed phrase or private key.')
+      await expect(f.locator('.ft-mark-wrap')).toHaveAttribute('aria-hidden', 'true')
+      // No social handles until the founder confirms them (landing.ts officialLinks is empty).
+      expect(await f.locator('nav[aria-label="Find us at"]').count()).toBe(0)
+    }
+  })
+
+  test('no dead links: every internal footer link resolves, and its #fragment exists', async ({ page, request }) => {
+    await open(page)
+    const hrefs = [...new Set(await page.locator('footer[data-footer] a[href^="/"]').evaluateAll((els) => els.map((e) => e.getAttribute('href')!)))]
+    expect(hrefs.length).toBeGreaterThan(5)
+    for (const href of hrefs) {
+      const [path, hash] = href.split('#')
+      const res = await request.get(path, { maxRedirects: 0 })
+      expect(res.status(), href).toBe(200)
+      if (hash) expect(await res.text(), href).toContain(`id="${hash}"`)
+    }
+  })
+
+  test('the wordmark spans the content width without overflow, 320 to 1440', async ({ page }) => {
+    for (const width of [320, 360, 375, 414, 430, 768, 1440]) {
+      await page.setViewportSize({ width, height: 800 })
+      await open(page)
+      const m = await page.evaluate(() => {
+        const mark = document.querySelector<HTMLElement>('.ft-mark')!
+        const r = document.createRange()
+        r.selectNodeContents(mark)
+        const text = r.getBoundingClientRect()
+        const box = mark.getBoundingClientRect()
+        return { textW: text.width, boxW: box.width, sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }
+      })
+      expect(m.sw, `overflow at ${width}`).toBe(m.cw)
+      expect(m.textW, `wordmark wider than its box at ${width}`).toBeLessThanOrEqual(m.boxW + 1)
+      expect(m.textW, `wordmark doesn't span the width at ${width}`).toBeGreaterThan(m.boxW * 0.94)
+    }
+  })
+
+  test('reduced motion: the fill is static and complete, and no footer animation runs', async ({ browser }) => {
+    const ctx = await browser.newContext({ reducedMotion: 'reduce', viewport: { width: 1440, height: 900 } })
+    const page = await ctx.newPage()
+    await open(page)
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }))
+    await page.waitForTimeout(300)
+    const r = await page.evaluate(() => {
+      const mark = document.querySelector<HTMLElement>('.ft-mark')!
+      return { anims: mark.getAnimations().length, pos: getComputedStyle(mark).backgroundPositionY.split(',')[2].trim() }
+    })
+    expect(r).toEqual({ anims: 0, pos: '86%' })
+    await ctx.close()
+  })
+
+  test('motion: the gold rises with the scroll and is complete at the bottom; the cursor light follows', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await open(page)
+    const posY = () => page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.ft-mark')!).backgroundPositionY.split(',')[2]))
+    const supported = await page.evaluate(() => CSS.supports('animation-timeline: view()'))
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight - innerHeight - 140, behavior: 'instant' }))
+    await page.waitForTimeout(300)
+    const mid = await posY()
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }))
+    await page.waitForTimeout(300)
+    const end = await posY()
+    if (supported) expect(mid).toBeLessThan(end)
+    expect(end).toBeCloseTo(86, 0)
+    const box = (await page.locator('.ft-mark').boundingBox())!
+    await page.mouse.move(box.x + 300, box.y + 100)
+    await page.waitForTimeout(200)
+    expect(await page.evaluate(() => getComputedStyle(document.querySelector('.ft-mark')!).getPropertyValue('--mx'))).toBe('300px')
   })
 })
