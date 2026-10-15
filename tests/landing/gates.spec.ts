@@ -20,6 +20,8 @@ const HEIGHT_HARD = 6600
 const DOM_MAX = 1200
 const WORDS_MAX = 300
 const PAGES = ['/', '/how-it-works', '/security'] as const
+// 08-site (2026-10-16): the whole marketing site is Monolith-themed.
+const SITE = [...PAGES, '/about', '/changelog'] as const
 const THEMES = ['obsidian', 'porcelain'] as const
 type Theme = (typeof THEMES)[number]
 
@@ -62,7 +64,7 @@ const first = (page: Page) => page.evaluate(() => (window as unknown as { __firs
 const theme = (page: Page) => page.evaluate(() => document.documentElement.dataset.theme)
 
 test.describe('static HTML', () => {
-  for (const path of PAGES) {
+  for (const path of SITE) {
     test(`${path}: no element is server-rendered invisible; no wallet code`, async ({ request }) => {
       const html = await (await request.get(path)).text()
       expect(html).not.toContain('style="opacity:0')
@@ -251,16 +253,36 @@ test.describe('themes (07-wow)', () => {
     expect(errors).toEqual([])
   })
 
-  test('/about stays light whatever the theme, with no toggle', async ({ page }) => {
-    await open(page, '/about')
-    expect(await page.evaluate(() => document.querySelector('.lp-theme'))).toBeNull()
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light')
-    expect(await page.locator('[data-theme-toggle]').count()).toBe(0)
-  })
+  for (const path of ['/about', '/changelog']) {
+    test(`${path}: Obsidian by default and a remembered Porcelain, both before first paint; the toggle works`, async ({ browser }) => {
+      const ctx = await browser.newContext({ colorScheme: 'light', viewport: { width: 1440, height: 900 } })
+      const page = await ctx.newPage()
+      await recordFirst(page)
+      await open(page, path)
+      expect(await first(page)).toEqual({ theme: 'obsidian', bg: 'rgb(5, 5, 6)' })
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('dark')
+      await page.getByRole('button', { name: 'Light theme' }).click()
+      expect(await theme(page)).toBe('porcelain')
+      await page.reload({ waitUntil: 'networkidle' })
+      expect(await first(page)).toEqual({ theme: 'porcelain', bg: 'rgb(244, 241, 234)' })
+      await expect(page.locator('[data-theme-toggle]')).toHaveAttribute('aria-pressed', 'true')
+      await ctx.close()
+    })
+
+    test(`${path}: no wallet code, framer-motion or app-route chunks`, async ({ page }) => {
+      const urls: string[] = []
+      page.on('request', (r) => urls.push(decodeURIComponent(r.url())))
+      await open(page, path)
+      expect(urls.filter((u) => /\/app\/\(app\)\//.test(u))).toEqual([])
+      const html = await page.content()
+      expect(html).not.toMatch(/rainbowkit|WagmiProvider|data-framer-appear-id/i)
+      expect(urls.filter((u) => /fonts\.g(oogleapis|static)|inter|space.?grotesk/i.test(u))).toEqual([])
+    })
+  }
 })
 
 test.describe('layout', () => {
-  for (const path of PAGES) {
+  for (const path of SITE) {
     for (const width of [320, 375, 390]) {
       test(`${path}: no horizontal overflow at ${width} px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 800 })
@@ -398,11 +420,13 @@ test.describe('accessibility (axe, WCAG 2.2 AA), both themes', () => {
       expect(await axe(page)).toEqual([])
       await ctx.close()
     })
-    for (const path of ['/how-it-works', '/security']) {
-      for (const [width, height] of [
-        [375, 812],
-        [1440, 900],
-      ]) {
+    for (const [path, sizes] of [
+      ['/how-it-works', [[375, 812], [1440, 900]]],
+      ['/security', [[375, 812], [1440, 900]]],
+      ['/about', [[320, 640], [375, 812], [768, 1024], [1440, 900]]],
+      ['/changelog', [[320, 640], [375, 812], [768, 1024], [1440, 900]]],
+    ] as const) {
+      for (const [width, height] of sizes) {
         test(`${path} · ${t}: 0 violations at ${width} px`, async ({ page }) => {
           await remember(page, t)
           await page.setViewportSize({ width, height })
@@ -481,7 +505,7 @@ test.describe('subpage behaviours (moved from the old homepage)', () => {
 
 test.describe('statement footer (founder brief 2026-10-14)', () => {
   test('same structure on the three pages: columns, honest chips, the app CTA, a decorative wordmark', async ({ page }) => {
-    for (const path of PAGES) {
+    for (const path of SITE) {
       await open(page, path)
       const f = page.locator('footer[data-footer]')
       expect(await f.locator('nav h2').allTextContents()).toEqual(['Product', 'Trust', 'Developers', 'Company'])
@@ -569,7 +593,7 @@ test.describe('statement footer (founder brief 2026-10-14)', () => {
 
   test('no seam: the last section and the footer share one background', async ({ page }) => {
     for (const t of THEMES) {
-      for (const path of PAGES) {
+      for (const path of SITE) {
         await remember(page, t)
         await open(page, path)
         const [last, footer] = await page.evaluate(() => {
