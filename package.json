@@ -16,7 +16,13 @@
     "relayer:loop": "tsx worker/relayer.ts --loop",
     "webhooks": "tsx worker/webhook-dispatcher.ts",
     "webhooks:dry-run": "tsx worker/webhook-dispatcher.ts --dry-run",
-    "webhooks:loop": "tsx worker/webhook-dispatcher.ts --loop"
+    "webhooks:loop": "tsx worker/webhook-dispatcher.ts --loop",
+    "test:claims": "tsx --test tests/landing/claims-denylist.spec.ts",
+    "test:unit": "tsx --test src/config/*.test.ts",
+    "test:gates": "playwright test",
+    "check:bundle": "node scripts/check-landing-bundle.mjs",
+    "check:contrast": "node scripts/contrast-check.mjs",
+    "check:imports": "node scripts/check-landing-imports.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.58",
@@ -58,6 +64,8 @@
     "framer-motion": "^12.23.24",
     "graphql": "^16.14.1",
     "graphql-request": "^7.4.0",
+    "gsap": "3.15.0",
+    "lenis": "1.3.26",
     "lucide-react": "^0.475.0",
     "next": "15.3.8",
     "next-auth": "^4.24.11",
@@ -69,15 +77,18 @@
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
+    "three": "0.186.1",
     "uploadthing": "^7.7.4",
     "viem": "^2.40.3",
     "wagmi": "^2.19.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "axe-core": "4.14.0",
     "eslint": "9.39.1",
     "eslint-config-next": "16.0.3",
     "postcss": "^8",

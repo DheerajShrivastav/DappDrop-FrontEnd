@@ -1,48 +1,42 @@
-"use client";
-
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Home, ArrowLeft, SearchX } from 'lucide-react';
-import MarketingHeader from '@/components/marketing-header';
 import Footer from '@/components/footer';
 
+// Server component with NO client components: Next renders the root not-found boundary into
+// every page's payload, so anything client-side here loads on the landing page too. In
+// particular next/link must not be imported here: Next attributed it to the (app) layout's
+// chunk group, which pulled the wallet bundles onto /. Plain <a> only, and a static header (the
+// landing header has client islands).
 export default function NotFound() {
-  const router = useRouter();
-
   return (
     <>
-      <MarketingHeader />
-      <main className="flex-grow flex flex-col items-center justify-center min-h-[80vh] px-4 text-center space-y-8 py-12">
-        {/* Icon and Glitch effect container */}
-        <div className="relative flex flex-col items-center justify-center">
-          <div className="absolute -inset-8 bg-primary/20 blur-3xl rounded-full opacity-50 animate-pulse" />
-          <SearchX className="w-24 h-24 text-primary relative z-10 animate-bounce duration-3000" />
+      <header className="border-b border-border bg-white">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4">
+          <a href="/" className="text-lg font-semibold tracking-tight text-foreground">
+            DappDrop
+          </a>
+          <a href="/how-it-works" className="text-sm text-muted-foreground hover:text-foreground">
+            How it works
+          </a>
         </div>
-
-        <div className="space-y-4 max-w-md relative z-10">
-          <h1 className="text-4xl md:text-6xl font-bold tracking-tight font-space-grotesk text-foreground">
-            404
-          </h1>
-          <h2 className="text-2xl font-semibold text-foreground/90">
-            Page Not Found
-          </h2>
-          <p className="text-muted-foreground">
-            Oops! It looks like you've ventured into uncharted territory. The page you're looking for doesn't exist or has been moved.
-          </p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4 items-center z-10 relative mt-8">
-          <Button asChild variant="default" size="lg" className="w-full sm:w-auto gap-2">
-            <Link href="/">
-              <Home className="w-4 h-4" />
-              Back to Home
-            </Link>
-          </Button>
-          <Button variant="outline" size="lg" className="w-full sm:w-auto gap-2" onClick={() => router.back()}>
-            <ArrowLeft className="w-4 h-4" />
-            Go Back
-          </Button>
+      </header>
+      <main id="main" tabIndex={-1} className="flex-grow flex flex-col items-center justify-center min-h-[60vh] px-4 text-center py-16">
+        <p className="font-mono text-sm text-muted-foreground">404</p>
+        <h1 className="mt-3 text-4xl md:text-5xl font-bold tracking-tight text-foreground">Page not found</h1>
+        <p className="mt-4 max-w-md text-muted-foreground">
+          The page you&apos;re looking for doesn&apos;t exist or has moved.
+        </p>
+        <div className="mt-8 flex flex-col sm:flex-row gap-3 items-center">
+          <a
+            href="/"
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-transparent bg-primary px-6 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            Back to the home page
+          </a>
+          <a
+            href="/campaigns"
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-input bg-white px-6 text-sm font-medium text-foreground hover:bg-secondary"
+          >
+            Browse campaigns
+          </a>
         </div>
       </main>
       <Footer />

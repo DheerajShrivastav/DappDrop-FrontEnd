@@ -1,0 +1,1 @@
+DappDrop: Don’t promise rewards. Lock them in. Public beta on Sepolia testnet.

@@ -1,0 +1,54 @@
+# QW-09: landing-page release gates. Fails the PR on any budget, a11y or claims regression.
+name: Landing gates
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/landing/**'
+      - 'scripts/**'
+      - 'tailwind.config.ts'
+      - 'next.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'lighthouserc.json'
+      - 'playwright.config.ts'
+      - '.github/workflows/landing.yml'
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      # Build-only placeholders: no secrets are needed to build or test the landing page.
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci
+      NEXTAUTH_URL: http://localhost:3100
+      NEXTAUTH_SECRET: ci-placeholder-not-a-secret
+      NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID: '00000000000000000000000000000000'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run check:contrast
+      - run: npm run check:imports
+      - run: npm run build
+      - name: Claims denylist (QW-01)
+        run: npm run test:claims
+      - name: Bundle, static and no-wallet-code gates
+        run: npm run check:bundle
+      - run: npx playwright install --with-deps chromium
+      - name: Playwright gates (overflow, height, DOM, motion, keyboard, axe)
+        run: npm run test:gates
+      - name: Lighthouse CI (mobile, median of 5)
+        run: npx --yes @lhci/cli@0.15.1 autorun

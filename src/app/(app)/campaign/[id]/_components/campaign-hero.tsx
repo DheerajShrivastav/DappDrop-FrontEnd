@@ -50,7 +50,7 @@ export function CampaignHero({
           asChild
           className="backdrop-blur-sm bg-white/90 hover:bg-white"
         >
-          <Link href="/">
+          <Link href="/" prefetch={false}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Back
           </Link>
