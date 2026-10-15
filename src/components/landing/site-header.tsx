@@ -12,11 +12,11 @@ import { Wordmark } from './wordmark'
  *
  * Desktop (≥ 1024): wordmark · How it works · Security · FAQ · For participants / Browse
  * campaigns · [Start a campaign] · theme toggle. Phone: wordmark · ● Testnet · [Start] · toggle ·
- * Menu (native <dialog>). Solid on scroll, transparent at the very top on the themed pages; no
- * blur. The CTA goes straight to the app, prefetched only on intent. `themed` = the (landing)
- * pages; /about and /changelog stay light and show no toggle.
+ * Menu (native <dialog>). Solid on scroll, transparent at the very top; no blur. The CTA goes
+ * straight to the app, prefetched only on intent. Every marketing page (the (landing) group:
+ * /, /how-it-works, /security, /about, /changelog) is themed and shows the toggle.
  */
-export function SiteHeader({ themed = false }: { themed?: boolean }) {
+export function SiteHeader() {
   const navLink =
     'inline-flex h-11 items-center text-small text-ink-2 underline-offset-4 aria-[current=page]:text-ink aria-[current=page]:underline can-hover:hover:text-ink can-hover:hover:underline'
 
@@ -57,7 +57,7 @@ export function SiteHeader({ themed = false }: { themed?: boolean }) {
               Start<span className="sr-only"> a campaign</span>
             </IntentPrefetch>
           </span>
-          {themed && <ThemeToggle />}
+          <ThemeToggle />
           <span className="lg:hidden">
             <MenuDialog>
               <nav aria-label="Menu" className="px-5 py-2">
