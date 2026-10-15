@@ -208,7 +208,10 @@ export function HomeModes() {
   )
 }
 
-/** The trust line: one line, one link (copy §2.6). Below 400 px it drops to the short form. */
+/**
+ * The trust line: one line, one link (copy §2.6). Below 400 px it drops "Built on OpenZeppelin".
+ * Founder decision 2026-10-15: no "Not audited yet" here (the audit status lives on /security).
+ */
 export function HomeTrust() {
   const item = 'whitespace-nowrap'
   const sep = <span aria-hidden="true" className="mx-2 text-ink-3">·</span>
@@ -216,17 +219,13 @@ export function HomeTrust() {
     <section id="trust" data-beat="after" data-section="trust" aria-label="Trust" className="mh-after">
       <div className="lp-container">
         <p className="flex flex-wrap items-baseline gap-y-2 border-y border-rule py-6 text-small text-ink-2 md:text-body">
-          <span className="max-[399px]:hidden">
-            <span className={item}>Contracts verified on {network.explorerName}</span>
-            {sep}
-          </span>
-          <span className={item}>{claims.licenseFile ? 'Open source (MIT)' : 'Public code'}</span>
+          <span className={item}>Contracts verified on {network.explorerName}</span>
           {sep}
+          <span className={item}>{claims.licenseFile ? 'Open source (MIT)' : 'Public code'}</span>
           <span className="max-[399px]:hidden">
-            <span className={item}>Built on OpenZeppelin</span>
             {sep}
+            <span className={item}>Built on OpenZeppelin</span>
           </span>
-          <span className={item}>Not audited yet</span>
           <span className="ml-auto pl-4">
             <a href="/security" className="mh-textlink whitespace-nowrap text-ink" data-cta="trust_security" data-loc="trust">
               Check our work <span aria-hidden="true">→</span>

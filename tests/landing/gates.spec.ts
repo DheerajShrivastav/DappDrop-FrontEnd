@@ -138,7 +138,9 @@ test.describe('homepage copy and contract markup (07-wow)', () => {
     await expect(page.locator('#claim h2')).toHaveText('Claimed straight to their wallets.')
     await expect(page.locator('#modes h2')).toHaveText('Pick the tasks. Pick the payout.')
     await expect(page.locator('#final h2')).toHaveText('Lock in your first reward.')
-    await expect(page.locator('#trust')).toContainText('Not audited yet')
+    // Founder decision 2026-10-15: no audit wording on the homepage (it lives on /security).
+    await expect(page.locator('#trust')).toContainText('Public code')
+    expect(await page.evaluate(() => document.body.innerText)).not.toMatch(/audit/i)
     await expect(page.locator('#trust a')).toHaveAttribute('href', '/security')
     const beats = await page.locator('main [data-beat]').evaluateAll((els) => els.map((e) => `${e.id}:${e.getAttribute('data-beat')}`))
     expect(beats).toEqual(['top:hero', 'fund:fund', 'prove:prove', 'claim:claim', 'modes:after', 'trust:after', 'final:after'])
@@ -483,10 +485,14 @@ test.describe('statement footer (founder brief 2026-10-14)', () => {
       await open(page, path)
       const f = page.locator('footer[data-footer]')
       expect(await f.locator('nav h2').allTextContents()).toEqual(['Product', 'Trust', 'Developers', 'Company'])
-      const chips = (await f.locator('ul[aria-label="Status"] > li').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim())
-      expect(chips).toEqual([expect.stringMatching(/^Contracts verified on .+/), 'Public code', 'Not audited yet', expect.stringMatching(/^Public beta/)])
+      const trust = (await f.locator('ul[aria-label="Status"] > li').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim())
+      expect(trust).toEqual([expect.stringMatching(/^Public beta/), expect.stringMatching(/^Contracts verified on \S+/), 'Public code'])
+      // Founder decision 2026-10-15: no audit wording in the footer; one brand moment (no small wordmark).
+      expect(await f.innerText()).not.toMatch(/audit/i)
+      expect(await f.locator('a[aria-label="DappDrop home"]').count()).toBe(0)
       await expect(f.locator('[data-cta="footer_primary"]')).toHaveAttribute('href', '/create-campaign')
-      await expect(f).toContainText('We will never ask for your seed phrase or private key.')
+      await expect(f).toContainText('never ask for your seed phrase or private key.')
+      await expect(f).not.toContainText('loads no wallet code')
       await expect(f.locator('.ft-mark-wrap')).toHaveAttribute('aria-hidden', 'true')
       // No social handles until the founder confirms them (landing.ts officialLinks is empty).
       expect(await f.locator('nav[aria-label="Find us at"]').count()).toBe(0)
@@ -554,5 +560,36 @@ test.describe('statement footer (founder brief 2026-10-14)', () => {
     await page.mouse.move(box.x + 300, box.y + 100)
     await page.waitForTimeout(200)
     expect(await page.evaluate(() => getComputedStyle(document.querySelector('.ft-mark')!).getPropertyValue('--mx'))).toBe('300px')
+  })
+
+  test('/security keeps the factual audit status (founder decision 2026-10-15)', async ({ page }) => {
+    await open(page, '/security')
+    await expect(page.locator('main')).toContainText('Not audited')
+  })
+
+  test('no seam: the last section and the footer share one background', async ({ page }) => {
+    for (const t of THEMES) {
+      for (const path of PAGES) {
+        await remember(page, t)
+        await open(page, path)
+        const [last, footer] = await page.evaluate(() => {
+          const sections = document.querySelectorAll('main section')
+          const bg = (el: Element) => getComputedStyle(el).backgroundColor
+          const s = sections[sections.length - 1]
+          const own = bg(s)
+          return [own === 'rgba(0, 0, 0, 0)' ? bg(document.querySelector('.lp-theme')!) : own, bg(document.querySelector('footer')!)]
+        })
+        expect(last, `${t} ${path}`).toBe(footer)
+      }
+    }
+  })
+
+  test('Back to top: returns to the top and moves focus to <main>', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await open(page, '/how-it-works')
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }))
+    await page.locator('[data-back-to-top]').click()
+    await page.waitForFunction(() => scrollY < 10, null, { timeout: 5000 })
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe('main')
   })
 })

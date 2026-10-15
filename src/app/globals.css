@@ -994,3 +994,93 @@ html[data-theme="porcelain"] .lp-theme .ft-mark {
         background-position: 0 0, 0 0, 0 86%, 0 0, 0 0;
     }
 }
+
+/* Footer links: a 1 px accent underline that draws left → right, and ↗ / ↑ arrows that nudge.
+   Transform-only, 150 ms; instant under reduced motion (the global safety net). */
+.ft-link {
+    text-decoration: none;
+}
+.ft-link:focus-visible {
+    outline-offset: 4px;
+}
+.ft-u {
+    position: relative;
+}
+.ft-u::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 1px;
+    background: var(--signal);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 150ms var(--ease-out);
+}
+.ft-link:focus-visible .ft-u::after {
+    transform: scaleX(1);
+}
+.ft-arrow {
+    display: inline-block;
+    transition: transform 150ms var(--ease-out);
+}
+.ft-link:focus-visible .ft-arrow {
+    transform: translate(2px, -2px);
+}
+.ft-link:focus-visible .ft-arrow--up {
+    transform: translateY(-2px);
+}
+@media (hover: hover) and (pointer: fine) {
+    .ft-link:hover .ft-u::after {
+        transform: scaleX(1);
+    }
+    .ft-link:hover .ft-arrow {
+        transform: translate(2px, -2px);
+    }
+    .ft-link:hover .ft-arrow--up {
+        transform: translateY(-2px);
+    }
+}
+
+/* No seam above the footer: on the Monolith pages a closing ink band (/how-it-works #start,
+   /security's "Seen enough?") sits on the page colour, so it runs straight into the footer with
+   the footer's single hairline between them. Its inverted roles map back to the page tokens
+   (raw --ob-* / --pc-* values: the band's own --paper / --ink are derived from --band-*). */
+.lp-theme main > section.lp-ink:last-of-type {
+    --band: var(--ob-paper);
+    --band-text: var(--ob-ink);
+    --band-text-2: var(--ob-ink-2);
+    --band-signal: var(--ob-signal);
+}
+html[data-theme="porcelain"] .lp-theme main > section.lp-ink:last-of-type {
+    --band: var(--pc-paper);
+    --band-text: var(--pc-ink);
+    --band-text-2: var(--pc-ink-2);
+    --band-signal: var(--pc-signal);
+}
+
+/* The footer's trust row: inline items separated by "·". Each item carries its separator before
+   it; the list is pulled left by one separator width and clipped, so a wrapped line never starts
+   (or ends) with a dangling dot. 4 px of clip slack keeps focus rings visible. */
+.ft-trust {
+    overflow: clip;
+    overflow-clip-margin: 4px;
+}
+.ft-trust ul {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 0.25rem;
+    margin-left: -1.25rem;
+}
+.ft-trust li {
+    white-space: nowrap;
+}
+.ft-trust li::before {
+    content: "·";
+    content: "·" / "";
+    display: inline-block;
+    width: 1.25rem;
+    text-align: center;
+    color: var(--ink-3);
+}
