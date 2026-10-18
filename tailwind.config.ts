@@ -9,6 +9,9 @@ export default {
         './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
         './src/components/**/*.{js,ts,jsx,tsx,mdx}',
         './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+        // status-styles.ts holds the status chip/banner classes; without this path Tailwind
+        // never generated them, so every status chip rendered as white text on transparent.
+        './src/lib/**/*.{ts,tsx}',
     ],
     theme: {
         container: {

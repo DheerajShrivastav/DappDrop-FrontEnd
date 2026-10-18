@@ -1,5 +1,6 @@
 /**
- * Get campaign image URL from cache with fallback
+ * Get a campaign's stored image URL, or '' when it has none. Never a stock placeholder:
+ * a campaign without an image renders without one.
  */
 export async function getCampaignImageUrl(campaignId: number): Promise<string> {
   try {
@@ -9,19 +10,21 @@ export async function getCampaignImageUrl(campaignId: number): Promise<string> {
 
     if (response.ok) {
       const data = await response.json()
-      if (data.imageUrl) {
-        return data.imageUrl
-      }
+      return displayImageUrl(data.imageUrl) ?? ''
     }
   } catch (error) {
     console.error('Error fetching campaign image:', error)
   }
-
-  // Fallback to placeholder
-  return '/images/campaign-placeholder.jpg'
+  return ''
 }
 
 /**
- * Default placeholder image URL
+ * The image to show for a campaign, or undefined for "no image". Older campaigns stored the
+ * wizard's stock "600 × 400" placeholder as their image, so that counts as no image too.
  */
-export const CAMPAIGN_IMAGE_PLACEHOLDER = '/images/campaign-placeholder.jpg'
+export function displayImageUrl(url: string | null | undefined): string | undefined {
+  if (!url) return undefined
+  const trimmed = url.trim()
+  if (!trimmed || trimmed.includes('placehold.co')) return undefined
+  return trimmed
+}
