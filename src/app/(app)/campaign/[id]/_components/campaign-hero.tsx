@@ -7,18 +7,18 @@ import { ArrowLeft } from 'lucide-react'
 
 import type { Campaign } from '@/lib/types'
 import { displayImageUrl } from '@/lib/campaign-image'
+import { getCampaignStatus } from '@/lib/campaign-status'
+import { getStatusStyle } from '@/lib/status-styles'
+import { cn } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AlertTriangle } from 'lucide-react'
 
-export function CampaignHero({
-  campaign,
-  isTimeExpiredNotClosed,
-}: {
-  campaign: Campaign
-  isTimeExpiredNotClosed?: boolean
-}) {
+export function CampaignHero({ campaign }: { campaign: Campaign }) {
   const imageUrl = displayImageUrl(campaign.imageUrl)
+  // One chip from the shared status model: the same label the card, the banner and the
+  // dashboard show, so the page can't contradict itself.
+  const status = getCampaignStatus(campaign)
+  const statusStyle = getStatusStyle(status.state)
   return (
     <motion.div
       className="relative h-[400px] w-full overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200"
@@ -62,15 +62,10 @@ export function CampaignHero({
             transition={{ delay: 0.2, duration: 0.6 }}
           >
             <div className="flex flex-wrap items-center gap-2 mb-4">
-              <Badge className="bg-white/20 backdrop-blur-sm text-white border-white/30">
-                {campaign.status}
+              <Badge className={cn('flex items-center gap-1 border', statusStyle.badge)}>
+                <statusStyle.Icon className="h-3 w-3" />
+                {status.label}
               </Badge>
-              {isTimeExpiredNotClosed && (
-                <Badge className="bg-status-pending-solid/90 backdrop-blur-sm text-white border-transparent flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  End time passed — not yet closed
-                </Badge>
-              )}
             </div>
             <h1 className="text-4xl md:text-5xl font-headline font-bold text-white mb-3">
               {campaign.title}

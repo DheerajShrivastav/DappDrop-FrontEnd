@@ -7,7 +7,7 @@ import { CampaignCard } from '@/components/campaign-card'
 import { CampaignGridSkeleton } from '@/components/campaign-card-skeleton'
 import { getAllCampaigns, hasParticipated } from '@/lib/web3-service'
 import type { Campaign, SettlementMode } from '@/lib/types'
-import { getLifecycleState } from '@/lib/campaign-lifecycle'
+import { getCampaignStatus, matchesStatusFilter, type CampaignStatusFilter } from '@/lib/campaign-status'
 import { useWallet } from '@/context/wallet-provider'
 import { Input } from '@/components/ui/input'
 import {
@@ -26,7 +26,7 @@ const fadeInUp = {
 // FR-D2 discovery controls. Filtering/sorting runs client-side over indexer data so no page
 // blocks on a live RPC call (NFR-4).
 type SortKey = 'newest' | 'ending_soon' | 'most_participants'
-type StatusFilter = 'all' | 'open' | 'claimable' | 'closed'
+type StatusFilter = CampaignStatusFilter
 type RewardFilter = 'all' | 'ERC20' | 'ERC721'
 type ModeFilter = 'all' | SettlementMode
 
@@ -84,15 +84,8 @@ export default function CampaignsPage() {
         if (q && !`${c.title} ${c.description}`.toLowerCase().includes(q)) return false
         if (reward !== 'all' && c.reward.type !== reward) return false
         if (mode !== 'all' && (c.settlement?.mode ?? 'UNSET') !== mode) return false
-        if (status !== 'all') {
-          const state = getLifecycleState(c, now).state
-          if (status === 'open' && state !== 'open') return false
-          if (
-            status === 'claimable' &&
-            !['claims_open', 'allocations_published', 'closed_claimable'].includes(state)
-          )
-            return false
-          if (status === 'closed' && !['swept', 'cancelled', 'closed_no_claimants'].includes(state)) return false
+        if (status !== 'all' && !matchesStatusFilter(getCampaignStatus(c, now).state, status)) {
+          return false
         }
         return true
       })

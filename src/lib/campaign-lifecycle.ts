@@ -1,228 +1,35 @@
 /**
- * Canonical participant-facing lifecycle state ladder (PRD NFR-9). Derives the honest,
- * named state a campaign is in — including the 24h dispute window and 30-day grace period
- * as first-class states — from the indexed on-chain facts on `Campaign.settlement`.
+ * Back-compat layer over the ONE status model in ./campaign-status.ts.
  *
- * Single source of truth for lifecycle copy across discovery cards and the detail page.
- *
- * BR-I4 caveat: this is for DISPLAY. A value-bearing action (actually claiming) must
- * re-verify against a direct RPC read at execution time — that gating lands in P1.
+ * `getLifecycleState` used to return `open` for any on-chain `Open`, whatever the time, so
+ * campaigns that ended weeks ago still read "Open". It now delegates to the time-aware
+ * `getCampaignStatus`; existing callers keep their import path. New code should import
+ * from './campaign-status' directly.
  */
 
-import type { Campaign, CampaignSettlement, SettlementMode } from './types'
+import type { Campaign, SettlementMode } from './types'
+import {
+  getCampaignStatus,
+  type CampaignDisplayState,
+  type CampaignStatusInfo,
+  type CampaignStatusInput,
+} from './campaign-status'
 
-// Windows/periods (mirror the contract constants; see docs/REWARD_SYSTEM.md).
-export const ROOT_DISPUTE_WINDOW_MS = 24 * 60 * 60 * 1000 // ROOT_DISPUTE_WINDOW
-export const CLAIM_GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000 // CLAIM_GRACE_PERIOD
-export const SETTLEMENT_FALLBACK_DELAY_MS = 14 * 24 * 60 * 60 * 1000 // SETTLEMENT_FALLBACK_DELAY
+export {
+  ROOT_DISPUTE_WINDOW_MS,
+  CLAIM_GRACE_PERIOD_MS,
+  SETTLEMENT_FALLBACK_DELAY_MS,
+} from './campaign-status'
 
-export type LifecycleState =
-  | 'draft'
-  | 'open'
-  | 'ended_finalizing' // Ended, no root published yet
-  | 'overdue_fallback' // Ended 14d+ with no root — publication overdue (NFR-11)
-  | 'allocations_published' // root set, within the 24h dispute window
-  | 'claims_open' // root set, dispute window elapsed
-  | 'closed_claimable' // Closed, within the 30-day grace period
-  | 'closed_no_claimants' // Closed, but nobody can claim (zero participants, or no root ever published)
-  | 'swept' // unclaimed escrow swept / claiming ended
-  | 'cancelled' // terminal, refunded
+export type LifecycleState = CampaignDisplayState
+export type LifecycleInfo = CampaignStatusInfo
 
-export type LifecycleInfo = {
-  state: LifecycleState
-  /** Short label for badges/status chips. */
-  label: string
-  /** One-line honest explanation of the state (the "why the wait" copy). */
-  detail: string
-  /** When Merkle claims become actionable (rootPublishedAt + 24h), if known. */
-  claimsOpenAt?: Date
-  /** When the host may sweep unclaimed funds (closedAt + 30d), if known. */
-  sweepEligibleAt?: Date
-  /** True while the current-published root is inside its 24h dispute window. */
-  inDisputeWindow: boolean
-  /** True once claims can actually be submitted (tiered: at Ended; Merkle: window elapsed). */
-  claimable: boolean
-}
-
-// Tiered campaigns settle purely from on-chain state — no host root, no dispute window.
-function isTiered(mode: SettlementMode | undefined): boolean {
-  return mode === 'RANK_TIERED' || mode === 'SCORE_TIERED'
-}
-
-// The published Merkle root + its publish time for whichever Merkle path this campaign uses.
-function merkleRoot(s: CampaignSettlement | undefined): {
-  root: string | null | undefined
-  publishedAt: Date | undefined
-} {
-  if (!s) return { root: undefined, publishedAt: undefined }
-  if (s.mode === 'NFT') {
-    return { root: s.nftMerkleRoot, publishedAt: s.nftRootPublishedAt }
-  }
-  return { root: s.erc20MerkleRoot, publishedAt: s.erc20RootPublishedAt }
-}
-
-/**
- * Compute the lifecycle state for a campaign at time `now` (default: current time).
- * Pure and deterministic given the campaign snapshot.
- */
 export function getLifecycleState(
-  campaign: Campaign,
+  campaign: CampaignStatusInput,
   now: Date = new Date(),
 ): LifecycleInfo {
-  const s = campaign.settlement
-  const t = now.getTime()
-
-  if (campaign.status === 'Cancelled') {
-    return {
-      state: 'cancelled',
-      label: 'Cancelled',
-      detail: 'This campaign was cancelled and any escrow was refunded to the host.',
-      inDisputeWindow: false,
-      claimable: false,
-    }
-  }
-
-  if (campaign.status === 'Draft') {
-    return {
-      state: 'draft',
-      label: 'Draft',
-      detail: 'This campaign is being configured and is not open yet.',
-      inDisputeWindow: false,
-      claimable: false,
-    }
-  }
-
-  if (campaign.status === 'Open') {
-    return {
-      state: 'open',
-      label: 'Open',
-      detail: 'Complete tasks before the campaign ends to qualify for rewards.',
-      inDisputeWindow: false,
-      claimable: false,
-    }
-  }
-
-  // Ended or Closed below.
-  const tiered = isTiered(s?.mode)
-  const { root, publishedAt } = merkleRoot(s)
-  const hasRoot = tiered ? true : Boolean(root && root !== ZERO_ROOT)
-  const claimsOpenAt =
-    publishedAt !== undefined
-      ? new Date(publishedAt.getTime() + ROOT_DISPUTE_WINDOW_MS)
-      : undefined
-  const sweepEligibleAt =
-    s?.closedAt !== undefined
-      ? new Date(s.closedAt.getTime() + CLAIM_GRACE_PERIOD_MS)
-      : undefined
-
-  // Swept is terminal for claiming (ERC20 sweep ends all claims; FR-C6/NFR-15).
-  if (s?.erc20Swept) {
-    return {
-      state: 'swept',
-      label: 'Claiming ended',
-      detail: 'Unclaimed rewards have been swept back to the host. Claiming is closed.',
-      sweepEligibleAt,
-      inDisputeWindow: false,
-      claimable: false,
-    }
-  }
-
-  if (campaign.status === 'Closed') {
-    // Nobody can claim from a Closed campaign with zero participants, or from a Merkle/NFT
-    // campaign that was closed without ever publishing a root (no tree, no leaves). "Claim now"
-    // would be false for both. The root rule only applies when settlement facts actually loaded
-    // (`s` defined) — a missing snapshot must not be read as "no root", or every Closed Merkle
-    // campaign would claim to have no eligible participants whenever the indexer is unavailable.
-    // Tiered campaigns with participants but no qualifier aren't detectable from this snapshot
-    // and keep the claimable copy; their claim panel reports per-wallet eligibility.
-    const noClaimants = campaign.participants === 0 || (s !== undefined && !tiered && !hasRoot)
-    if (noClaimants) {
-      // The sweep is NOT automatic — withdrawUnclaimedERC20 / withdrawUnclaimedERC721/1155 are
-      // host-called. So this says the funds become withdrawable, never that they "return".
-      return {
-        state: 'closed_no_claimants',
-        label: 'Closed — no eligible participants',
-        detail: sweepEligibleAt
-          ? `No eligible participants — the host can withdraw the escrowed rewards from ${sweepEligibleAt.toLocaleDateString()}.`
-          : 'No eligible participants — the host can withdraw the escrowed rewards once the 30-day grace period ends.',
-        sweepEligibleAt,
-        inDisputeWindow: false,
-        claimable: false,
-      }
-    }
-    return {
-      state: 'closed_claimable',
-      label: 'Closed — claim now',
-      detail: sweepEligibleAt
-        ? `Allocations are frozen. Claim before ${sweepEligibleAt.toLocaleDateString()}, after which unclaimed rewards return to the host.`
-        : 'Allocations are frozen. Claim before the grace period ends.',
-      claimsOpenAt,
-      sweepEligibleAt,
-      inDisputeWindow: false,
-      claimable: true,
-    }
-  }
-
-  // status === 'Ended'
-  if (tiered) {
-    return {
-      state: 'claims_open',
-      label: 'Claims open',
-      detail: 'Rewards are computed on-chain from your rank/score — claim any time.',
-      inDisputeWindow: false,
-      claimable: true,
-    }
-  }
-
-  if (!hasRoot) {
-    // No root yet. If the host is overdue past the 14-day fallback delay, say so (NFR-11).
-    const overdueAt = campaign.endDate.getTime() + SETTLEMENT_FALLBACK_DELAY_MS
-    if (t >= overdueAt) {
-      return {
-        state: 'overdue_fallback',
-        label: 'Publication overdue',
-        detail:
-          'The host has not finalized allocations. The platform can publish them as a fallback so claims can open.',
-        inDisputeWindow: false,
-        claimable: false,
-      }
-    }
-    return {
-      state: 'ended_finalizing',
-      label: 'Results being finalized',
-      detail: 'The campaign has ended and reward allocations are being prepared.',
-      inDisputeWindow: false,
-      claimable: false,
-    }
-  }
-
-  // Root published. Are we still inside the 24h dispute window?
-  const windowElapsed = claimsOpenAt !== undefined && t >= claimsOpenAt.getTime()
-  if (!windowElapsed) {
-    return {
-      state: 'allocations_published',
-      label: 'Allocations published',
-      detail: claimsOpenAt
-        ? `Allocations are public for a 24-hour community review window. Claims open at ${claimsOpenAt.toLocaleString()}.`
-        : 'Allocations are published; a 24-hour community review window is in progress.',
-      claimsOpenAt,
-      inDisputeWindow: true,
-      claimable: false,
-    }
-  }
-
-  return {
-    state: 'claims_open',
-    label: 'Claims open',
-    detail: 'Reward allocations are final. You can claim your allocation now.',
-    claimsOpenAt,
-    inDisputeWindow: false,
-    claimable: true,
-  }
+  return getCampaignStatus(campaign, now)
 }
-
-const ZERO_ROOT =
-  '0x0000000000000000000000000000000000000000000000000000000000000000'
 
 /**
  * Human-readable settlement-mode label for badges (FR-D1), or null when the mode is unknown

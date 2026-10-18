@@ -74,14 +74,12 @@ export function CampaignSidebar({
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Expired-but-not-closed warning */}
-          {isTimeExpiredNotClosed && (
+          {/* Host-only nudge; everyone else reads the state from the lifecycle banner. */}
+          {isTimeExpiredNotClosed && isHostOfCampaign && (
             <div className="flex items-start gap-2 p-3 rounded-lg border border-status-pending-border bg-status-pending-bg">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-status-pending-fg" />
               <p className="text-xs text-status-pending-fg leading-relaxed">
-                End time has passed but this campaign is not yet closed on-chain.
-                {isHostOfCampaign
-                  ? ' Please end the campaign below so participants can claim rewards.'
-                  : ' Avoid interacting until the creator closes it.'}
+                The end time has passed. Record the end below so results can follow.
               </p>
             </div>
           )}
