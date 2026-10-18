@@ -38,6 +38,80 @@ export function isGraphConfigured(): boolean {
   return Boolean(config.graphApiUrl)
 }
 
+// ---------------------------------------------------------------------------
+// Schema guard
+// ---------------------------------------------------------------------------
+//
+// The configured endpoint can lag the contract. In production (2026-10) it still serves the
+// pre-v0.6.0 subgraph: its `Campaign` has no settlement fields and `Query` has no `claims`,
+// and it indexes the OLD entrypoint, so its campaign ids/names are a different contract's.
+// Querying it failed every time, and querying only the fields it does have would show the
+// wrong campaigns. So before the first query we introspect the schema once (read-only) and
+// only use the indexer when it is the v0.6.0 one. Otherwise every function returns null and
+// the caller falls back to direct RPC against the configured entrypoint.
+
+/** Fields the queries below need. Exported for tests. */
+export const REQUIRED_SCHEMA = {
+  Campaign: ['settlementMode', 'maxParticipants', 'erc20MerkleRoot', 'closedAt'],
+  Query: ['campaigns', 'participations', 'claims'],
+} as const
+
+const SCHEMA_PROBE = gql`
+  query DappDropSchemaProbe {
+    campaign: __type(name: "Campaign") {
+      fields {
+        name
+      }
+    }
+    query: __type(name: "Query") {
+      fields {
+        name
+      }
+    }
+  }
+`
+
+type SchemaProbeResult = {
+  campaign: { fields: { name: string }[] } | null
+  query: { fields: { name: string }[] } | null
+}
+
+/** True when the introspected schema has every field the app's queries use. */
+export function schemaSupportsQueries(probe: SchemaProbeResult): boolean {
+  const has = (t: { fields: { name: string }[] } | null, names: readonly string[]) => {
+    const set = new Set((t?.fields ?? []).map((f) => f.name))
+    return names.every((n) => set.has(n))
+  }
+  return has(probe.campaign, REQUIRED_SCHEMA.Campaign) && has(probe.query, REQUIRED_SCHEMA.Query)
+}
+
+let schemaCheck: Promise<boolean> | null = null
+
+async function getCompatibleClient(): Promise<GraphQLClient | null> {
+  const client = getClient()
+  if (!client) return null
+  if (!schemaCheck) {
+    schemaCheck = client
+      .request<SchemaProbeResult>(SCHEMA_PROBE)
+      .then((probe) => {
+        const ok = schemaSupportsQueries(probe)
+        if (!ok) {
+          console.warn(
+            '[graph-service] The indexer at NEXT_PUBLIC_GRAPH_API_URL is not the v0.6.0 subgraph; reading from RPC instead.',
+          )
+        }
+        return ok
+      })
+      .catch((err) => {
+        // A network blip shouldn't disable the indexer for the whole session: retry next call.
+        schemaCheck = null
+        console.warn('[graph-service] Schema check failed; reading from RPC instead.', err)
+        return false
+      })
+  }
+  return (await schemaCheck) ? client : null
+}
+
 // v0.6.0 lifecycle: Draft, Open, Ended, Closed, Cancelled.
 const STATUS_MAP = ['Draft', 'Open', 'Ended', 'Closed', 'Cancelled'] as const
 
@@ -274,17 +348,14 @@ function mapGraphCampaign(gc: GraphCampaign, meta: OffChainMeta): Campaign {
   }
 
   const rewardType = meta.rewardType ?? rewardTypeFromMode(gc.settlementMode)
-  const rewardName =
-    meta.rewardName ??
-    (rewardType === 'None' ? 'Reward to be announced' : `Reward for ${gc.name}`)
+  // No invented copy: missing off-chain metadata stays empty and the UI says so.
+  const rewardName = meta.rewardName ?? ''
 
   return {
     id: gc.id,
     title: gc.name,
-    description: meta.shortDescription ?? `A campaign hosted by ${gc.host}`,
-    longDescription:
-      meta.longDescription ??
-      `A campaign hosted by ${gc.host} with the name ${gc.name}.`,
+    description: meta.shortDescription ?? '',
+    longDescription: meta.longDescription ?? '',
     startDate: new Date(Number(gc.startTime) * 1000),
     endDate: new Date(Number(gc.endTime) * 1000),
     status: (STATUS_MAP[gc.status] ?? 'Draft') as Campaign['status'],
@@ -305,8 +376,7 @@ function mapGraphCampaign(gc: GraphCampaign, meta: OffChainMeta): Campaign {
       name: rewardName,
     },
     settlement,
-    imageUrl: meta.imageUrl ?? 'https://placehold.co/600x400',
-    'data-ai-hint': 'blockchain technology',
+    imageUrl: meta.imageUrl ?? '',
   }
 }
 
@@ -315,7 +385,7 @@ function mapGraphCampaign(gc: GraphCampaign, meta: OffChainMeta): Campaign {
 // ---------------------------------------------------------------------------
 
 export async function getGraphCampaigns(): Promise<Campaign[] | null> {
-  const client = getClient()
+  const client = await getCompatibleClient()
   if (!client) return null
   try {
     const campaigns = await fetchAllPages<GraphCampaign>((first, skip) =>
@@ -339,7 +409,7 @@ export async function getGraphCampaigns(): Promise<Campaign[] | null> {
 export async function getGraphCampaignsByHost(
   hostAddress: string,
 ): Promise<Campaign[] | null> {
-  const client = getClient()
+  const client = await getCompatibleClient()
   if (!client) return null
   try {
     const host = hostAddress.toLowerCase()
@@ -363,7 +433,7 @@ export async function getGraphCampaignsByHost(
 export async function getGraphParticipantAddresses(
   campaignId: string,
 ): Promise<string[] | null> {
-  const client = getClient()
+  const client = await getCompatibleClient()
   if (!client) return null
   try {
     const participations = await fetchAllPages<{ participant: string }>((first, skip) =>
@@ -384,7 +454,7 @@ export async function getGraphParticipantAddresses(
 export async function getGraphParticipants(
   campaignId: string,
 ): Promise<ParticipantData[] | null> {
-  const client = getClient()
+  const client = await getCompatibleClient()
   if (!client) return null
   try {
     // Single query returns participations + the set of accounts that have claimed.
