@@ -144,6 +144,7 @@ import {
   ToggleCard,
 } from './_components/wizard-ui'
 import { HostGate } from './_components/host-gate'
+import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
 import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
@@ -1032,8 +1033,10 @@ export default function CreateCampaignPage() {
                 metadata: {
                   paymentRequired: true,
                   paymentRecipient: task.paymentRecipient,
-                  chainId: task.chainId,
-                  network: task.network,
+                  // Always the deployment chain (never a form value), so a Sepolia
+                  // app can't save a mainnet payment task.
+                  chainId: DEPLOYMENT_CHAIN.id,
+                  network: DEPLOYMENT_CHAIN.network,
                   tokenAddress: task.tokenAddress || null,
                   tokenSymbol: task.tokenSymbol,
                   amount: task.amount,
@@ -2161,59 +2164,23 @@ export default function CreateCampaignPage() {
                                 />
 
                                 <div className="grid gap-4 sm:grid-cols-2">
-                                  <FormField
-                                    control={form.control}
-                                    name={`tasks.${index}.network`}
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>
-                                          Network
-                                        </FormLabel>
-                                        <Select
-                                          onValueChange={(value) => {
-                                            field.onChange(value)
-                                            // Set chainId based on network
-                                            const chainIds: Record<
-                                              string,
-                                              number
-                                            > = {
-                                              sepolia: 11155111,
-                                              ethereum: 1,
-                                              base: 8453,
-                                              polygon: 137,
-                                            }
-                                            form.setValue(
-                                              `tasks.${index}.chainId`,
-                                              chainIds[value],
-                                            )
-                                          }}
-                                          value={field.value || 'ethereum'}
-                                          defaultValue="ethereum"
-                                        >
-                                          <FormControl>
-                                            <SelectTrigger>
-                                              <SelectValue placeholder="Ethereum" />
-                                            </SelectTrigger>
-                                          </FormControl>
-                                          <SelectContent>
-                                            <SelectItem value="ethereum">
-                                              Ethereum
-                                            </SelectItem>
-                                            <SelectItem value="base">
-                                              Base
-                                            </SelectItem>
-                                            <SelectItem value="polygon">
-                                              Polygon
-                                            </SelectItem>
-                                            <SelectItem value="sepolia">
-                                              Sepolia (testnet)
-                                            </SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
+                                  {/* Locked to the deployment chain: a payment task on a
+                                      Sepolia app must not ask for mainnet funds. The value
+                                      saved is set on submit, not taken from this field. */}
+                                  <FormItem>
+                                    <FormLabel>Network</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        value={DEPLOYMENT_CHAIN.name}
+                                        readOnly
+                                        disabled
+                                        aria-readonly="true"
+                                      />
+                                    </FormControl>
+                                    <p className="text-xs text-muted-foreground">
+                                      Payments go on the chain this app runs on.
+                                    </p>
+                                  </FormItem>
 
                                   <FormField
                                     control={form.control}
