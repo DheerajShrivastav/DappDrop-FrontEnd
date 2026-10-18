@@ -224,8 +224,11 @@ export function getLifecycleState(
 const ZERO_ROOT =
   '0x0000000000000000000000000000000000000000000000000000000000000000'
 
-/** Human-readable settlement-mode label for badges (FR-D1). */
-export function settlementModeLabel(mode: SettlementMode | undefined): string {
+/**
+ * Human-readable settlement-mode label for badges (FR-D1), or null when the mode is unknown
+ * (settlement facts not loaded) or not committed yet. Unknown means no chip, never "TBD".
+ */
+export function settlementModeLabel(mode: SettlementMode | undefined): string | null {
   switch (mode) {
     case 'MERKLE_ERC20':
       return 'Token · Merkle'
@@ -236,6 +239,19 @@ export function settlementModeLabel(mode: SettlementMode | undefined): string {
     case 'NFT':
       return 'NFT'
     default:
-      return 'Reward TBD'
+      return null
   }
+}
+
+/**
+ * The reward line for a campaign: the host's reward name when there is one, otherwise the
+ * true state. "Reward not set" only when the chain says no reward mode is committed; when we
+ * simply couldn't load the details, say that instead of implying anything.
+ */
+export function rewardDisplayLabel(campaign: Pick<Campaign, 'reward' | 'settlement'>): string {
+  const name = campaign.reward?.name?.trim()
+  if (name) return name
+  const mode = campaign.settlement?.mode
+  if (mode === 'UNSET') return 'Reward not set'
+  return settlementModeLabel(mode) ?? 'Reward details not available'
 }

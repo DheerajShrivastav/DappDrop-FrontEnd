@@ -6,6 +6,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft } from 'lucide-react'
 
 import type { Campaign } from '@/lib/types'
+import { displayImageUrl } from '@/lib/campaign-image'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle } from 'lucide-react'
@@ -17,6 +18,7 @@ export function CampaignHero({
   campaign: Campaign
   isTimeExpiredNotClosed?: boolean
 }) {
+  const imageUrl = displayImageUrl(campaign.imageUrl)
   return (
     <motion.div
       className="relative h-[400px] w-full overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200"
@@ -24,20 +26,14 @@ export function CampaignHero({
       animate={{ opacity: 1 }}
       transition={{ duration: 0.6 }}
     >
-      {campaign.imageUrl && !campaign.imageUrl.includes('placehold.co') && (
+      {imageUrl && (
         <Image
-          src={campaign.imageUrl}
+          src={imageUrl}
           alt={campaign.title}
           fill
           className="object-cover"
           priority
-          unoptimized={campaign.imageUrl.startsWith('http')}
-          onError={(e) => {
-            console.error('❌ Image failed to load:', campaign.imageUrl)
-          }}
-          onLoad={() => {
-            console.log('✅ Image loaded successfully:', campaign.imageUrl)
-          }}
+          unoptimized={imageUrl.startsWith('http')}
         />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/30 to-transparent" />
@@ -79,9 +75,11 @@ export function CampaignHero({
             <h1 className="text-4xl md:text-5xl font-headline font-bold text-white mb-3">
               {campaign.title}
             </h1>
-            <p className="text-lg text-white/90 max-w-3xl">
-              {campaign.longDescription}
-            </p>
+            {campaign.longDescription && (
+              <p className="text-lg text-white/90 max-w-3xl">
+                {campaign.longDescription}
+              </p>
+            )}
           </motion.div>
         </div>
       </div>

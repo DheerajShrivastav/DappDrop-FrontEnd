@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 
 import type { Campaign } from '@/lib/types'
+import { rewardDisplayLabel } from '@/lib/campaign-lifecycle'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -86,7 +87,7 @@ export function CampaignSidebar({
           )}
 
           {/* About This Campaign */}
-          {campaign.description && !campaign.description.startsWith('A campaign hosted by') && (
+          {campaign.description && (
             <div className="p-3 bg-secondary/50 rounded-lg border border-border">
               <div className="flex items-center gap-2 mb-2">
                 <Info className="h-4 w-4 text-muted-foreground" />
@@ -122,7 +123,7 @@ export function CampaignSidebar({
             <Gift className="h-5 w-5 text-foreground/70" />
             <div>
               <p className="text-sm font-medium text-muted-foreground">Reward</p>
-              <p className="font-semibold">{campaign.reward.name}</p>
+              <p className="font-semibold">{rewardDisplayLabel(campaign)}</p>
             </div>
           </div>
 
