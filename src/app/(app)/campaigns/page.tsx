@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useRef } from 'react'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
 import { Search, LayoutGrid } from 'lucide-react'
 import { CampaignCard } from '@/components/campaign-card'
@@ -229,6 +230,22 @@ export default function CampaignsPage() {
                   <CampaignCard campaign={campaign} />
                 </motion.div>
               ))}
+            </div>
+          ) : listedCampaigns.length === 0 && !showHidden ? (
+            // Nothing live yet (every campaign on this deployment is a hidden test run).
+            <div className="text-center py-20 bg-card rounded-xl border border-dashed">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-secondary">
+                <LayoutGrid className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-semibold">No live campaigns yet</h3>
+              <p className="text-muted-foreground mt-1.5 text-sm">
+                Be the first: fund a reward and open a quest campaign on Sepolia.
+              </p>
+              <Button asChild className="mt-5">
+                <Link href="/create-campaign" prefetch={false}>
+                  Start a campaign
+                </Link>
+              </Button>
             </div>
           ) : (
             <div className="text-center py-20 bg-card rounded-xl border border-dashed">

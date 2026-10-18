@@ -15,12 +15,14 @@ import config from '@/app/config'
 export const HIDDEN_CAMPAIGNS_BY_ENTRYPOINT: Record<string, readonly string[]> = {
   // Sepolia v0.6.0 entrypoint (src/app/config.ts ADDRESS_BOOK). Ids from the 2026-10-16 app
   // audit (landing-studio/08-site/app-audit.md §1; app-design.md §2.1 "4 internal test runs").
-  // Pending founder confirmation.
+  // Founder confirmed all six as test runs on 2026-10-18.
   '0xf0a2fac02ffba4a7762f2f0d611253b6c97bb1b3': [
     '1', // "P2 Relayer Test (throwaway)"
     '2', // "CP1 Rank-Tiered Live Test"
     '3', // "CP1 Score-Tiered Live Test"
     '4', // "CP2 NFT Live Test"
+    '6', // "Official ERC20 Token Launch Event Project-Xerox..." (founder confirmed test run, 2026-10-18)
+    '7', // "Secure Your Exclusive Event Waitlist Spot" (founder confirmed test run, 2026-10-18)
   ],
 }
 
