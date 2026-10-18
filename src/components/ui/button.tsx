@@ -5,20 +5,21 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
+  "inline-flex items-center justify-center whitespace-nowrap rounded-full text-sm font-medium ring-offset-background transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:border disabled:border-dashed disabled:border-input disabled:bg-transparent disabled:text-muted-foreground active:translate-y-px",
   {
     variants: {
       variant: {
-        // Primary: solid near-black — the one "loud" surface in a monochrome UI, kept
-        // deliberately understated (a hairline shadow, not a glow).
+        // 08-site: Monolith pills. Primary is the ink pill (--primary maps to --ink in the app).
         default:
-          "bg-primary text-primary-foreground shadow-soft hover:bg-primary/90",
+          "bg-primary text-primary-foreground hover:bg-primary/90",
+        // The red is for errors only, so a destructive action is a red OUTLINE, never a red
+        // call-to-action fill (founder decision, 08-site phase 1).
         destructive:
-          "bg-destructive text-destructive-foreground shadow-soft hover:bg-destructive/90",
+          "border border-destructive bg-transparent text-destructive hover:bg-secondary",
         // Secondary/outline: white with a crisp border — reads as a real action, not a
         // ghost, without competing with primary.
         outline:
-          "border border-input bg-background hover:bg-accent hover:text-accent-foreground hover:border-foreground/20",
+          "border border-input bg-transparent hover:border-foreground",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
@@ -26,8 +27,8 @@ const buttonVariants = cva(
       },
       size: {
         default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
+        sm: "h-9 px-3",
+        lg: "h-11 px-8",
         icon: "h-10 w-10",
       },
     },
