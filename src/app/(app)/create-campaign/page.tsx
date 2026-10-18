@@ -105,7 +105,6 @@ import { getSession, signAuthMessage } from '@/lib/wallet-auth'
 import type { TaskType } from '@/lib/types'
 import { isSelfReportedTask, SELF_REPORTED_TASK_NOTE } from '@/lib/task-types'
 import {
-  becomeHost,
   createDraftCampaignWithTasks,
   configureAndFundERC20Reward,
   setCampaignMaxParticipantsOnChain,
@@ -144,6 +143,7 @@ import {
   SetupChecklist,
   ToggleCard,
 } from './_components/wizard-ui'
+import { HostGate } from './_components/host-gate'
 import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
@@ -426,7 +426,6 @@ export default function CreateCampaignPage() {
     retryable: boolean
     category: string
   } | null>(null)
-  const [isBecomingHost, setIsBecomingHost] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [campaignCreated, setCampaignCreated] = useState(false)
@@ -1158,27 +1157,6 @@ export default function CreateCampaignPage() {
     }
   }
 
-  const handleBecomeHost = async () => {
-    if (!isConnected || !address) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Please connect your wallet first.',
-      })
-      return
-    }
-    setIsBecomingHost(true)
-    try {
-      await becomeHost()
-      // Re-check role after transaction
-      await checkRoles(address)
-    } catch (e) {
-      // Error toast is handled in the service
-    } finally {
-      setIsBecomingHost(false)
-    }
-  }
-
   const nextStep = async () => {
     let fieldsToValidate:
       | (keyof CampaignFormValues)[]
@@ -1381,46 +1359,11 @@ export default function CreateCampaignPage() {
 
   if (role !== 'host') {
     return (
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <Card className="bg-card border shadow-elevated">
-          <CardHeader>
-            <CardTitle className="text-3xl font-bold text-center flex items-center justify-center gap-2">
-              <UserPlus /> Become a Host
-            </CardTitle>
-            <CardDescription className="text-center">
-              Get the HOST_ROLE to start creating campaigns.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Alert variant="default" className="border-primary/20 bg-card mb-6">
-              <Info className="h-4 w-4 text-primary" />
-              <AlertTitle>Permissionless Hosting</AlertTitle>
-              <AlertDescription>
-                To create a campaign, you need the HOST_ROLE. You can grant this
-                role to your connected wallet address yourself.
-              </AlertDescription>
-            </Alert>
-            <div className="text-center">
-              <p className="mb-4 text-muted-foreground">
-                Click the button below to sign a transaction and grant yourself
-                the HOST_ROLE.
-              </p>
-              <Button
-                size="lg"
-                onClick={handleBecomeHost}
-                disabled={isBecomingHost || !isConnected}
-              >
-                {isBecomingHost ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <ShieldCheck className="mr-2 h-4 w-4" />
-                )}
-                Get Host Role
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <HostGate
+        isConnected={isConnected}
+        address={address}
+        onGranted={() => (address ? checkRoles(address) : undefined)}
+      />
     )
   }
 
