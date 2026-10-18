@@ -1,3 +1,5 @@
+import type { Metadata } from 'next'
+
 /**
  * Route segment config for /create-campaign. Lives here because page.tsx is a client component
  * and can't export it.
@@ -8,6 +10,9 @@
  * the request first — a killed request is the one failure the client can't tell apart from "slow".
  */
 export const maxDuration = 120
+
+// 08-site (APP-05): one <title> per app page.
+export const metadata: Metadata = { title: 'New campaign · DappDrop' }
 
 export default function CreateCampaignLayout({ children }: { children: React.ReactNode }) {
   return children

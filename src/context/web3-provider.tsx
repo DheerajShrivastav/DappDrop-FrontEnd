@@ -1,17 +1,15 @@
 'use client'
 
 import '@rainbow-me/rainbowkit/styles.css'
-import {
-  getDefaultConfig,
-  RainbowKitProvider,
-  lightTheme,
-} from '@rainbow-me/rainbowkit'
+import { getDefaultConfig, RainbowKitProvider } from '@rainbow-me/rainbowkit'
 import { WagmiProvider, http } from 'wagmi'
 import { mainnet, sepolia, base, polygon } from 'wagmi/chains'
 import { defineChain, type Chain } from 'viem'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
-import { ReactNode } from 'react'
+import { ReactNode, useMemo } from 'react'
 import appConfig from '@/app/config'
+import { rainbowTheme } from '@/components/app/rainbow-theme'
+import { useTheme } from '@/components/app/use-theme'
 
 // Singleton pattern to prevent multiple WalletConnect initializations
 // This can happen during React strict mode or hot module reloading
@@ -83,15 +81,14 @@ function getQueryClient() {
 }
 
 export function Web3Provider({ children }: { children: ReactNode }) {
+  // 08-site: the RainbowKit modals follow <html data-theme> (Obsidian / Porcelain).
+  const theme = useTheme()
+  const rkTheme = useMemo(() => rainbowTheme(theme), [theme])
   return (
     <WagmiProvider config={getConfig()}>
       <QueryClientProvider client={getQueryClient()}>
         <RainbowKitProvider
-          theme={lightTheme({
-            accentColor: '#171717',
-            accentColorForeground: '#ffffff',
-            borderRadius: 'medium',
-          })}
+          theme={rkTheme}
         >
           {children}
         </RainbowKitProvider>
