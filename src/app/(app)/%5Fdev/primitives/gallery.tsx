@@ -131,13 +131,13 @@ export function PrimitivesGallery() {
         </ul>
       </nav>
 
-      <div className="mt-12 grid gap-20">
+      <div className="mt-12 grid grid-cols-[minmax(0,1fr)] gap-20">
         <Section id="tokens" title="Tokens" note="per theme">
-          <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+          <ul className="grid grid-cols-[repeat(2,minmax(0,1fr))] gap-3 sm:grid-cols-4 lg:grid-cols-6">
             {SWATCHES.map((t) => (
               <li key={t} className="rounded-[10px] border border-rule bg-surface p-3">
                 <span aria-hidden="true" className="block h-12 rounded-md border border-rule" style={{ background: `var(--${t})` }} />
-                <span className="mt-2 block font-mono text-[0.8125rem] text-ink">--{t}</span>
+                <span className="mt-2 block font-mono text-[0.8125rem] text-ink [overflow-wrap:anywhere]">--{t}</span>
               </li>
             ))}
           </ul>

@@ -21,7 +21,7 @@ export type ButtonVariant = 'primary' | 'reward' | 'secondary' | 'ghost' | 'dang
 export type ButtonSize = 'md' | 'sm'
 
 const BASE =
-  'inline-flex max-w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border font-medium leading-none no-underline transition-colors [transition-duration:var(--dur-micro)] active:translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal disabled:cursor-not-allowed disabled:active:translate-y-0 aria-disabled:cursor-not-allowed'
+  'inline-flex max-w-full shrink-0 items-center justify-center gap-2 rounded-full border text-center font-medium leading-tight no-underline sm:whitespace-nowrap transition-colors [transition-duration:var(--dur-micro)] active:translate-y-px focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal disabled:cursor-not-allowed disabled:active:translate-y-0 aria-disabled:cursor-not-allowed'
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: 'border-transparent bg-ink text-paper can-hover:hover:bg-ink-2',
@@ -34,8 +34,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
 const DISABLED = 'disabled:border-dashed disabled:border-rule-strong disabled:bg-transparent disabled:text-ink-3 disabled:font-medium disabled:brightness-100'
 
 const SIZES: Record<ButtonSize, string> = {
-  md: 'h-12 px-6 text-body',
-  sm: 'h-11 px-[1.1rem] text-small',
+  // min-height, so a long label can wrap to two lines on a 320 px phone instead of overflowing.
+  md: 'min-h-12 px-6 py-2 text-body',
+  sm: 'min-h-11 px-[1.1rem] py-2 text-small',
 }
 
 export function buttonClass({ variant = 'primary', size = 'md', block = false, className }: { variant?: ButtonVariant; size?: ButtonSize; block?: boolean; className?: string } = {}) {

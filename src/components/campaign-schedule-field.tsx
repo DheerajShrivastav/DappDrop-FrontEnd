@@ -117,9 +117,12 @@ export function CampaignScheduleField({
             <div className="flex gap-2">
               <Popover open={startOpen} onOpenChange={setStartOpen}>
                 <PopoverTrigger asChild>
-                  <button type="button" className={cn(CONTROL, 'min-w-0 flex-1 justify-start gap-2 text-left')} aria-label="Start date">
+                  <button type="button" className={cn(CONTROL, 'min-w-0 flex-1 justify-start gap-2 text-left')}>
                     <CalendarIcon className="h-4 w-4 shrink-0 text-ink-2" aria-hidden="true" />
-                    <span className="truncate">{formatLocal(value.scheduledStart).split(',')[0]}</span>
+                    <span className="truncate">
+                      <span className="sr-only">Start date: </span>
+                      {formatLocal(value.scheduledStart).split(',')[0]}
+                    </span>
                   </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
@@ -204,9 +207,12 @@ export function CampaignScheduleField({
           <div className="flex gap-2">
             <Popover open={endOpen} onOpenChange={setEndOpen}>
               <PopoverTrigger asChild>
-                <button type="button" className={cn(CONTROL, 'min-w-0 flex-1 justify-start gap-2 text-left')} aria-label="End date">
+                <button type="button" className={cn(CONTROL, 'min-w-0 flex-1 justify-start gap-2 text-left')}>
                   <CalendarIcon className="h-4 w-4 shrink-0 text-ink-2" aria-hidden="true" />
-                  <span className="truncate">{formatLocal(value.customEnd).split(',')[0]}</span>
+                  <span className="truncate">
+                      <span className="sr-only">End date: </span>
+                      {formatLocal(value.customEnd).split(',')[0]}
+                    </span>
                 </button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
