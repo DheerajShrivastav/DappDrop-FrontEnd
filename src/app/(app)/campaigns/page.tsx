@@ -9,6 +9,8 @@ import { getAllCampaigns, hasParticipated } from '@/lib/web3-service'
 import type { Campaign, SettlementMode } from '@/lib/types'
 import { getCampaignStatus, matchesStatusFilter, type CampaignStatusFilter } from '@/lib/campaign-status'
 import { useWallet } from '@/context/wallet-provider'
+import { partitionHiddenCampaigns } from '@/config/hidden-campaigns'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -43,6 +45,8 @@ export default function CampaignsPage() {
   const [status, setStatus] = useState<StatusFilter>('all')
   const [reward, setReward] = useState<RewardFilter>('all')
   const [mode, setMode] = useState<ModeFilter>('all')
+  // Internal test runs (src/config/hidden-campaigns.ts) are hidden by default, with a toggle.
+  const [showHidden, setShowHidden] = useState(false)
 
   const fetchAllCampaigns = async () => {
     setIsLoading(true)
@@ -76,10 +80,15 @@ export default function CampaignsPage() {
     if (role !== 'participant') setParticipantCampaigns([])
   }, [role, address, campaigns])
 
+  const { visible: listedCampaigns, hidden: hiddenCampaigns } = useMemo(
+    () => partitionHiddenCampaigns(campaigns),
+    [campaigns],
+  )
+
   const visibleCampaigns = useMemo(() => {
     const q = search.trim().toLowerCase()
     const now = new Date()
-    return campaigns
+    return (showHidden ? campaigns : listedCampaigns)
       .filter((c) => {
         if (q && !`${c.title} ${c.description}`.toLowerCase().includes(q)) return false
         if (reward !== 'all' && c.reward.type !== reward) return false
@@ -95,7 +104,7 @@ export default function CampaignsPage() {
         // newest — createdAt isn't on the client type; endDate desc is the available proxy
         return b.endDate.getTime() - a.endDate.getTime()
       })
-  }, [campaigns, search, sort, status, reward, mode])
+  }, [campaigns, listedCampaigns, showHidden, search, sort, status, reward, mode])
 
   return (
     <div className="min-h-screen bg-background">
@@ -188,6 +197,24 @@ export default function CampaignsPage() {
         </div>
 
         <section>
+          {!isLoading && hiddenCampaigns.length > 0 && (
+            <div className="mb-6 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+              <span>
+                {showHidden
+                  ? `Showing ${hiddenCampaigns.length} internal test ${hiddenCampaigns.length === 1 ? 'run' : 'runs'}.`
+                  : `${hiddenCampaigns.length} internal test ${hiddenCampaigns.length === 1 ? 'run is' : 'runs are'} hidden.`}
+              </span>
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0"
+                onClick={() => setShowHidden((v) => !v)}
+                aria-pressed={showHidden}
+              >
+                {showHidden ? 'Hide test runs' : `Show hidden (${hiddenCampaigns.length})`}
+              </Button>
+            </div>
+          )}
           {isLoading ? (
             <CampaignGridSkeleton />
           ) : visibleCampaigns.length > 0 ? (
