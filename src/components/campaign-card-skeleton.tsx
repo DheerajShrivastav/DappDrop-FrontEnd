@@ -1,36 +1,15 @@
-import { Card, CardContent, CardFooter, CardHeader } from './ui/card'
-import { Skeleton } from './ui/skeleton'
+import { CardSkeleton, LoadingRegion } from '@/components/app'
 
-/** Loading placeholder shaped like CampaignCard — used everywhere a campaign grid can be
- * loading, so the layout never jumps between skeleton and real content. */
-export function CampaignCardSkeleton() {
-  return (
-    <Card className="h-full flex flex-col overflow-hidden">
-      <CardHeader className="p-0">
-        <Skeleton className="h-52 w-full rounded-none" />
-      </CardHeader>
-      <div className="p-6 flex flex-col flex-grow gap-3">
-        <Skeleton className="h-6 w-3/4" />
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-2/3" />
-        <div className="mt-auto space-y-3 pt-3">
-          <Skeleton className="h-9 w-full rounded-md" />
-          <Skeleton className="h-9 w-full rounded-md" />
-        </div>
-      </div>
-      <CardFooter className="border-t p-4">
-        <Skeleton className="h-5 w-24" />
-      </CardFooter>
-    </Card>
-  )
-}
+/** The /campaigns grid (3 columns, 2 from 700 px, 1 below). Shared by the cards and their skeletons. */
+export const CAMPAIGN_GRID = 'grid gap-5 min-[700px]:grid-cols-2 lg:grid-cols-3'
 
-export function CampaignGridSkeleton({ count = 6 }: { count?: number }) {
+/** Loading: the card's exact shape (CardSkeleton), so nothing jumps when the data lands. */
+export function CampaignGridSkeleton({ count = 6, label = 'Loading campaigns' }: { count?: number; label?: string }) {
   return (
-    <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-      {Array.from({ length: count }).map((_, i) => (
-        <CampaignCardSkeleton key={i} />
+    <LoadingRegion label={label} className={CAMPAIGN_GRID}>
+      {Array.from({ length: count }, (_, i) => (
+        <CardSkeleton key={i} />
       ))}
-    </div>
+    </LoadingRegion>
   )
 }
