@@ -268,6 +268,7 @@ export function CampaignImageUpload({
         ref={inputRef}
         type="file"
         accept="image/*"
+        aria-label="Cover image file"
         className="sr-only"
         tabIndex={-1}
         onChange={(e) => handleFile(e.target.files?.[0])}
@@ -276,7 +277,7 @@ export function CampaignImageUpload({
       {value ? (
         <div
           className={cn(
-            'group relative aspect-[16/7] min-h-[9.5rem] w-full overflow-hidden rounded-md border border-rule-strong bg-sunk',
+            'group relative min-h-[9.5rem] w-full sm:aspect-[16/7] overflow-hidden rounded-md border border-rule-strong bg-sunk',
             // 16:9 gets very short on a phone, and the broken-image message shares the card with the
             // Replace/Remove row — keep it tall enough that they can't land on top of the text.
             previewFailed && 'min-h-[12rem]',
@@ -339,7 +340,6 @@ export function CampaignImageUpload({
           role="button"
           tabIndex={busy ? -1 : 0}
           aria-disabled={busy}
-          aria-label="Upload a campaign cover image"
           onClick={openPicker}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -349,7 +349,7 @@ export function CampaignImageUpload({
           }}
           {...dropHandlers}
           className={cn(
-            'flex aspect-[16/7] min-h-[9.5rem] w-full flex-col items-center justify-center gap-3 rounded-md border border-dashed border-rule-strong bg-sunk p-6 text-center transition-colors [transition-duration:var(--dur-micro)]',
+            'flex min-h-[9.5rem] w-full flex-col sm:aspect-[16/7] items-center justify-center gap-3 rounded-md border border-dashed border-rule-strong bg-sunk p-6 text-center transition-colors [transition-duration:var(--dur-micro)]',
             'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal',
             busy ? 'cursor-default' : 'cursor-pointer can-hover:hover:border-ink-2',
             isDragging && 'border-ink',

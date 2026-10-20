@@ -8,7 +8,7 @@ import { Button, Chip, KeyValueList, PageContainer, PageHeader, Panel, Skeleton,
 import { becomeHost } from '@/lib/web3-service'
 import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
 import { claims } from '@/config/claims'
-import { network } from '@/config/landing'
+import { network, networkLabel } from '@/config/landing'
 import { cn } from '@/lib/utils'
 
 export type GateState = { kind: 'idle' } | { kind: 'pending' } | { kind: 'failed'; reason: string } | { kind: 'granted' }
@@ -139,7 +139,7 @@ export function HostGate({
         lead="Connect the wallet you’ll fund campaigns from, then give it the host role. You do this once per wallet."
       />
 
-      <div className="mt-11 grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_21rem]">
+      <div className="mt-11 grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_21rem]">
         <section aria-label="Setup">
           <ol className="border-b border-rule" data-host-gate-steps>
             <GateStep
@@ -153,10 +153,10 @@ export function HostGate({
                     <span className="font-mono text-ink" title={address}>
                       {shortAddress(address)}
                     </span>
-                    {wrongNetwork ? `, on another network. DappDrop runs on ${DEPLOYMENT_CHAIN.name}.` : '.'}
+                    {wrongNetwork ? `, on another network. DappDrop runs on ${networkLabel}.` : '.'}
                   </>
                 ) : (
-                  <>Use the wallet that will fund your campaigns. It must be on {DEPLOYMENT_CHAIN.name}. We’ll never ask for your seed phrase.</>
+                  <>Use the wallet that will fund your campaigns. It must be on {networkLabel}. We’ll never ask for your seed phrase.</>
                 )
               }
               action={

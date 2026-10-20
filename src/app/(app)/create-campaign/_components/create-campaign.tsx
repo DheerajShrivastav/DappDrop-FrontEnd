@@ -1241,8 +1241,8 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
             }))}
           />
           <FormProvider {...form}>
-            <div className="mt-10 grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_21rem]">
-              <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="grid min-w-0 gap-8" aria-label={`Step ${step}: ${STEPS[step - 1].name}`}>
+            <div className="mt-10 grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_21rem]">
+              <form onSubmit={fixture ? (e) => e.preventDefault() : form.handleSubmit(onSubmit)} noValidate className="grid min-w-0 grid-cols-1 gap-8" aria-label={`Step ${step}: ${STEPS[step - 1].name}`}>
                 <ErrorSummary ref={summaryRef} errors={summaryErrors} focusOnMount={false} />
 
                 {step === 1 && (
