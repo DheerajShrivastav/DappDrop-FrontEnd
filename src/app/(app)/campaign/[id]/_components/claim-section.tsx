@@ -14,7 +14,7 @@ const LIST_WAITING = new Set(['ended_finalizing', 'overdue_fallback'])
 const LIST_PUBLISHED = new Set(['allocations_published', 'claims_open', 'closed_claimable', 'swept'])
 
 /** The deadline line under the claim buttons (§1.9). */
-function deadlineLine(status: CampaignStatusInfo): ReactNode {
+export function deadlineLine(status: CampaignStatusInfo): ReactNode {
   if (status.state === 'closed_claimable' && status.sweepEligibleAt)
     return (
       <>

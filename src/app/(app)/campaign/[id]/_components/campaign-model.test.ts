@@ -102,6 +102,7 @@ test('host plan: the host bar never invents a deadline', () => {
 })
 
 test('date ranges read like the mockups', () => {
+  assert.equal(dateRange(new Date(2026, 7, 7, 9), new Date(2026, 7, 7, 18)), '7 Aug')
   assert.equal(dateRange(new Date(2026, 9, 1), new Date(2026, 9, 8)), '1–8 Oct')
   assert.equal(dateRange(new Date(2026, 8, 28), new Date(2026, 9, 8)), '28 Sep – 8 Oct')
   assert.equal(dateRange(new Date(2026, 11, 28), new Date(2027, 0, 3)), '28 Dec 2026 – 3 Jan 2027')

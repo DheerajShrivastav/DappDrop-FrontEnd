@@ -89,6 +89,8 @@
 .cp-ribbon .is-now {
     color: var(--signal);
     font-weight: 600;
+}
+.cp-ribbon .is-now .cp-stop {
     text-decoration: underline;
     text-decoration-thickness: 2px;
     text-underline-offset: 6px;
@@ -105,7 +107,7 @@
     .cp-ribbon li:not(:last-child)::after {
         content: none;
     }
-    .cp-ribbon .is-now {
+    .cp-ribbon .is-now .cp-stop {
         text-decoration: none;
     }
     .cp-ribbon .is-now::before {

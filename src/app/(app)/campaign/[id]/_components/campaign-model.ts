@@ -6,7 +6,7 @@
  *
  * Unit-tested in campaign-model.test.ts.
  */
-import { addMilliseconds, format, isSameMonth, isSameYear } from 'date-fns'
+import { addMilliseconds, format, isSameDay, isSameMonth, isSameYear } from 'date-fns'
 import {
   SETTLEMENT_FALLBACK_DELAY_MS,
   shortDate,
@@ -24,8 +24,9 @@ export function isTieredMode(mode: SettlementMode | undefined | null): boolean {
   return mode === 'RANK_TIERED' || mode === 'SCORE_TIERED'
 }
 
-/** "1–8 Oct", "28 Sep – 8 Oct", "28 Dec 2026 – 3 Jan 2027". */
+/** "7 Aug" (one day), "1–8 Oct", "28 Sep – 8 Oct", "28 Dec 2026 – 3 Jan 2027". */
 export function dateRange(start: Date, end: Date): string {
+  if (isSameDay(start, end)) return format(end, 'd MMM')
   if (isSameMonth(start, end)) return `${format(start, 'd')}–${format(end, 'd MMM')}`
   if (isSameYear(start, end)) return `${format(start, 'd MMM')} – ${format(end, 'd MMM')}`
   return `${format(start, 'd MMM yyyy')} – ${format(end, 'd MMM yyyy')}`

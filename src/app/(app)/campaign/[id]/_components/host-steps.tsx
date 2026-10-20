@@ -42,8 +42,14 @@ function StepRow({ step, n, action, body }: { step: HostStep; n: number; action?
       <span className="cp-state">
         {step.state === 'past' ? (
           <span className="cp-done">
-            <span className="sr-only">Done</span>
-            {step.date}
+            {step.date ? (
+              <>
+                <span className="sr-only">Done </span>
+                {step.date}
+              </>
+            ) : (
+              'Done'
+            )}
           </span>
         ) : (
           action

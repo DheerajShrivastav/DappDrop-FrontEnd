@@ -22,7 +22,7 @@ export function LifecycleRibbon({ campaign, status, action }: { campaign: Campai
       <ol className="cp-ribbon" aria-labelledby="cp-where">
         {stops.map((s) => (
           <li key={s.key} className={cn(s.state === 'past' && 'is-past', s.state === 'now' && 'is-now')} aria-current={s.state === 'now' ? 'step' : undefined}>
-            {s.label}
+            <span className="cp-stop">{s.label}</span>
             {s.state === 'past' && <span className="sr-only"> (done)</span>}
           </li>
         ))}

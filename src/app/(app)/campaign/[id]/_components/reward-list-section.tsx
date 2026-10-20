@@ -46,10 +46,12 @@ export function RewardListSection({ campaign, status, report }: { campaign: Camp
     ])
       .then(([erc20, nft]) => {
         if (cancelled) return
-        if (erc20?.allocation) {
+        // Only a PUBLISHED list is public. The host's own session also gets their unpublished
+        // draft from this route, and "View as a participant" must not show it as the list.
+        if (erc20?.allocation?.status === 'PUBLISHED') {
           setAllocation(erc20.allocation)
           setIsNFT(false)
-        } else if (nft?.allocation) {
+        } else if (nft?.allocation?.status === 'PUBLISHED') {
           setAllocation(nft.allocation)
           setIsNFT(true)
         } else setAllocation(null)

@@ -7,6 +7,7 @@ import { submitERC20MerkleRoot, mapContractRevertToMessage } from '@/lib/web3-se
 import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
 import { plural } from '@/components/app'
 import { ListReview } from './list-review'
+import { amountText, splitAmount } from './reward-panel'
 
 type AllocationEntry = { wallet: string; amount: string; tasksCompleted: number }
 type AllocationSummary = {
@@ -166,14 +167,14 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
       allocation={allocation}
       summary={
         allocation
-          ? `${plural(allocation.entries.length, 'wallet')} · ${formatAmount(allocation.totalAmount, allocation.decimals, allocation.symbol)} in total · ${allocation.policy}`
+          ? `${plural(allocation.entries.length, 'wallet')} · ${amountText(splitAmount(formatAmount(allocation.totalAmount, allocation.decimals, allocation.symbol)))} in total · ${allocation.policy}`
           : undefined
       }
       columns={['Wallet', 'Tasks done', 'Amount']}
       rows={(allocation?.entries ?? []).map((e) => ({
         key: e.wallet,
         wallet: e.wallet,
-        cells: [e.tasksCompleted, formatAmount(e.amount, allocation!.decimals, allocation!.symbol)],
+        cells: [e.tasksCompleted, amountText(splitAmount(formatAmount(e.amount, allocation!.decimals, allocation!.symbol)))],
       }))}
       excluded={allocation?.excludedForHumanity}
       isClosed={isClosed}
