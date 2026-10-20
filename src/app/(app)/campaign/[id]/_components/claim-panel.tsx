@@ -1,149 +1,88 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
-import { Trophy, CheckCircle2 } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
-import { useToast } from '@/hooks/use-toast'
-import { Skeleton } from '@/components/ui/skeleton'
-import { useWallet } from '@/context/wallet-provider'
 import type { Campaign } from '@/lib/types'
-import { claimERC20Reward, mapContractRevertToMessage } from '@/lib/web3-service'
-import { getLifecycleState } from '@/lib/campaign-lifecycle'
-import { SponsoredClaimActions } from './sponsored-claim-actions'
+import type { CampaignStatusInfo } from '@/lib/campaign-status'
+import { claimERC20Reward } from '@/lib/web3-service'
+import { ClaimButtons, RewardPanel, amountText, reviewReason, splitAmount, type RewardViewState } from './reward-panel'
 
 type AllocationProof = {
   wallet: string
   amount: string
   proof: string[]
   claimableAt: number | null
-  status:
-    | 'not_allocated'
-    | 'pending_publish'
-    | 'dispute_window'
-    | 'claimable'
-    | 'claimed'
-    | 'swept'
+  status: 'not_allocated' | 'pending_publish' | 'dispute_window' | 'claimable' | 'claimed' | 'swept'
   decimals: number | null
   symbol: string | null
 }
 
 /**
- * Participant self-claim (PRD FR-C1/C2, no relayer yet — sponsorship is P2). Only renders a
- * claim ACTION once the lifecycle ladder (src/lib/campaign-lifecycle.ts) says the dispute
- * window has actually elapsed — before that, the state banner already elsewhere on the page
- * explains why. Every relevant revert maps to a specific message (NFR-10).
+ * The ERC20 reward-list claim (PRD FR-C1/C2) for the connected wallet. Reads the wallet's proof
+ * from /api/campaigns/:id/allocation/:wallet (which cross-checks the live on-chain root) and maps
+ * it onto the claim panel: not on the list · inside the 24-hour review (buttons disabled, with the
+ * time in words) · claimable (gas-free first, the wallet claim always live) · claimed · swept.
+ * Every revert is mapped to a specific message (NFR-10) by ClaimButtons.
  */
-export function ClaimPanel({ campaign }: { campaign: Campaign }) {
-  const { address, isConnected } = useWallet()
-  const { toast } = useToast()
+export function ClaimPanel({
+  campaign,
+  status,
+  address,
+  deadline,
+  report,
+}: {
+  campaign: Campaign
+  status: CampaignStatusInfo
+  address: string
+  deadline?: ReactNode
+  report?: ReactNode
+}) {
   const [proof, setProof] = useState<AllocationProof | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isClaiming, setIsClaiming] = useState(false)
-
-  const lifecycle = getLifecycleState(campaign)
-  const isMerkleErc20 = campaign.settlement?.mode === 'MERKLE_ERC20'
+  const [claimedTx, setClaimedTx] = useState<string | null | undefined>(undefined)
 
   useEffect(() => {
-    if (!isConnected || !address || !isMerkleErc20) {
-      setIsLoading(false)
-      return
-    }
+    // Out-of-order guard: a wallet switch mid-flight must not show the previous wallet's proof.
+    let cancelled = false
     setIsLoading(true)
+    setClaimedTx(undefined)
     fetch(`/api/campaigns/${campaign.id}/allocation/${address}`)
       .then((res) => (res.ok ? res.json() : null))
-      .then(setProof)
-      .catch(() => setProof(null))
-      .finally(() => setIsLoading(false))
-  }, [campaign.id, address, isConnected, isMerkleErc20])
-
-  if (!isMerkleErc20) return null
-  if (!isConnected || !address) return null
-  // Only show once claims are actually possible, or once claimed/swept (to explain state).
-  if (!['claims_open', 'closed_claimable', 'swept'].includes(lifecycle.state)) return null
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-4 w-24" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-9 w-36 rounded-md" />
-        </CardContent>
-      </Card>
-    )
-  }
-  if (!proof || proof.status === 'not_allocated') {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5" /> Your Reward
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            This wallet has no allocation in this campaign
-            {address ? ` — you participated with ${address}.` : '.'}
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const handleClaim = async () => {
-    setIsClaiming(true)
-    try {
-      await claimERC20Reward(campaign.id, proof.amount, proof.proof)
-      toast({ title: 'Reward claimed!', description: 'Your tokens have been sent to your wallet.' })
-      setProof({ ...proof, status: 'claimed' })
-    } catch (e: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Claim failed',
-        description: mapContractRevertToMessage(e),
-      })
-    } finally {
-      setIsClaiming(false)
+      .then((p) => !cancelled && setProof(p))
+      .catch(() => !cancelled && setProof(null))
+      .finally(() => !cancelled && setIsLoading(false))
+    return () => {
+      cancelled = true
     }
-  }
+  }, [campaign.id, address])
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Trophy className="h-5 w-5" /> Your Reward
-        </CardTitle>
-        <CardDescription>
-          Allocation: {formatAmount(proof.amount, proof.decimals, proof.symbol)}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {proof.status === 'claimed' ? (
-          <div className="flex items-center gap-2 text-sm text-status-claimable-fg">
-            <CheckCircle2 className="h-4 w-4" /> Already claimed.
-          </div>
-        ) : proof.status === 'swept' ? (
-          <p className="text-sm text-muted-foreground">
-            Unclaimed rewards for this campaign have been swept back to the host.
-            Claiming is closed.
-          </p>
-        ) : proof.status === 'claimable' ? (
-          <SponsoredClaimActions
-            campaignId={campaign.id}
-            account={address}
-            busy={isClaiming}
-            onSelfClaim={handleClaim}
-            onSponsoredConfirmed={() => setProof({ ...proof, status: 'claimed' })}
-            selfClaimLabel={`Claim ${formatAmount(proof.amount, proof.decimals, proof.symbol)}`}
-          />
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Your allocation isn't claimable yet — see the status above.
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  )
+  const onClaimed = useCallback((tx: string | null) => setClaimedTx(tx), [])
+
+  let view: RewardViewState
+  const amount = proof ? splitAmount(formatAmount(proof.amount, proof.decimals, proof.symbol)) : null
+  if (isLoading) view = { kind: 'checking' }
+  else if (!proof || proof.status === 'not_allocated') {
+    if (status.state === 'swept') return null
+    view = { kind: 'not-on-list' }
+  } else if (claimedTx !== undefined || proof.status === 'claimed') view = { kind: 'claimed', amount: amount!, txHash: claimedTx }
+  else if (proof.status === 'swept') view = { kind: 'swept', endedOn: status.sweepEligibleAt }
+  else if (proof.status === 'pending_publish') view = { kind: 'waiting-list', tasksDone: true }
+  else if (proof.status === 'dispute_window')
+    view = { kind: 'review', amount: amount!, claimsOpenAt: proof.claimableAt ? new Date(proof.claimableAt * 1000) : status.claimsOpenAt }
+  else view = { kind: 'claimable', amount: amount! }
+
+  const actions =
+    (view.kind === 'claimable' || view.kind === 'review') && proof ? (
+      <ClaimButtons
+        campaignId={campaign.id}
+        address={address}
+        amountLabel={amountText(view.amount)}
+        claim={() => claimERC20Reward(campaign.id, proof.amount, proof.proof)}
+        onClaimed={onClaimed}
+        disabledReason={view.kind === 'review' ? reviewReason(view.claimsOpenAt) : undefined}
+        successBody="Your tokens have been sent to your wallet."
+      />
+    ) : null
+
+  return <RewardPanel view={view} address={address} actions={actions} deadline={deadline} report={report} />
 }

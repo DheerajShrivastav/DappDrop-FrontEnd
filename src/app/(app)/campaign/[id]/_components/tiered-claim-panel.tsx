@@ -1,186 +1,119 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
-import { Trophy, CheckCircle2, Award } from 'lucide-react'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
-import { useToast } from '@/hooks/use-toast'
-import { Skeleton } from '@/components/ui/skeleton'
-import { useWallet } from '@/context/wallet-provider'
 import type { Campaign } from '@/lib/types'
+import type { CampaignStatusInfo } from '@/lib/campaign-status'
 import {
   claimTieredReward,
   getTieredRewardStatus,
   getTieredTiers,
   getERC20TokenInfo,
-  mapContractRevertToMessage,
   type TieredRewardStatus,
   type TierView,
 } from '@/lib/web3-service'
-import { SponsoredClaimActions } from './sponsored-claim-actions'
+import { ClaimButtons, RewardPanel, amountText, splitAmount, type RewardViewState } from './reward-panel'
 
-/** Mirrors OnChainRewardLib.matchRankTier/matchScoreTier exactly — display-only preview of
- * what the contract will compute; the actual payout is always contract-computed at claim time. */
-function matchTier(
-  mode: 'RANK_TIERED' | 'SCORE_TIERED',
-  tiers: TierView[],
-  rankOrScore: number,
-): string | null {
+/** Mirrors OnChainRewardLib.matchRankTier/matchScoreTier exactly: a display-only preview of what
+ * the contract will compute; the actual payout is always contract-computed at claim time. */
+export function matchTier(mode: 'RANK_TIERED' | 'SCORE_TIERED', tiers: TierView[], rankOrScore: number): string | null {
   if (mode === 'RANK_TIERED') {
     const t = tiers.find((t) => rankOrScore >= Number(t.threshold) && rankOrScore <= Number(t.thresholdEnd))
     return t?.amount ?? null
   }
-  // Score tiers are matched in stored (descending-threshold) order — the array from getTiers()
-  // preserves on-chain storage order, so a plain find() replicates matchScoreTier exactly.
+  // Score tiers are matched in stored (descending-threshold) order, as getTiers() returns them.
   const t = tiers.find((t) => rankOrScore >= Number(t.threshold))
   return t?.amount ?? null
 }
 
 /**
- * Participant self-claim for RANK_TIERED / SCORE_TIERED campaigns (P3 CP1) — the on-chain
- * tiered counterpart of ClaimPanel (which is Merkle-only). No proof, no dispute window: the
- * module computes rank/score and payout purely from on-chain completion state, so this panel
- * never shows any Merkle/root/dispute-window UI — that machinery doesn't apply here.
+ * The ranked / by-points claim (P3 CP1). No list and no 24-hour review: the module works out rank
+ * or score and the payout from on-chain completions, so this never shows list UI.
  */
-export function TieredClaimPanel({ campaign }: { campaign: Campaign }) {
-  const { address, isConnected } = useWallet()
-  const { toast } = useToast()
+export function TieredClaimPanel({
+  campaign,
+  status: lifecycle,
+  address,
+  deadline,
+}: {
+  campaign: Campaign
+  status: CampaignStatusInfo
+  address: string
+  deadline?: ReactNode
+}) {
   const [status, setStatus] = useState<TieredRewardStatus | null>(null)
   const [tiers, setTiers] = useState<TierView[]>([])
   const [tokenInfo, setTokenInfo] = useState<{ decimals: number; symbol: string } | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isClaiming, setIsClaiming] = useState(false)
-
-  const isTiered =
-    campaign.settlement?.mode === 'RANK_TIERED' || campaign.settlement?.mode === 'SCORE_TIERED'
-  const canClaim = campaign.status === 'Ended' || campaign.status === 'Closed'
+  const [claimedTx, setClaimedTx] = useState<string | null | undefined>(undefined)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
-    if (!isConnected || !address || !isTiered || !canClaim) {
-      setIsLoading(false)
-      return
-    }
+    let cancelled = false
     setIsLoading(true)
+    setClaimedTx(undefined)
     Promise.all([
       getTieredRewardStatus(campaign.id, address),
       getTieredTiers(campaign.id),
       campaign.settlement?.erc20Token ? getERC20TokenInfo(campaign.settlement.erc20Token) : null,
     ])
       .then(([s, t, info]) => {
+        if (cancelled) return
         setStatus(s ?? null)
         setTiers(t)
         setTokenInfo(info)
       })
-      .catch(() => setStatus(null))
-      .finally(() => setIsLoading(false))
-  }, [campaign.id, address, isConnected, isTiered, canClaim, campaign.settlement?.erc20Token])
-
-  if (!isTiered) return null
-  if (!isConnected || !address) return null
-  if (!canClaim) return null
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-4 w-24" />
-        </CardHeader>
-        <CardContent>
-          <Skeleton className="h-9 w-36 rounded-md" />
-        </CardContent>
-      </Card>
-    )
-  }
-
-  if (!status) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Trophy className="h-5 w-5" /> Your Reward
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Could not read your reward status for this campaign — refresh and try again.
-          </p>
-        </CardContent>
-      </Card>
-    )
-  }
-
-  const isRank = status.mode === 'RANK_TIERED'
-  const rankOrScore = isRank ? status.rank : status.score
-  const previewAmount = matchTier(status.mode as 'RANK_TIERED' | 'SCORE_TIERED', tiers, rankOrScore)
-
-  const handleClaim = async () => {
-    setIsClaiming(true)
-    try {
-      await claimTieredReward(campaign.id)
-      toast({ title: 'Reward claimed!', description: 'Your tokens have been sent to your wallet.' })
-      setStatus({ ...status, claimed: true })
-    } catch (e: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Claim failed',
-        description: mapContractRevertToMessage(e),
-      })
-    } finally {
-      setIsClaiming(false)
+      .catch(() => !cancelled && setStatus(null))
+      .finally(() => !cancelled && setIsLoading(false))
+    return () => {
+      cancelled = true
     }
+  }, [campaign.id, address, campaign.settlement?.erc20Token, attempt])
+
+  const onClaimed = useCallback((tx: string | null) => setClaimedTx(tx), [])
+
+  if (lifecycle.state === 'swept') return <RewardPanel view={{ kind: 'swept', endedOn: lifecycle.sweepEligibleAt }} />
+
+  let view: RewardViewState
+  let rankLine: string | undefined
+  let amountLabel = ''
+  if (isLoading) view = { kind: 'checking' }
+  else if (!status) view = { kind: 'error', message: 'We couldn’t read your reward from the contract. The network didn’t answer.' }
+  else {
+    const isRank = status.mode === 'RANK_TIERED'
+    const rankOrScore = isRank ? status.rank : status.score
+    const preview = matchTier(status.mode as 'RANK_TIERED' | 'SCORE_TIERED', tiers, rankOrScore)
+    const amount = preview ? splitAmount(formatAmount(preview, tokenInfo?.decimals ?? null, tokenInfo?.symbol ?? null)) : undefined
+    amountLabel = amount ? amountText(amount) : ''
+    if (rankOrScore > 0) rankLine = isRank ? `Completion rank #${rankOrScore}` : `Score: ${rankOrScore} points`
+    // RANK_TIERED gates the claim on CURRENTLY qualified (a since-revoked required task blocks it
+    // even though the rank stands); SCORE_TIERED has no separate gate: a low score matches no tier.
+    const canClaim = isRank ? status.qualified && rankOrScore > 0 : rankOrScore > 0
+    if (claimedTx !== undefined || status.claimed) view = { kind: 'claimed', amount, txHash: claimedTx }
+    else if (!canClaim)
+      view = {
+        kind: 'not-eligible',
+        message: isRank
+          ? rankOrScore > 0
+            ? 'A required task isn’t done any more, so this wallet can’t claim right now. Finish every required task to claim.'
+            : 'Not ranked yet: finish every required task to get a rank.'
+          : 'Your score doesn’t reach a reward tier.',
+      }
+    else if (!amount) view = { kind: 'not-eligible', message: `Your ${isRank ? 'rank' : 'score'} doesn’t fall into any reward tier.` }
+    else view = { kind: 'claimable', amount }
   }
 
-  // RANK_TIERED gates claim on CURRENTLY qualified (a since-revoked required task blocks it
-  // even though the historical rank stands); SCORE_TIERED has no separate qualified gate —
-  // score alone determines the tier, and a zero/too-low score just matches no tier.
-  const canActuallyClaim = isRank ? status.qualified && rankOrScore > 0 : rankOrScore > 0
+  const actions =
+    view.kind === 'claimable' ? (
+      <ClaimButtons
+        campaignId={campaign.id}
+        address={address}
+        amountLabel={amountLabel}
+        claim={() => claimTieredReward(campaign.id)}
+        onClaimed={onClaimed}
+        successBody="Your tokens have been sent to your wallet."
+      />
+    ) : null
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Trophy className="h-5 w-5" /> Your Reward
-        </CardTitle>
-        <CardDescription className="flex items-center gap-2">
-          <Award className="h-3.5 w-3.5" />
-          {isRank ? (
-            rankOrScore > 0 ? (
-              <>Completion rank #{rankOrScore}{!status.qualified && ' (currently not qualified — a required task is incomplete)'}</>
-            ) : (
-              'Not yet ranked — complete every required task to be assigned a rank.'
-            )
-          ) : (
-            <>Score: {rankOrScore} points</>
-          )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {status.claimed ? (
-          <div className="flex items-center gap-2 text-sm text-status-claimable-fg">
-            <CheckCircle2 className="h-4 w-4" /> Already claimed.
-          </div>
-        ) : !canActuallyClaim ? (
-          <p className="text-sm text-muted-foreground">
-            {isRank
-              ? 'You are not currently eligible to claim — complete all required tasks.'
-              : 'Your score does not currently qualify for a reward tier.'}
-          </p>
-        ) : previewAmount === null ? (
-          <p className="text-sm text-muted-foreground">
-            Your {isRank ? 'rank' : 'score'} does not fall into any configured reward tier.
-          </p>
-        ) : (
-          <SponsoredClaimActions
-            campaignId={campaign.id}
-            account={address}
-            busy={isClaiming}
-            onSelfClaim={handleClaim}
-            onSponsoredConfirmed={() => setStatus({ ...status, claimed: true })}
-            selfClaimLabel={`Claim ${formatAmount(previewAmount, tokenInfo?.decimals ?? null, tokenInfo?.symbol ?? null)}`}
-          />
-        )}
-      </CardContent>
-    </Card>
-  )
+  return <RewardPanel view={view} address={address} rankLine={rankLine} actions={actions} deadline={deadline} onRetry={() => setAttempt((a) => a + 1)} />
 }
