@@ -10,7 +10,11 @@ import { Suspense, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth, useHumanity } from '@humanity-org/react-sdk'
-import { Button, ErrorState, PageContainer, PageHeader, Spinner } from '@/components/app'
+// Direct module imports, not the '@/components/app' barrel: the barrel pulls every primitive
+// (ScheduleField's calendar, ClaimActions…) into the route's first load.
+import { Button, Spinner } from '@/components/app/button'
+import { ErrorState } from '@/components/app/states'
+import { PageContainer, PageHeader } from '@/components/app/page-header'
 
 function CallbackContent() {
   const router = useRouter()

@@ -3,21 +3,14 @@
 import { useMemo, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { Campaign } from '@/lib/types'
-import {
-  Button,
-  CampaignStatusChip,
-  EmptyState,
-  ErrorState,
-  LoadingRegion,
-  PageContainer,
-  PageHeader,
-  RowsSkeleton,
-  SectionHeader,
-  Skeleton,
-  StatRow,
-  plural,
-  shortAddress,
-} from '@/components/app'
+// Direct module imports, not the '@/components/app' barrel: the barrel pulls every primitive
+// (ScheduleField's calendar, ClaimActions…) into the route's first load.
+import { Button } from '@/components/app/button'
+import { CampaignStatusChip } from '@/components/app/chip'
+import { EmptyState, ErrorState, LoadingRegion, RowsSkeleton, Skeleton } from '@/components/app/states'
+import { PageContainer, PageHeader, SectionHeader } from '@/components/app/page-header'
+import { StatRow } from '@/components/app/stat-row'
+import { plural, shortAddress } from '@/components/app/format'
 import { dateRange, hostCsv, hostRows, hostStats, type HostRow } from '../_lib/host-actions'
 
 /** Where the visitor stands: drives the in-place states (APP-12: no redirect, no toast). */

@@ -1,7 +1,13 @@
 import type { Campaign } from '@/lib/types'
 import { getCampaignStatus } from '@/lib/campaign-status'
 import { displayImageUrl } from '@/lib/campaign-image'
-import { CampaignStatusChip, CardLink, KeyValueList, payoutShortLabel, plural, shortAddress } from '@/components/app'
+// Direct module imports, not the '@/components/app' barrel: the barrel pulls every primitive
+// (ScheduleField's calendar, ClaimActions…) into the route's first load.
+import { CampaignStatusChip } from '@/components/app/chip'
+import { CardLink } from '@/components/app/panel'
+import { KeyValueList } from '@/components/app/kv-list'
+import { payoutShortLabel } from '@/components/app/chip-map'
+import { plural, shortAddress } from '@/components/app/format'
 import { participantsFact, rewardFact, taskCheckSummary, timeFact } from '@/app/(app)/campaigns/_lib/discovery'
 
 /**

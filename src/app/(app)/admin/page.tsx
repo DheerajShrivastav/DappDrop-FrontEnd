@@ -22,7 +22,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Chip, EmptyState, LoadingRegion, PageContainer, PageHeader, RowsSkeleton, shortAddress } from '@/components/app'
+// Direct module imports, not the '@/components/app' barrel: the barrel pulls every primitive
+// (ScheduleField's calendar, ClaimActions…) into the route's first load.
+import { Chip } from '@/components/app/chip'
+import { EmptyState, LoadingRegion, RowsSkeleton } from '@/components/app/states'
+import { PageContainer, PageHeader } from '@/components/app/page-header'
+import { shortAddress } from '@/components/app/format'
 import { flagAccountOnChain, emergencyPauseOnChain, emergencyUnpauseOnChain } from '@/lib/web3-service'
 
 type AdminRole = 'DEFAULT_ADMIN' | 'MODERATOR' | 'EMERGENCY_ADMIN' | 'SIGNER' | 'SETTLER'

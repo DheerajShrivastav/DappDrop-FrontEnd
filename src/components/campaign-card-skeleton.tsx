@@ -1,4 +1,6 @@
-import { CardSkeleton, LoadingRegion } from '@/components/app'
+// Direct module imports, not the '@/components/app' barrel: the barrel pulls every primitive
+// (ScheduleField's calendar, ClaimActions…) into the route's first load.
+import { CardSkeleton, LoadingRegion } from '@/components/app/states'
 
 /** The /campaigns grid (3 columns, 2 from 700 px, 1 below). Shared by the cards and their skeletons. */
 export const CAMPAIGN_GRID = 'grid gap-5 min-[700px]:grid-cols-2 lg:grid-cols-3'
