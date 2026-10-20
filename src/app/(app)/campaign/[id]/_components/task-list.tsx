@@ -119,6 +119,10 @@ export function TaskList({
                         Try again
                       </Button>
                     </span>
+                  ) : canAct && task.type === 'ONCHAIN_TX' ? (
+                    // Pre-existing gap: the page never had a payment dialog, so [Start] did nothing.
+                    // Say so instead of offering a dead button (phase2-A-handoff.md, open issues).
+                    <span className="text-[0.8125rem] text-ink-2">Can’t be done in the app yet</span>
                   ) : canAct ? (
                     <Button size="sm" variant="secondary" onClick={() => onStart(task.id, task.type)} aria-label={`Start: ${task.description}`}>
                       Start
