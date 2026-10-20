@@ -1,10 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ClipboardList, Plus, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { Button, Input, Textarea, plural } from '@/components/app'
 import { parsePastedNftList, type NftRow } from '@/lib/reward-plan'
 
 /**
@@ -30,83 +27,51 @@ export function NftTokenTable({
     onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   const count = rows.filter((r) => r.id.trim()).length
 
+  const cols = withQty ? 'grid-cols-[minmax(0,1fr)_6.5rem_4.5rem]' : 'grid-cols-[minmax(0,1fr)_4.5rem]'
   return (
-    <div className="space-y-3">
-      <div className="rounded-md border">
-        <div
-          className={`grid gap-2 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground ${
-            withQty ? 'grid-cols-[1fr_6rem_2.25rem]' : 'grid-cols-[1fr_2.25rem]'
-          }`}
-        >
+    <div className="grid gap-3">
+      <div className="rounded-md border border-rule-strong">
+        <div aria-hidden="true" className={`grid gap-3 border-b border-rule px-3 py-2 font-mono text-[0.75rem] uppercase tracking-[0.08em] text-ink-3 ${cols}`}>
           <span>Token ID</span>
           {withQty && <span>Quantity</span>}
-          <span className="sr-only">Remove</span>
+          <span />
         </div>
-        <div className="max-h-72 space-y-2 overflow-y-auto p-3">
-          {rows.length === 0 && (
-            <p className="text-sm text-muted-foreground">No tokens yet — add one or paste a list.</p>
-          )}
+        <div className="grid max-h-80 gap-2 overflow-y-auto p-3">
+          {rows.length === 0 && <p className="text-[0.875rem] text-ink-2">No tokens yet. Add one or paste a list.</p>}
           {rows.map((r, i) => (
-            <div
-              key={i}
-              className={`grid items-center gap-2 ${withQty ? 'grid-cols-[1fr_6rem_2.25rem]' : 'grid-cols-[1fr_2.25rem]'}`}
-            >
-              <Input
-                value={r.id}
-                inputMode="numeric"
-                placeholder="e.g. 42"
-                aria-label={`Token ID, row ${i + 1}`}
-                onChange={(e) => update(i, { id: e.target.value })}
-                className="font-mono"
-              />
-              {withQty && (
-                <Input
-                  value={r.qty}
-                  inputMode="numeric"
-                  aria-label={`Quantity, row ${i + 1}`}
-                  onChange={(e) => update(i, { qty: e.target.value })}
-                  className="font-mono"
-                />
-              )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 text-muted-foreground hover:text-destructive"
-                onClick={() => onChange(rows.filter((_, j) => j !== i))}
-                aria-label={`Remove row ${i + 1}`}
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+            <div key={i} className={`grid items-center gap-3 ${cols}`}>
+              <Input value={r.id} inputMode="numeric" placeholder="e.g. 42" aria-label={`Token ID, row ${i + 1}`} onChange={(e) => update(i, { id: e.target.value })} className="font-mono" />
+              {withQty && <Input value={r.qty} inputMode="numeric" aria-label={`Quantity, row ${i + 1}`} onChange={(e) => update(i, { qty: e.target.value })} className="font-mono" />}
+              <button type="button" className="dd-link min-h-11 justify-self-end text-small text-ink" onClick={() => onChange(rows.filter((_, j) => j !== i))} aria-label={`Remove row ${i + 1}`}>
+                Remove
+              </button>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => onChange([...rows, { id: '', qty: '1' }])}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> Add token
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="sm" variant="secondary" onClick={() => onChange([...rows, { id: '', qty: '1' }])}>
+          + Add a token
         </Button>
-        <Button type="button" variant="outline" size="sm" onClick={() => setPasteOpen((o) => !o)}>
-          <ClipboardList className="mr-1 h-3.5 w-3.5" /> Paste a list
+        <Button size="sm" variant="secondary" onClick={() => setPasteOpen((o) => !o)} aria-expanded={pasteOpen}>
+          Paste a list
         </Button>
-        <span className="ml-auto text-sm text-muted-foreground">
-          {count} prize{count === 1 ? '' : 's'}
-        </span>
+        <span className="ml-auto font-mono text-[0.8125rem] text-ink-2">{plural(count, 'prize')}</span>
       </div>
 
       {pasteOpen && (
-        <div className="space-y-2 rounded-md border p-3">
+        <div className="grid gap-3 rounded-md border border-rule-strong p-3">
           <Textarea
             rows={4}
+            aria-label="Token list to paste"
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
             placeholder={withQty ? 'One per line: token ID then quantity\n42 5\n43 1' : '42, 43, 44\nor one per line'}
-            className="font-mono text-sm"
+            className="font-mono text-[0.875rem]"
           />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-3">
             <Button
-              type="button"
               size="sm"
               onClick={() => {
                 const added = parsePastedNftList(pasteText, withQty)
@@ -117,10 +82,11 @@ export function NftTokenTable({
                 setPasteOpen(false)
               }}
               disabled={!pasteText.trim()}
+              disabledReason="Paste some token IDs first."
             >
               Add these
             </Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => setPasteOpen(false)}>
+            <Button size="sm" variant="ghost" onClick={() => setPasteOpen(false)}>
               Cancel
             </Button>
           </div>
