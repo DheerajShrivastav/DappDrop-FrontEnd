@@ -72,7 +72,7 @@ export function DashboardView({ gate, address, onConnect, campaigns, loadError, 
         eyebrow={
           address ? (
             <>
-              Dashboard · <span title={address}>{shortAddress(address)}</span>
+              Dashboard · <span title={address} className="normal-case">{shortAddress(address)}</span>
             </>
           ) : (
             'Dashboard'
