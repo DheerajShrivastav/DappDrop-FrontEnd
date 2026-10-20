@@ -1,202 +1,145 @@
 'use client'
 
-import { motion } from 'framer-motion'
-import {
-  CheckCircle,
-  Twitter,
-  MessageSquare,
-  Bot,
-  ShieldCheck,
-} from 'lucide-react'
-
 import type { Campaign, UserTask, Task as TaskType } from '@/lib/types'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
-import { isSelfReportedTask } from '@/lib/task-types'
-import { SelfReportedBadge } from '@/components/self-reported-badge'
-import { getCampaignStatus, shortDateTime } from '@/lib/campaign-status'
+import type { CampaignStatusInfo } from '@/lib/campaign-status'
+import { shortDate, shortDateTime } from '@/lib/campaign-status'
+import { TASK_VERIFICATION_METHOD } from '@/lib/task-types'
+import { Button, Spinner } from '@/components/app/button'
+import { Chip, VerificationChip } from '@/components/app/chip'
+import { Panel } from '@/components/app/panel'
+import { SectionHeader } from '@/components/app/page-header'
+import { plural } from '@/components/app/format'
 
-// Task-type icons are categorical, not status — kept neutral/monochrome (icon shape
-// alone communicates the type; color is reserved for lifecycle/money state).
-const TaskIcon = ({ type }: { type: TaskType['type'] }) => {
-  switch (type) {
-    case 'SOCIAL_FOLLOW':
-    case 'RETWEET':
-      return <Twitter className="h-5 w-5 text-foreground/70" />
-    case 'JOIN_DISCORD':
-      return <MessageSquare className="h-5 w-5 text-foreground/70" />
-    case 'JOIN_TELEGRAM':
-      return <Bot className="h-5 w-5 text-foreground/70" />
-    case 'ONCHAIN_TX':
-    case 'HUMANITY_VERIFICATION':
-      return <ShieldCheck className="h-5 w-5 text-foreground/70" />
-    default:
-      return <Bot className="h-5 w-5 text-muted-foreground" />
-  }
-}
-
-interface TaskListProps {
-  campaign: Campaign
-  userTasks: UserTask[]
-  role: string | null
-  onOpenVerifyDialog: (taskId: string, taskType: TaskType['type']) => void
-}
-
+/**
+ * "Your tasks" (§1.8 / §2.2): numbered hairline rows: 01 · what to do · how it's checked · the
+ * state on the right. States: To do [Start] · Checking… · ✓ Done (self-reported tasks keep their
+ * dashed chip) · ! Couldn't verify: <reason> [Try again].
+ *
+ * Fixes from the audit (§2.2 "bug fixes the build must include"):
+ * - task actions for ANY connected wallet, not only `role === 'participant'` (a wallet with the
+ *   host role can take part in someone else's campaign);
+ * - "Campaign full" from the campaign's real cap (`settlement.maxParticipants`, 0 = no cap), not
+ *   a hard-coded 1,000, and only for wallets that haven't joined yet (a joined wallet keeps going).
+ */
 export function TaskList({
   campaign,
+  status,
   userTasks,
-  role,
-  onOpenVerifyDialog,
-}: TaskListProps) {
-  // The campaign's state (and why tasks may be closed) is stated once, by the lifecycle
-  // banner above; rows just reflect it.
-  const status = getCampaignStatus(campaign)
-  const completedTasksCount = userTasks.filter((ut) => ut.completed).length
-  const progressPercentage = (completedTasksCount / campaign.tasks.length) * 100
+  taskErrors,
+  isConnected,
+  isJoined,
+  onConnect,
+  onStart,
+}: {
+  campaign: Campaign
+  status: CampaignStatusInfo
+  userTasks: UserTask[]
+  /** The last verification failure per task id, in plain words. */
+  taskErrors: Record<string, string>
+  isConnected: boolean
+  isJoined: boolean
+  onConnect: () => void
+  onStart: (taskId: string, type: TaskType['type']) => void
+}) {
+  const tasks = campaign.tasks
+  const done = tasks.filter((t) => userTasks.find((u) => u.taskId === t.id)?.completed).length
+  const cap = campaign.settlement?.maxParticipants ?? 0
+  const full = cap > 0 && campaign.participants >= cap && !isJoined
+  const accepting = status.acceptingTasks && campaign.status === 'Open'
+  const canAct = isConnected && accepting && !full
+
+  // One line under the list for every reason the rows are read-only (never a silent no-op).
+  const closedNote =
+    status.state === 'draft'
+      ? 'Tasks open when the host opens the campaign.'
+      : status.state === 'upcoming'
+        ? `Tasks open ${shortDateTime(new Date(campaign.startDate))}.`
+        : status.state === 'cancelled'
+          ? 'This campaign was cancelled, so its tasks are closed.'
+          : !accepting
+            ? `Tasks closed when the campaign ended on ${shortDate(new Date(campaign.endDate))}.`
+            : full
+              ? `This campaign is full (${cap.toLocaleString('en-US')} of ${cap.toLocaleString('en-US')}).`
+              : null
 
   return (
-    <>
-      {/* Progress Card */}
-      {role === 'participant' && (
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.3, duration: 0.6 }}
-        >
-          <Card className="card-modern">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="font-headline font-semibold text-lg">
-                    Your Progress
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {completedTasksCount} of {campaign.tasks.length} tasks
-                    completed
-                  </p>
-                </div>
-                <div className="text-3xl font-bold text-primary">
-                  {Math.round(progressPercentage)}%
-                </div>
-              </div>
-              <Progress value={progressPercentage} className="h-3" />
-            </CardContent>
-          </Card>
-        </motion.div>
+    <section aria-labelledby="cp-tasks">
+      <SectionHeader
+        id="cp-tasks"
+        title={isConnected ? 'Your tasks' : 'Tasks'}
+        note={isConnected && tasks.length > 0 ? `${done} of ${tasks.length} done` : plural(tasks.length, 'task')}
+      />
+
+      {!isConnected && accepting && !full && (
+        <Panel tone="sunk" pad={false} className="mt-4 flex flex-wrap items-center justify-between gap-3 px-5 py-4" data-connect-bar="">
+          <p className="text-body text-ink">Connect your wallet to take part.</p>
+          <Button size="sm" onClick={onConnect}>
+            Connect wallet
+          </Button>
+        </Panel>
       )}
 
-      {/* Tasks List */}
-      <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.4, duration: 0.6 }}
-      >
-        <Card className="card-modern">
-          <CardHeader>
-            <CardTitle className="font-headline">Tasks to Complete</CardTitle>
-            <CardDescription>
-              Complete all required tasks to be eligible for rewards
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {campaign.tasks.map((task, index) => {
-              const userTask = userTasks.find((ut) => ut.taskId === task.id)
-              const isCompleted = userTask?.completed
+      {tasks.length === 0 ? (
+        <p className="border-b border-rule py-5 text-small text-ink-2">This campaign has no tasks.</p>
+      ) : (
+        <ol className="cp-rows">
+          {tasks.map((task, i) => {
+            const n = String(i + 1).padStart(2, '0')
+            const u = userTasks.find((x) => x.taskId === task.id)
+            const method = TASK_VERIFICATION_METHOD[task.type]
+            const err = taskErrors[task.id]
+            return (
+              <li key={task.id} className="cp-row" data-task-state={u?.completed ? 'done' : u?.isCompleting ? 'checking' : err ? 'failed' : 'todo'}>
+                <span className="cp-n" aria-hidden="true">
+                  {n}
+                </span>
+                <span className="cp-what text-body font-medium text-ink">{task.description}</span>
+                <span className="cp-how">
+                  {method && <VerificationChip method={method} withNote />}
+                  {task.isOptional && <Chip variant="neutral">Optional</Chip>}
+                  {task.type === 'ONCHAIN_TX' && task.metadata?.paymentRequired && task.metadata.amountDisplay && (
+                    <span className="font-mono text-[0.8125rem] text-ink-2">
+                      Pay {task.metadata.amountDisplay}
+                      {task.metadata.network ? ` on ${task.metadata.network}` : ''}
+                    </span>
+                  )}
+                </span>
+                <span className="cp-state">
+                  {u?.completed ? (
+                    <span className="cp-done">Done</span>
+                  ) : u?.isCompleting ? (
+                    <span className="inline-flex items-center gap-2 font-mono text-[0.8125rem] text-ink-2" role="status">
+                      <Spinner /> Checking…
+                    </span>
+                  ) : err && canAct ? (
+                    <span className="grid justify-items-end gap-2 max-sm:justify-items-start">
+                      <span className="text-small text-ink-2">
+                        <span aria-hidden="true" className="mr-1 font-mono font-semibold text-danger">
+                          !
+                        </span>
+                        Couldn’t verify: {err}
+                      </span>
+                      <Button size="sm" variant="secondary" onClick={() => onStart(task.id, task.type)} aria-label={`Try again: ${task.description}`}>
+                        Try again
+                      </Button>
+                    </span>
+                  ) : canAct && task.type === 'ONCHAIN_TX' ? (
+                    // Pre-existing gap: the page never had a payment dialog, so [Start] did nothing.
+                    // Say so instead of offering a dead button (phase2-A-handoff.md, open issues).
+                    <span className="text-[0.8125rem] text-ink-2">Can’t be done in the app yet</span>
+                  ) : canAct ? (
+                    <Button size="sm" variant="secondary" onClick={() => onStart(task.id, task.type)} aria-label={`Start: ${task.description}`}>
+                      Start
+                    </Button>
+                  ) : null}
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+      )}
 
-              return (
-                <motion.div
-                  key={task.id}
-                  initial={{ x: -20, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: 0.5 + index * 0.1, duration: 0.4 }}
-                  className={`p-4 rounded-xl border transition-all ${
-                    isCompleted
-                      ? 'bg-status-claimable-bg border-status-claimable-border'
-                      : 'bg-card border-border hover:border-foreground/20 hover:shadow-card'
-                  }`}
-                >
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`p-3 rounded-lg ${isCompleted ? 'bg-status-claimable-solid/10' : 'bg-secondary'}`}
-                    >
-                      {isCompleted ? (
-                        <CheckCircle className="h-5 w-5 text-status-claimable-fg" />
-                      ) : (
-                        <TaskIcon type={task.type} />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2 mb-1">
-                        {/* overflow-wrap: a pasted post URL is one unbreakable "word" and used to
-                            push the row past the viewport on phones. */}
-                        <h4 className="min-w-0 font-semibold [overflow-wrap:anywhere]">{task.description}</h4>
-                        {isSelfReportedTask(task.type) && <SelfReportedBadge />}
-                        {task.isOptional && (
-                          <Badge variant="outline" className="h-5 shrink-0 px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
-                            Optional
-                          </Badge>
-                        )}
-                        {task.type === 'ONCHAIN_TX' && (
-                          <Badge
-                            variant="outline"
-                            className="text-[10px] px-1.5 py-0 h-5 font-semibold text-muted-foreground"
-                          >
-                            Beta
-                          </Badge>
-                        )}
-                      </div>
-                      {task.type === 'ONCHAIN_TX' &&
-                        task.metadata?.paymentRequired && (
-                          <Badge variant="outline" className="text-xs">
-                            💰 {task.metadata.amountDisplay} on{' '}
-                            {task.metadata.network}
-                          </Badge>
-                        )}
-                    </div>
-                    {role === 'participant' &&
-                      !isCompleted &&
-                      campaign.status === 'Open' &&
-                      (status.state === 'ended_unrecorded' ? (
-                        <Badge variant="outline" className="border-status-pending-border bg-status-pending-bg text-status-pending-fg">
-                          Ended
-                        </Badge>
-                      ) : status.state === 'upcoming' ? (
-                        <Badge variant="outline" className="border-status-pending-border bg-status-pending-bg text-status-pending-fg">
-                          Opens {shortDateTime(campaign.startDate)}
-                        </Badge>
-                      ) : campaign.participants >= 1000 ? (
-                        <Badge variant="destructive">
-                          Campaign Full
-                        </Badge>
-                      ) : (
-                        <Button
-                          size="sm"
-                          onClick={() => onOpenVerifyDialog(task.id, task.type)}
-                        >
-                          Verify
-                        </Button>
-                      ))}
-                    {isCompleted && (
-                      <Badge className="bg-status-claimable-solid text-white border-transparent">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Done
-                      </Badge>
-                    )}
-                  </div>
-                </motion.div>
-              )
-            })}
-          </CardContent>
-        </Card>
-      </motion.div>
-    </>
+      {closedNote && <p className="mt-[0.9rem] text-[0.8125rem] text-ink-2">{closedNote}</p>}
+    </section>
   )
 }

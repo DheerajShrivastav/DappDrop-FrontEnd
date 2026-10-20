@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import './campaign.css'
 
 /**
  * 08-site (APP-05): the campaign page's <title>. The server only knows the id ("Campaign #12 ·
