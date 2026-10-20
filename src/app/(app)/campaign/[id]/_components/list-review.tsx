@@ -2,7 +2,10 @@
 
 import type { ReactNode } from 'react'
 import { shortDateTime, ROOT_DISPUTE_WINDOW_MS } from '@/lib/campaign-status'
-import { Button, ConfirmDialog, Skeleton, plural, shortAddress } from '@/components/app'
+import { Button } from '@/components/app/button'
+import { ConfirmDialog } from '@/components/app/confirm-dialog'
+import { Skeleton } from '@/components/app/states'
+import { plural, shortAddress } from '@/components/app/format'
 
 export type ListReviewRow = { key: string; wallet: string; cells: ReactNode[] }
 

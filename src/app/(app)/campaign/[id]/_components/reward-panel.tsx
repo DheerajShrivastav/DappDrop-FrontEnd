@@ -6,7 +6,12 @@ import { shortDate, shortDateTime } from '@/lib/campaign-status'
 import { network } from '@/config/landing'
 import { useSponsoredClaim } from '@/hooks/use-sponsored-claim'
 import { mapContractRevertToMessage } from '@/lib/web3-service'
-import { Button, ClaimActions, ClaimSkeleton, Panel, shortAddress, toast, type WalletClaimPhase } from '@/components/app'
+import { Button } from '@/components/app/button'
+import { ClaimActions, type WalletClaimPhase } from '@/components/app/claim-actions'
+import { ClaimSkeleton } from '@/components/app/states'
+import { Panel } from '@/components/app/panel'
+import { shortAddress } from '@/components/app/format'
+import { toast } from '@/hooks/use-toast'
 
 export type RewardAmount = { value: string; unit?: string }
 

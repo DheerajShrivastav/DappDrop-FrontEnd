@@ -24,7 +24,10 @@ import {
   getUserTaskCompletionStatus,
 } from '@/lib/web3-service'
 
-import { Button, EmptyState, LoadingRegion, PageContainer, Skeleton, ClaimSkeleton, RowsSkeleton, useDocumentTitle } from '@/components/app'
+import { Button } from '@/components/app/button'
+import { EmptyState, LoadingRegion, Skeleton, ClaimSkeleton, RowsSkeleton } from '@/components/app/states'
+import { PageContainer } from '@/components/app/page-header'
+import { useDocumentTitle } from '@/components/app/document-title'
 import { CampaignView } from './_components/campaign-view'
 import { getCampaignStatus } from '@/lib/campaign-status'
 

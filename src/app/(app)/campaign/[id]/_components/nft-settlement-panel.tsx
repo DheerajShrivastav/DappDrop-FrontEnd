@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useToast } from '@/hooks/use-toast'
 import type { Campaign } from '@/lib/types'
 import { submitNFTMerkleRoot, mapContractRevertToMessage } from '@/lib/web3-service'
-import { plural } from '@/components/app'
+import { plural } from '@/components/app/format'
 import { ListReview } from './list-review'
 
 type NFTAllocationEntry = { wallet: string; standard: string | null; tokenId: string | null; amount: string; tasksCompleted: number }

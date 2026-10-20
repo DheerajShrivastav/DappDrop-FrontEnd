@@ -6,7 +6,10 @@ import type { CampaignStatusInfo } from '@/lib/campaign-status'
 import { shortDate, shortDateTime } from '@/lib/campaign-status'
 import { rewardDisplayLabel } from '@/lib/campaign-lifecycle'
 import { network, networkLabel } from '@/config/landing'
-import { Button, KeyValueList, Panel, payoutShortLabel, type KeyValueItem } from '@/components/app'
+import { Button } from '@/components/app/button'
+import { KeyValueList, type KeyValueItem } from '@/components/app/kv-list'
+import { Panel } from '@/components/app/panel'
+import { payoutShortLabel } from '@/components/app/chip-map'
 import { dateRange, isTieredMode, listDueBy } from './campaign-model'
 
 function participantsValue(campaign: Campaign): string {

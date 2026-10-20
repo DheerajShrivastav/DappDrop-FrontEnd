@@ -5,7 +5,9 @@ import type { Campaign } from '@/lib/types'
 import type { CampaignStatusInfo } from '@/lib/campaign-status'
 import { displayImageUrl } from '@/lib/campaign-image'
 import { network } from '@/config/landing'
-import { CampaignStatusChip, PageHeader, PayoutChip, shortAddress } from '@/components/app'
+import { CampaignStatusChip, PayoutChip } from '@/components/app/chip'
+import { PageHeader } from '@/components/app/page-header'
+import { shortAddress } from '@/components/app/format'
 
 /**
  * The campaign page header (§2.2 / §2.3): ← back · the chip row (state · payout) · the serif H1 ·

@@ -14,7 +14,10 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import type { Campaign } from '@/lib/types'
 import { cancelCampaignOnChain, closeCampaignOnChain, getCloseOptions, mapContractRevertToMessage } from '@/lib/web3-service'
-import { Button, Chip, Spinner, Textarea, buttonClass, plural, shortAddress } from '@/components/app'
+import { Button, Spinner, buttonClass } from '@/components/app/button'
+import { Chip } from '@/components/app/chip'
+import { Textarea } from '@/components/app/field'
+import { plural, shortAddress } from '@/components/app/format'
 
 type Report = {
   id: string

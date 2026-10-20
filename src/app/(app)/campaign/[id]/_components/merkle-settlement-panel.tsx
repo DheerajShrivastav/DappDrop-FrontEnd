@@ -5,7 +5,7 @@ import { useToast } from '@/hooks/use-toast'
 import type { Campaign } from '@/lib/types'
 import { submitERC20MerkleRoot, mapContractRevertToMessage } from '@/lib/web3-service'
 import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
-import { plural } from '@/components/app'
+import { plural } from '@/components/app/format'
 import { ListReview } from './list-review'
 import { amountText, splitAmount } from './reward-panel'
 

@@ -5,7 +5,9 @@ import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
 import type { Campaign } from '@/lib/types'
 import type { CampaignStatusInfo } from '@/lib/campaign-status'
 import { shortDateTime } from '@/lib/campaign-status'
-import { SectionHeader, Skeleton, plural, shortAddress } from '@/components/app'
+import { SectionHeader } from '@/components/app/page-header'
+import { Skeleton } from '@/components/app/states'
+import { plural, shortAddress } from '@/components/app/format'
 import { splitAmount, amountText } from './reward-panel'
 
 type ERC20Entry = { wallet: string; amount: string; tasksCompleted: number }

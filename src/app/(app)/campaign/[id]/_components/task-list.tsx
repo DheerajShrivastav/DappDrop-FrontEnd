@@ -4,7 +4,11 @@ import type { Campaign, UserTask, Task as TaskType } from '@/lib/types'
 import type { CampaignStatusInfo } from '@/lib/campaign-status'
 import { shortDate, shortDateTime } from '@/lib/campaign-status'
 import { TASK_VERIFICATION_METHOD } from '@/lib/task-types'
-import { Button, Chip, Panel, SectionHeader, Spinner, VerificationChip, plural } from '@/components/app'
+import { Button, Spinner } from '@/components/app/button'
+import { Chip, VerificationChip } from '@/components/app/chip'
+import { Panel } from '@/components/app/panel'
+import { SectionHeader } from '@/components/app/page-header'
+import { plural } from '@/components/app/format'
 
 /**
  * "Your tasks" (§1.8 / §2.2): numbered hairline rows: 01 · what to do · how it's checked · the

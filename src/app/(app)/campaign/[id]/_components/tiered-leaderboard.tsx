@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
 import type { Campaign } from '@/lib/types'
 import { getTieredLeaderboard, getTieredTiers, getERC20TokenInfo, type LeaderboardEntry, type TierView } from '@/lib/web3-service'
-import { SectionHeader, Skeleton, plural, shortAddress } from '@/components/app'
+import { SectionHeader } from '@/components/app/page-header'
+import { Skeleton } from '@/components/app/states'
+import { plural, shortAddress } from '@/components/app/format'
 import { amountText, splitAmount } from './reward-panel'
 
 function matchTierAmount(isRank: boolean, tiers: TierView[], rankOrScore: number): string | null {
