@@ -315,7 +315,7 @@ export function CampaignFixtures() {
           <label>
             <span className="sr-only">Choose a state</span>
             <select
-              className="border-b border-rule-strong bg-transparent text-ink"
+              className="mt-1 block w-full max-w-full border-b border-rule-strong bg-transparent text-ink sm:inline-block sm:w-auto"
               value={key}
               onChange={(e) => (window.location.search = `?state=${e.target.value}`)}
             >
