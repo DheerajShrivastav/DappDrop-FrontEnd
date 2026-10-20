@@ -7,9 +7,10 @@
 'use client'
 
 import { Suspense, useEffect, useState, useRef } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAuth, useHumanity } from '@humanity-org/react-sdk'
-import { Loader2 } from 'lucide-react'
+import { Button, ErrorState, PageContainer, PageHeader, Spinner } from '@/components/app'
 
 function CallbackContent() {
   const router = useRouter()
@@ -17,7 +18,7 @@ function CallbackContent() {
   const { isAuthenticated, isLoading, accessToken, error: authError } = useAuth()
   const { verify } = useHumanity()
   const [error, setError] = useState<string | null>(null)
-  const [status, setStatus] = useState('Completing authentication...')
+  const [status, setStatus] = useState('Completing sign-in…')
   const processedRef = useRef(false)
 
   // Check for OAuth error from the provider
@@ -52,7 +53,7 @@ function CallbackContent() {
 
     async function completeVerification() {
       try {
-        setStatus('Verifying identity...')
+        setStatus('Checking your humanity status…')
 
         // Read the presets that were stored before the OAuth redirect.
         // May be a JSON array (new) or a plain string (old campaigns).
@@ -69,7 +70,7 @@ function CallbackContent() {
         // Client-side verify the first preset for UX feedback only
         await verify(storedPresets[0])
 
-        setStatus('Saving verification...')
+        setStatus('Saving the result…')
 
         // Send accessToken + all presets to backend for server-side verification.
         // The server validates the token against each preset.
@@ -106,7 +107,7 @@ function CallbackContent() {
           }),
         )
 
-        setStatus('Redirecting...')
+        setStatus('Taking you back to the campaign…')
 
         // Redirect back to the campaign page
         const returnPath = sessionStorage.getItem('humanity_return_to')
@@ -127,46 +128,63 @@ function CallbackContent() {
   if (error) {
     const returnPath = sessionStorage.getItem('humanity_return_to') || '/'
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="w-full max-w-md space-y-4 text-center">
-          <h2 className="text-xl font-semibold text-destructive">
-            Verification Error
-          </h2>
-          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-4">
-            <p className="text-sm">{error}</p>
-          </div>
-          <button
-            onClick={() => router.replace(returnPath)}
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors underline"
-          >
-            Go back and try again
-          </button>
-        </div>
-      </div>
+      <PageContainer>
+        <PageHeader eyebrow="Humanity check" title="Verifying" />
+        <ErrorState
+          className="mt-10"
+          title="The humanity check didn’t go through."
+          reason={error}
+          action={
+            <Button variant="secondary" onClick={() => router.replace(returnPath)}>
+              Go back and try again
+            </Button>
+          }
+        />
+      </PageContainer>
     )
   }
 
+  return <Pending status={status} />
+}
+
+/** The in-progress state: the step in words, announced politely. */
+function Pending({ status }: { status: string }) {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="text-center space-y-3">
-        <Loader2 className="h-8 w-8 animate-spin mx-auto text-purple-500" />
-        <p className="text-sm text-muted-foreground">{status}</p>
-      </div>
-    </div>
+    <PageContainer>
+      <PageHeader eyebrow="Humanity check" title="Verifying" />
+      <p role="status" className="mt-10 flex items-center gap-3 text-body text-ink-2">
+        <Spinner />
+        {status}
+      </p>
+    </PageContainer>
   )
 }
 
+// Mirrors HumanityAuthProvider (src/context/humanity-provider.tsx): without these the provider
+// isn't mounted, and the SDK hooks above would throw (the page crashed to #__next_error__).
+const HUMANITY_CONFIGURED = Boolean(process.env.NEXT_PUBLIC_HUMANITY_CLIENT_ID && process.env.NEXT_PUBLIC_HUMANITY_REDIRECT_URI)
+
 export default function HumanityCallbackPage() {
+  if (!HUMANITY_CONFIGURED) {
+    return (
+      <PageContainer>
+        <PageHeader eyebrow="Humanity check" title="Verifying" />
+        <ErrorState
+          className="mt-10"
+          title="The humanity check isn’t set up here."
+          reason="This deployment has no Humanity sign-in configured, so there’s nothing to finish. Campaigns that need the check can’t verify it on this site yet."
+          action={
+            <Button asChild variant="secondary">
+              <Link href="/campaigns">Back to campaigns</Link>
+            </Button>
+          }
+        />
+      </PageContainer>
+    )
+  }
   return (
     <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <div className="text-center space-y-3">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto text-purple-500" />
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          </div>
-        </div>
-      }
+      fallback={<Pending status="Loading…" />}
     >
       <CallbackContent />
     </Suspense>

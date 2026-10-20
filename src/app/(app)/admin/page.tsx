@@ -1,8 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import { Loader2, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useWallet } from '@/context/wallet-provider'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
@@ -23,12 +22,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Chip, EmptyState, LoadingRegion, PageContainer, PageHeader, RowsSkeleton, shortAddress } from '@/components/app'
 import { flagAccountOnChain, emergencyPauseOnChain, emergencyUnpauseOnChain } from '@/lib/web3-service'
 
 type AdminRole = 'DEFAULT_ADMIN' | 'MODERATOR' | 'EMERGENCY_ADMIN' | 'SIGNER' | 'SETTLER'
 type Roles = Record<AdminRole, boolean>
-
-const fadeInUp = { initial: { opacity: 0, y: 12 }, animate: { opacity: 1, y: 0 } }
 
 function errorMessage(error: unknown): string {
   return String((error as any)?.reason ?? (error as any)?.shortMessage ?? (error as any)?.message ?? error ?? 'Something went wrong')
@@ -69,21 +67,50 @@ export default function AdminConsolePage() {
     loadRoles()
   }, [loadRoles])
 
+  const header = (
+    <PageHeader
+      eyebrow={
+        address ? (
+          <>
+            Internal · <span title={address} className="normal-case">{shortAddress(address)}</span>
+          </>
+        ) : (
+          'Internal'
+        )
+      }
+      title="Admin console"
+      lead="Access is gated on-chain by the connected wallet’s roles."
+      chips={
+        roles
+          ? (Object.entries(roles) as [AdminRole, boolean][])
+              .filter(([, held]) => held)
+              .map(([role]) => (
+                <Chip key={role} variant="check" mark="✓">
+                  {role}
+                </Chip>
+              ))
+          : undefined
+      }
+    />
+  )
+
   if (!isConnected) {
     return (
-      <div className="container mx-auto max-w-3xl py-16 text-center">
-        <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-muted-foreground" />
-        <h1 className="text-xl font-semibold">Connect your wallet</h1>
-        <p className="mt-2 text-muted-foreground">Admin console access is gated on-chain by the connected wallet&apos;s role.</p>
-      </div>
+      <PageContainer>
+        {header}
+        <EmptyState className="mt-10" title="Connect your wallet." body="Use a wallet that holds a moderator, admin or emergency role." />
+      </PageContainer>
     )
   }
 
   if (isLoadingRoles) {
     return (
-      <div className="container mx-auto flex max-w-3xl items-center justify-center py-24">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <PageContainer>
+        {header}
+        <LoadingRegion label="Checking admin roles" className="mt-10 block">
+          <RowsSkeleton count={3} />
+        </LoadingRegion>
+      </PageContainer>
     )
   }
 
@@ -91,37 +118,25 @@ export default function AdminConsolePage() {
 
   if (!hasAnyRole) {
     return (
-      <div className="container mx-auto max-w-3xl py-16 text-center">
-        <ShieldAlert className="mx-auto mb-4 h-10 w-10 text-destructive" />
-        <h1 className="text-xl font-semibold">Access denied</h1>
-        <p className="mt-2 text-muted-foreground">
-          Wallet <span className="font-mono">{address}</span> does not hold any admin role on-chain.
-        </p>
-      </div>
+      <PageContainer>
+        {header}
+        <EmptyState
+          className="mt-10"
+          title="This wallet has no admin role."
+          body={
+            <>
+              Wallet <span className="font-mono" title={address ?? undefined}>{shortAddress(address)}</span> doesn’t hold any admin role on-chain.
+            </>
+          }
+        />
+      </PageContainer>
     )
   }
 
   return (
-    <motion.div {...fadeInUp} className="container mx-auto max-w-6xl py-10">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Admin console</h1>
-          <p className="text-sm text-muted-foreground">
-            Connected as <span className="font-mono">{address}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {roles &&
-            (Object.entries(roles) as [AdminRole, boolean][])
-              .filter(([, held]) => held)
-              .map(([role]) => (
-                <Badge key={role} variant="secondary" className="gap-1">
-                  <ShieldCheck className="h-3 w-3" /> {role}
-                </Badge>
-              ))}
-        </div>
-      </div>
-
+    <PageContainer>
+      {header}
+      <div className="mt-10">
       <Tabs defaultValue={firstAvailableTab(roles)}>
         <TabsList className="flex-wrap">
           {roles?.MODERATOR && <TabsTrigger value="search">Search</TabsTrigger>}
@@ -169,7 +184,8 @@ export default function AdminConsolePage() {
           </TabsContent>
         )}
       </Tabs>
-    </motion.div>
+      </div>
+    </PageContainer>
   )
 }
 
@@ -260,7 +276,7 @@ function SearchSection() {
                   <TableCell>{c.title}</TableCell>
                   <TableCell className="font-mono text-xs">{c.hostAddress}</TableCell>
                   <TableCell>{String(c.isActive)}</TableCell>
-                  <TableCell>{c.hiddenFromDiscovery ? <Badge variant="destructive">hidden</Badge> : '—'}</TableCell>
+                  <TableCell>{c.hiddenFromDiscovery ? <Chip variant="attention" mark="!">hidden</Chip> : '—'}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -336,9 +352,7 @@ function RelayerSection() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center gap-3">
-            <Badge variant={killSwitchEnabled ? 'destructive' : 'secondary'}>
-              {killSwitchEnabled ? 'DISABLED (killed)' : 'active'}
-            </Badge>
+            <Chip variant={killSwitchEnabled ? "attention" : "check"} mark={killSwitchEnabled ? "!" : "✓"}>{killSwitchEnabled ? 'DISABLED (killed)' : 'active'}</Chip>
             {data?.killSwitch?.reason && <span className="text-sm text-muted-foreground">{data.killSwitch.reason}</span>}
           </div>
           {!killSwitchEnabled ? (
@@ -477,7 +491,7 @@ function KeeperSection() {
                   <TableCell>{new Date(c.endDate).toLocaleString()}</TableCell>
                   <TableCell>
                     {c.alert ? (
-                      <Badge variant="destructive">{Math.round(c.overdueMinutes)}m overdue</Badge>
+                      <Chip variant="attention" mark="!">{Math.round(c.overdueMinutes)}m overdue</Chip>
                     ) : (
                       `${Math.round(c.overdueMinutes)}m`
                     )}
@@ -1026,7 +1040,7 @@ function DisputesSection() {
                 <TableCell>{c.openReportCount}</TableCell>
                 <TableCell>{c.allocatedWalletCount}</TableCell>
                 <TableCell>
-                  {c.escalation?.escalated ? <Badge variant="destructive">escalated</Badge> : '—'}
+                  {c.escalation?.escalated ? <Chip variant="attention" mark="!">escalated</Chip> : '—'}
                 </TableCell>
               </TableRow>
             ))}
