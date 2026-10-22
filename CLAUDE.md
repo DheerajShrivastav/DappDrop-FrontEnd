@@ -10,14 +10,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run dev          # Start dev server on :3000 with Turbopack
 npm run build        # prisma generate + next build
 npm run lint         # ESLint via next lint
-npm run typecheck    # tsc --noEmit (no test suite exists)
+npm run typecheck    # tsc --noEmit
+npm run test:unit    # unit tests: src/**/*.test.ts via tsx --test (node:test)
 
 npx prisma generate  # Re-generate Prisma client after schema changes
 npx prisma migrate dev --name <name>  # Create and apply a new migration
 npx prisma studio    # Open DB browser
 ```
 
-There is no test suite. Type-checking (`npm run typecheck`) is the primary correctness gate.
+Type-checking (`npm run typecheck`) is the primary correctness gate; `npm run test:unit` covers the pure helpers (status model, indexer schema guard, hidden-campaigns filter).
 
 ---
 

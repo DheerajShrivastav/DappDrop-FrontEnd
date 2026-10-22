@@ -20,7 +20,9 @@ export type StatusBucket = 'open' | 'claimable' | 'pending' | 'closed' | 'cancel
 
 export const STATUS_BUCKET_BY_LIFECYCLE: Record<LifecycleState, StatusBucket> = {
   draft: 'closed',
+  upcoming: 'pending',
   open: 'open',
+  ended_unrecorded: 'pending',
   ended_finalizing: 'pending',
   allocations_published: 'pending',
   overdue_fallback: 'pending',

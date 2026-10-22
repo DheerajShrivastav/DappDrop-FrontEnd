@@ -52,6 +52,7 @@ import { CampaignSidebar } from './_components/campaign-sidebar'
 import { TaskList } from './_components/task-list'
 import { CampaignLifecycleBanner } from './_components/campaign-lifecycle-banner'
 import { hasEndTimePassed, EXPIRED_OPEN_WARNING } from '@/lib/campaign-timing'
+import { getCampaignStatus } from '@/lib/campaign-status'
 import { MerkleSettlementPanel } from './_components/merkle-settlement-panel'
 import { ClaimPanel } from './_components/claim-panel'
 import { TieredClaimPanel } from './_components/tiered-claim-panel'
@@ -162,9 +163,9 @@ export default function CampaignDetailsPage() {
     if (isTimeExpiredNotClosed) {
       toast({
         variant: 'destructive',
-        title: 'Campaign Expired',
+        title: 'This campaign has ended',
         description:
-          'This campaign\'s end time has passed but it has not been officially closed by the creator. No new interactions are possible.',
+          'Its end time has passed, so tasks can no longer be completed.',
       })
       return
     }
@@ -783,10 +784,10 @@ export default function CampaignDetailsPage() {
     campaign &&
     address?.toLowerCase() === campaign.host.toLowerCase()
 
-  // Campaign is open on-chain but its end time has already passed —
-  // the creator forgot to call endCampaign(). Users cannot interact.
-  const isTimeExpiredNotClosed =
-    campaign?.status === 'Open' && new Date() > new Date(campaign.endDate)
+  // Shared status model: Open on-chain but past its end time reads as "Ended" everywhere,
+  // and tasks are closed. Anyone can record the end (endCampaign is permissionless then).
+  const displayStatus = campaign ? getCampaignStatus(campaign) : null
+  const isTimeExpiredNotClosed = displayStatus?.state === 'ended_unrecorded'
 
   if (isLoading) {
     return (
@@ -833,7 +834,7 @@ export default function CampaignDetailsPage() {
   return (
     <div className="min-h-screen bg-gradient-soft">
       {/* Hero Section */}
-      <CampaignHero campaign={campaign} isTimeExpiredNotClosed={!!isTimeExpiredNotClosed} />
+      <CampaignHero campaign={campaign} />
 
       {/* Lifecycle state ladder (NFR-9): honest, named state with claim/sweep timing. */}
       <div className="container mx-auto px-4 pt-8 space-y-6">
@@ -852,7 +853,6 @@ export default function CampaignDetailsPage() {
               campaign={campaign}
               userTasks={userTasks}
               role={role}
-              isTimeExpiredNotClosed={!!isTimeExpiredNotClosed}
               onOpenVerifyDialog={handleOpenVerifyDialog}
             />
 

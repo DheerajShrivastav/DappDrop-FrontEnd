@@ -112,7 +112,6 @@ import {
 } from '@/lib/x-task-fields'
 import { parseXTarget } from '@/lib/x-intents'
 import {
-  becomeHost,
   createDraftCampaignWithTasks,
   configureAndFundERC20Reward,
   setCampaignMaxParticipantsOnChain,
@@ -153,6 +152,8 @@ import {
   SetupChecklist,
   ToggleCard,
 } from './_components/wizard-ui'
+import { HostGate } from './_components/host-gate'
+import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
 import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 
 // Ethereum address regex: 0x followed by 40 hex characters
@@ -453,7 +454,6 @@ export default function CreateCampaignPage() {
     retryable: boolean
     category: string
   } | null>(null)
-  const [isBecomingHost, setIsBecomingHost] = useState(false)
   const [aiPrompt, setAiPrompt] = useState('')
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null)
   const [campaignCreated, setCampaignCreated] = useState(false)
@@ -1079,8 +1079,10 @@ export default function CreateCampaignPage() {
                 metadata: {
                   paymentRequired: true,
                   paymentRecipient: task.paymentRecipient,
-                  chainId: task.chainId,
-                  network: task.network,
+                  // Always the deployment chain (never a form value), so a Sepolia
+                  // app can't save a mainnet payment task.
+                  chainId: DEPLOYMENT_CHAIN.id,
+                  network: DEPLOYMENT_CHAIN.network,
                   tokenAddress: task.tokenAddress || null,
                   tokenSymbol: task.tokenSymbol,
                   amount: task.amount,
@@ -1201,27 +1203,6 @@ export default function CreateCampaignPage() {
     } catch (error) {
       // Silently fail - this is a cleanup operation
       console.warn('⚠️ Failed to cleanup orphaned image:', error)
-    }
-  }
-
-  const handleBecomeHost = async () => {
-    if (!isConnected || !address) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Please connect your wallet first.',
-      })
-      return
-    }
-    setIsBecomingHost(true)
-    try {
-      await becomeHost()
-      // Re-check role after transaction
-      await checkRoles(address)
-    } catch (e) {
-      // Error toast is handled in the service
-    } finally {
-      setIsBecomingHost(false)
     }
   }
 
@@ -1436,46 +1417,11 @@ export default function CreateCampaignPage() {
 
   if (role !== 'host') {
     return (
-      <div className="container mx-auto px-4 py-12 max-w-4xl">
-        <Card className="bg-card border shadow-elevated">
-          <CardHeader>
-            <CardTitle className="text-3xl font-bold text-center flex items-center justify-center gap-2">
-              <UserPlus /> Become a Host
-            </CardTitle>
-            <CardDescription className="text-center">
-              Get the HOST_ROLE to start creating campaigns.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Alert variant="default" className="border-primary/20 bg-card mb-6">
-              <Info className="h-4 w-4 text-primary" />
-              <AlertTitle>Permissionless Hosting</AlertTitle>
-              <AlertDescription>
-                To create a campaign, you need the HOST_ROLE. You can grant this
-                role to your connected wallet address yourself.
-              </AlertDescription>
-            </Alert>
-            <div className="text-center">
-              <p className="mb-4 text-muted-foreground">
-                Click the button below to sign a transaction and grant yourself
-                the HOST_ROLE.
-              </p>
-              <Button
-                size="lg"
-                onClick={handleBecomeHost}
-                disabled={isBecomingHost || !isConnected}
-              >
-                {isBecomingHost ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <ShieldCheck className="mr-2 h-4 w-4" />
-                )}
-                Get Host Role
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <HostGate
+        isConnected={isConnected}
+        address={address}
+        onGranted={() => (address ? checkRoles(address) : undefined)}
+      />
     )
   }
 
@@ -2322,59 +2268,23 @@ export default function CreateCampaignPage() {
                                 />
 
                                 <div className="grid gap-4 sm:grid-cols-2">
-                                  <FormField
-                                    control={form.control}
-                                    name={`tasks.${index}.network`}
-                                    render={({ field }) => (
-                                      <FormItem>
-                                        <FormLabel>
-                                          Network
-                                        </FormLabel>
-                                        <Select
-                                          onValueChange={(value) => {
-                                            field.onChange(value)
-                                            // Set chainId based on network
-                                            const chainIds: Record<
-                                              string,
-                                              number
-                                            > = {
-                                              sepolia: 11155111,
-                                              ethereum: 1,
-                                              base: 8453,
-                                              polygon: 137,
-                                            }
-                                            form.setValue(
-                                              `tasks.${index}.chainId`,
-                                              chainIds[value],
-                                            )
-                                          }}
-                                          value={field.value || 'ethereum'}
-                                          defaultValue="ethereum"
-                                        >
-                                          <FormControl>
-                                            <SelectTrigger>
-                                              <SelectValue placeholder="Ethereum" />
-                                            </SelectTrigger>
-                                          </FormControl>
-                                          <SelectContent>
-                                            <SelectItem value="ethereum">
-                                              Ethereum
-                                            </SelectItem>
-                                            <SelectItem value="base">
-                                              Base
-                                            </SelectItem>
-                                            <SelectItem value="polygon">
-                                              Polygon
-                                            </SelectItem>
-                                            <SelectItem value="sepolia">
-                                              Sepolia (testnet)
-                                            </SelectItem>
-                                          </SelectContent>
-                                        </Select>
-                                        <FormMessage />
-                                      </FormItem>
-                                    )}
-                                  />
+                                  {/* Locked to the deployment chain: a payment task on a
+                                      Sepolia app must not ask for mainnet funds. The value
+                                      saved is set on submit, not taken from this field. */}
+                                  <FormItem>
+                                    <FormLabel>Network</FormLabel>
+                                    <FormControl>
+                                      <Input
+                                        value={DEPLOYMENT_CHAIN.name}
+                                        readOnly
+                                        disabled
+                                        aria-readonly="true"
+                                      />
+                                    </FormControl>
+                                    <p className="text-xs text-muted-foreground">
+                                      Payments go on the chain this app runs on.
+                                    </p>
+                                  </FormItem>
 
                                   <FormField
                                     control={form.control}
