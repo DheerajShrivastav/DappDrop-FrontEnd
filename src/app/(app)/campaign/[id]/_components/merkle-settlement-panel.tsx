@@ -1,39 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
-import { Loader2, Gavel, AlertTriangle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-} from '@/components/ui/card'
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from '@/components/ui/table'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
-import { Skeleton } from '@/components/ui/skeleton'
 import type { Campaign } from '@/lib/types'
 import { submitERC20MerkleRoot, mapContractRevertToMessage } from '@/lib/web3-service'
-import { ROOT_DISPUTE_WINDOW_MS } from '@/lib/campaign-lifecycle'
+import { formatAllocationAmount as formatAmount } from '@/lib/allocation-format'
+import { plural } from '@/components/app/format'
+import { ListReview } from './list-review'
+import { amountText, splitAmount } from './reward-panel'
 
 type AllocationEntry = { wallet: string; amount: string; tasksCompleted: number }
 type AllocationSummary = {
@@ -104,14 +78,14 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to propose allocation')
       toast({
-        title: 'Allocation proposed',
-        description: `${data.allocation.entries.length} qualifying wallet(s). Review the table below before publishing.`,
+        title: 'List proposed',
+        description: `${plural(data.allocation.entries.length, 'wallet')} on it. Check it below, then publish.`,
       })
       await fetchLatest()
     } catch (e: any) {
       toast({
         variant: 'destructive',
-        title: 'Could not propose allocation',
+        title: 'The list wasn’t proposed',
         description: e.message || 'Please try again.',
       })
     } finally {
@@ -139,14 +113,13 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
     try {
       await submitERC20MerkleRoot(campaign.id, allocation.root)
       toast({
-        title: 'Allocation root published',
-        description:
-          'Claims open in 24 hours (the community review / dispute window).',
+        title: 'List published',
+        description: 'Claims open in 24 hours, after the public review.',
       })
     } catch (e: any) {
       toast({
         variant: 'destructive',
-        title: 'Failed to publish root',
+        title: 'The list wasn’t published',
         description: mapContractRevertToMessage(e),
       })
       setIsPublishing(false)
@@ -189,167 +162,29 @@ export function MerkleSettlementPanel({ campaign }: { campaign: Campaign }) {
   if (mode && mode !== 'UNSET' && mode !== 'MERKLE_ERC20') return null
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Gavel className="h-5 w-5" /> Review & Publish Allocations
-        </CardTitle>
-        <CardDescription>
-          The proposal below is computed off-chain from on-chain task completions. You
-          review it, then sign the publish transaction yourself — the platform never
-          publishes a root on your behalf.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isLoading ? (
-          <div className="space-y-4">
-            <Skeleton className="h-4 w-2/3" />
-            <Skeleton className="h-40 w-full rounded-md" />
-            <Skeleton className="h-9 w-40 rounded-md" />
-          </div>
-        ) : (
-          <>
-            {allocation && allocation.status === 'PUBLISHED' && (
-              <div className="flex items-start gap-2 rounded-md border border-status-claimable-border bg-status-claimable-bg text-status-claimable-fg p-3 text-sm">
-                <Gavel className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>
-                  Version {allocation.version} is published. Claims open{' '}
-                  {allocation.publishedAt
-                    ? new Date(
-                        new Date(allocation.publishedAt).getTime() +
-                          ROOT_DISPUTE_WINDOW_MS,
-                      ).toLocaleString()
-                    : 'once the 24h review window elapses'}
-                  .
-                </span>
-              </div>
-            )}
-
-            {allocation && allocation.status === 'PROPOSED' && (
-              <div className="flex items-start gap-2 rounded-md border border-status-pending-border bg-status-pending-bg text-status-pending-fg p-3 text-sm">
-                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>
-                  Version {allocation.version} is proposed but not yet published.
-                  Nothing is claimable until you publish it.
-                </span>
-              </div>
-            )}
-
-            {allocation ? (
-              <>
-                <div className="text-sm text-muted-foreground">
-                  Total allocated:{' '}
-                  {formatAmount(allocation.totalAmount, allocation.decimals, allocation.symbol)}{' '}
-                  · Policy: {allocation.policy} · {allocation.entries.length} wallet(s)
-                </div>
-                <div className="max-h-80 overflow-y-auto rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Wallet</TableHead>
-                        <TableHead>Tasks completed</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {allocation.entries.map((e) => (
-                        <TableRow key={e.wallet}>
-                          <TableCell className="font-mono text-xs">
-                            {e.wallet}
-                          </TableCell>
-                          <TableCell>{e.tasksCompleted}</TableCell>
-                          <TableCell className="text-right">
-                            {formatAmount(e.amount, allocation.decimals, allocation.symbol)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {allocation.excludedForHumanity &&
-                  allocation.excludedForHumanity.length > 0 && (
-                    <div className="space-y-2 rounded-md border border-status-pending-border bg-status-pending-bg p-3">
-                      <div className="flex items-start gap-2 text-sm text-status-pending-fg">
-                        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                        <span>
-                          {allocation.excludedForHumanity.length} wallet(s) excluded — not
-                          Humanity-verified. These wallets completed every task but are not
-                          Humanity-verified, so they are excluded from this gated campaign&apos;s
-                          allocation. Confirm this is intended before publishing.
-                        </span>
-                      </div>
-                      <div className="max-h-40 overflow-y-auto rounded border bg-background">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Excluded wallet</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {allocation.excludedForHumanity.map((w) => (
-                              <TableRow key={w}>
-                                <TableCell className="font-mono text-xs">{w}</TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  )}
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No allocation has been proposed yet.
-              </p>
-            )}
-
-            {isClosed ? (
-              <p className="text-sm text-muted-foreground">
-                This campaign is closed — the allocation is frozen and can no longer be changed.
-                Participants can still claim until the grace period ends.
-              </p>
-            ) : (
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                onClick={handlePropose}
-                disabled={isProposing}
-              >
-                {isProposing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {allocation ? 'Re-propose (recompute)' : 'Propose Allocation'}
-              </Button>
-              {allocation && allocation.status === 'PROPOSED' && (
-                <AlertDialog open={isRepublishConfirmOpen} onOpenChange={setIsRepublishConfirmOpen}>
-                  <Button onClick={handlePublish} disabled={isPublishing}>
-                    {isPublishing && (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    )}
-                    Publish Root
-                  </Button>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Publish a corrected allocation?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Publishing a different root restarts the 24-hour review window for
-                        everyone — all claims are delayed by another 24 hours, including wallets
-                        whose allocation is unchanged.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel disabled={isPublishing}>Cancel</AlertDialogCancel>
-                      <AlertDialogAction disabled={isPublishing} onClick={doPublish}>
-                        {isPublishing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Publish anyway'}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
-            </div>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+    <ListReview
+      isLoading={isLoading}
+      allocation={allocation}
+      summary={
+        allocation
+          ? `${plural(allocation.entries.length, 'wallet')} · ${amountText(splitAmount(formatAmount(allocation.totalAmount, allocation.decimals, allocation.symbol)))} in total · ${allocation.policy}`
+          : undefined
+      }
+      columns={['Wallet', 'Tasks done', 'Amount']}
+      rows={(allocation?.entries ?? []).map((e) => ({
+        key: e.wallet,
+        wallet: e.wallet,
+        cells: [e.tasksCompleted, amountText(splitAmount(formatAmount(e.amount, allocation!.decimals, allocation!.symbol)))],
+      }))}
+      excluded={allocation?.excludedForHumanity}
+      isClosed={isClosed}
+      isProposing={isProposing}
+      isPublishing={isPublishing}
+      onPropose={handlePropose}
+      onPublish={handlePublish}
+      republishOpen={isRepublishConfirmOpen}
+      onRepublishOpenChange={setIsRepublishConfirmOpen}
+      onConfirmRepublish={doPublish}
+    />
   )
 }

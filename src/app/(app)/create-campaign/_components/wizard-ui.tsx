@@ -1,71 +1,109 @@
 'use client'
 
-import { useState } from 'react'
-import type { LucideIcon } from 'lucide-react'
-import { Check, ChevronDown, Copy, ExternalLink, Pencil } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
+import { useId, useState } from 'react'
+import { buttonClass, shortAddress } from '@/components/app'
 import { cn } from '@/lib/utils'
 
 /**
- * An on/off option as a bordered card — the whole card is the click target. Same selected
- * style as the Details step's "Verified humans only" card.
+ * Small pieces shared by the wizard's steps (08-site phase 2, Monolith). Tokens only; the one red
+ * is for errors (`Notice tone="error"`), gold `!` marks something that needs attention.
  */
-export function ToggleCard({
-  icon: Icon,
+
+/** A one-line note, an attention note (gold `!`) or an error (red `!`). `title` is optional. */
+export function Notice({
+  tone = 'note',
   title,
-  description,
-  checked,
-  onCheckedChange,
+  children,
+  className,
+  live,
 }: {
-  icon: LucideIcon
-  title: string
-  description: React.ReactNode
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
+  tone?: 'note' | 'attention' | 'error'
+  title?: React.ReactNode
+  children?: React.ReactNode
+  className?: string
+  /** Announce it when it appears (role="status", or "alert" for an error). */
+  live?: boolean
 }) {
   return (
-    <label
+    <div
+      role={live ? (tone === 'error' ? 'alert' : 'status') : undefined}
       className={cn(
-        'flex cursor-pointer items-start gap-4 rounded-lg border p-4 transition-colors',
-        checked ? 'border-primary bg-primary/5' : 'hover:border-foreground/20 hover:bg-muted/40',
+        'flex items-start gap-3 rounded-md border px-4 py-3 text-[0.875rem] leading-relaxed',
+        tone === 'note' && 'border-dashed border-rule-strong text-ink-2',
+        tone === 'attention' && 'border-rule-strong bg-surface text-ink-2',
+        tone === 'error' && 'border-danger bg-surface text-ink-2',
+        className,
       )}
     >
-      <span
-        className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-colors',
-          checked ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
-        )}
-      >
-        <Icon className="h-5 w-5" />
-      </span>
-      <span className="flex-1 space-y-1">
-        <span className="block text-sm font-medium leading-none">{title}</span>
-        <span className="block text-sm leading-relaxed text-muted-foreground">{description}</span>
-      </span>
-      <Checkbox
-        className="mt-0.5"
-        checked={checked}
-        onCheckedChange={(v) => onCheckedChange(v === true)}
-      />
-    </label>
+      {tone !== 'note' && (
+        <span aria-hidden="true" className={cn('font-mono font-semibold leading-relaxed', tone === 'error' ? 'text-danger' : 'text-signal')}>
+          !
+        </span>
+      )}
+      <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+        {title && <p className={cn('font-semibold', tone === 'error' ? 'text-danger' : 'text-ink')}>{title}</p>}
+        {children}
+      </div>
+    </div>
   )
 }
 
 /**
- * Collapsible "do this outside DappDrop first" instructions: numbered steps, an optional
- * action link, and footnotes. Open by default — the host needs it the first time, and it
- * collapses once they've read it.
+ * An on/off option: a native checkbox row (44 px target), the label and an optional line under
+ * it. Replaces the old icon "toggle cards" and the Radix checkbox.
+ */
+export function CheckRow({
+  checked,
+  onCheckedChange,
+  label,
+  description,
+  id,
+  className,
+}: {
+  checked: boolean
+  onCheckedChange: (checked: boolean) => void
+  label: React.ReactNode
+  description?: React.ReactNode
+  id?: string
+  className?: string
+}) {
+  const auto = useId()
+  const inputId = id ?? `c${auto.replace(/:/g, '')}`
+  return (
+    <div className={cn('flex items-start gap-3', className)}>
+      <input
+        id={inputId}
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onCheckedChange(e.target.checked)}
+        aria-describedby={description ? `${inputId}-d` : undefined}
+        className="mt-3 h-5 w-5 shrink-0 cursor-pointer accent-[var(--ink)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+      />
+      <div className="min-w-0">
+        <label htmlFor={inputId} className="flex min-h-11 cursor-pointer items-center text-[0.9375rem] text-ink">
+          {label}
+        </label>
+        {description && (
+          <p id={`${inputId}-d`} className="-mt-1.5 text-[0.8125rem] leading-snug text-ink-2">
+            {description}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Collapsible "do this outside DappDrop first" instructions: numbered steps, an optional action
+ * link and footnotes. Open by default: the host needs it the first time.
  */
 export function SetupChecklist({
-  icon: Icon,
   title,
   steps,
   action,
   missingActionText,
   notes,
 }: {
-  icon: LucideIcon
   title: string
   steps: React.ReactNode[]
   action?: { label: string; href: string }
@@ -74,49 +112,40 @@ export function SetupChecklist({
   notes?: React.ReactNode[]
 }) {
   const [open, setOpen] = useState(true)
+  const id = `sc${useId().replace(/:/g, '')}`
   return (
-    <div className="rounded-lg border">
+    <div className="rounded-md border border-rule-strong">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+        aria-controls={id}
+        className="flex min-h-11 w-full items-center gap-3 rounded-md px-4 py-2 text-left text-[0.9375rem] font-semibold text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-signal"
       >
-        <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 text-sm font-medium">{title}</span>
-        <ChevronDown
-          className={cn(
-            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
-            open && 'rotate-180',
-          )}
-        />
+        <span className="flex-1">{title}</span>
+        <span aria-hidden="true" className="font-mono text-[0.75rem] text-ink-3">
+          {open ? 'Hide' : 'Show'}
+        </span>
       </button>
       {open && (
-        <div className="space-y-4 border-t px-4 py-4">
-          <ol className="space-y-2.5">
+        <div id={id} className="grid gap-4 border-t border-rule px-4 py-4">
+          <ol className="grid gap-2.5">
             {steps.map((s, i) => (
-              <li key={i} className="flex gap-3 text-sm">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium tabular-nums">
-                  {i + 1}
-                </span>
-                <span className="text-muted-foreground">{s}</span>
+              <li key={i} className="flex gap-3 text-[0.875rem] leading-relaxed text-ink-2">
+                <span className="w-5 shrink-0 font-mono text-[0.75rem] leading-[1.6rem] text-ink-3">{String(i + 1).padStart(2, '0')}</span>
+                <span>{s}</span>
               </li>
             ))}
           </ol>
           {action ? (
-            <Button type="button" variant="outline" size="sm" asChild>
-              <a href={action.href} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="mr-2 h-4 w-4" />
-                {action.label}
-              </a>
-            </Button>
+            <a href={action.href} target="_blank" rel="noopener noreferrer" className={buttonClass({ variant: 'secondary', size: 'sm', className: 'justify-self-start' })}>
+              {action.label} <span aria-hidden="true">↗</span>
+            </a>
           ) : (
-            missingActionText && (
-              <p className="text-sm font-medium text-destructive">{missingActionText}</p>
-            )
+            missingActionText && <Notice tone="error">{missingActionText}</Notice>
           )}
           {notes && notes.length > 0 && (
-            <div className="space-y-1 text-xs text-muted-foreground">
+            <div className="grid gap-1 text-[0.8125rem] text-ink-3">
               {notes.map((n, i) => (
                 <p key={i}>{n}</p>
               ))}
@@ -128,33 +157,16 @@ export function SetupChecklist({
   )
 }
 
-/** One block of the Review step's summary card, with a link back to the step that owns it. */
-export function ReviewSection({
-  title,
-  onEdit,
-  children,
-}: {
-  title: string
-  onEdit?: () => void
-  children: React.ReactNode
-}) {
+/** One block of the Review statement: a mono label, an [Edit] link back to its step, the rows. */
+export function ReviewSection({ title, onEdit, editLabel, children }: { title: string; onEdit?: () => void; editLabel?: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-3 px-5 py-4">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {title}
-        </h3>
+    <section className="grid gap-2 border-t border-rule py-5 first:border-t-0 first:pt-0">
+      <div className="flex min-h-11 items-center justify-between gap-3">
+        <h2 className="dd-eyebrow">{title}</h2>
         {onEdit && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-            onClick={onEdit}
-          >
-            <Pencil className="mr-1.5 h-3 w-3" />
+          <button type="button" onClick={onEdit} className="dd-link inline-flex min-h-11 items-center text-small text-ink" aria-label={editLabel ?? `Edit: ${title}`}>
             Edit
-          </Button>
+          </button>
         )}
       </div>
       {children}
@@ -162,39 +174,28 @@ export function ReviewSection({
   )
 }
 
-/** A label/value row inside a ReviewSection. */
-export function ReviewRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5 text-sm sm:flex-row sm:justify-between sm:gap-6">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="min-w-0 sm:text-right">{children}</span>
-    </div>
-  )
-}
-
-/** A shortened 0x address with a copy button; the full address is in the title tooltip. */
+/** A shortened 0x address with a copy button; the full address is in the title. */
 export function CopyableAddress({ address }: { address: string }) {
   const [copied, setCopied] = useState(false)
-  if (!address) return <span className="text-muted-foreground">—</span>
-  const short = address.length > 12 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address
+  if (!address) return <span className="text-ink-3">—</span>
   return (
-    <span className="inline-flex items-center gap-1 font-mono text-xs" title={address}>
-      {short}
+    <span className="inline-flex items-center gap-1 font-mono" title={address}>
+      {shortAddress(address)}
       <button
         type="button"
-        aria-label="Copy address"
-        className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+        aria-label={copied ? 'Address copied' : 'Copy address'}
+        className="inline-flex h-8 min-w-8 items-center justify-center rounded px-1.5 text-[0.75rem] text-ink-2 underline decoration-rule-strong underline-offset-4 can-hover:hover:text-ink"
         onClick={async () => {
           try {
             await navigator.clipboard.writeText(address)
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
           } catch {
-            // Clipboard can be unavailable (insecure context); the address is still in the tooltip.
+            // Clipboard can be unavailable (insecure context); the address is still in the title.
           }
         }}
       >
-        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? 'Copied' : 'Copy'}
       </button>
     </span>
   )

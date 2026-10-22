@@ -198,12 +198,11 @@ const mapContractDataToCampaign = (
 
   // Reward data is no longer on-chain (the `reward` struct field was removed in v0.6.0).
   // Use the stored reward name/type from off-chain metadata.
-  const rewardName =
-    campaignMetadata?.rewardName || `Reward for ${contractData.name}`
-
-  // Use stored descriptions if available, otherwise fall back to generated placeholders
-  const shortDescription = campaignMetadata?.shortDescription || `A campaign hosted by ${contractData.host}`
-  const longDescription = campaignMetadata?.longDescription || `A campaign hosted by ${contractData.host} with the name ${contractData.name}. More details can be found on the blockchain.`
+  // No invented copy: when the off-chain metadata is missing these stay empty, and the UI
+  // shows nothing (description, image) or the honest state (reward) instead.
+  const rewardName = campaignMetadata?.rewardName || ''
+  const shortDescription = campaignMetadata?.shortDescription || ''
+  const longDescription = campaignMetadata?.longDescription || ''
 
   // Use the actual dates from the blockchain
   let startDate = new Date(Number(contractData.startTime) * 1000)
@@ -293,8 +292,7 @@ const mapContractDataToCampaign = (
       amount: undefined,
       name: rewardName,
     },
-    imageUrl: imageUrl || `https://placehold.co/600x400`,
-    'data-ai-hint': 'blockchain technology',
+    imageUrl: imageUrl || '',
   }
 }
 
@@ -439,7 +437,14 @@ export const connectWallet = async (): Promise<string | null> => {
   }
 }
 
-export const getAllCampaigns = async (): Promise<Campaign[]> => {
+/**
+ * Optional, additive (08-site phase 2, Builder B): `onError` lets a page show its own in-place
+ * error state ("We couldn't load campaigns" + Try again) instead of the toast. Without it the
+ * behaviour is unchanged (the toast, then an empty list).
+ */
+export type CampaignListLoadOptions = { onError?: (reason: string) => void }
+
+export const getAllCampaigns = async (opts: CampaignListLoadOptions = {}): Promise<Campaign[]> => {
   // --- Fast path: The Graph subgraph (single query, no N+1 RPC calls) ---
   const graphResult = await getGraphCampaigns()
   if (graphResult !== null) {
@@ -452,6 +457,10 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
     console.warn('Contract not initialized, trying to initialize read-only...')
     initializeReadOnlyProvider()
     if (!readOnlyContract) {
+      if (opts.onError) {
+        opts.onError('Could not connect to the campaign contract.')
+        return []
+      }
       toast({
         variant: 'destructive',
         title: 'Contract Error',
@@ -460,7 +469,7 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
       })
       return []
     }
-    return getAllCampaigns()
+    return getAllCampaigns(opts)
   }
 
   try {
@@ -540,6 +549,10 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
         'Contract call failed. Check contract address and network.',
         error,
       )
+      if (opts.onError) {
+        opts.onError('The campaign contract call failed.')
+        return []
+      }
       toast({
         variant: 'destructive',
         title: 'Contract Error',
@@ -548,6 +561,10 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
       })
     } else {
       console.error('Error fetching campaigns:', error)
+      if (opts.onError) {
+        opts.onError('The campaign data could not be fetched.')
+        return []
+      }
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -560,6 +577,7 @@ export const getAllCampaigns = async (): Promise<Campaign[]> => {
 
 export const getCampaignsByHostAddress = async (
   hostAddress: string,
+  opts: CampaignListLoadOptions = {},
 ): Promise<Campaign[]> => {
   // --- Fast path: The Graph subgraph ---
   const graphResult = await getGraphCampaignsByHost(hostAddress)
@@ -643,6 +661,10 @@ export const getCampaignsByHostAddress = async (
     return campaigns.filter((c): c is Campaign => c !== null)
   } catch (error) {
     console.error(`Error fetching campaigns for host ${hostAddress}:`, error)
+    if (opts.onError) {
+      opts.onError('Your campaigns could not be fetched.')
+      return []
+    }
     toast({
       variant: 'destructive',
       title: 'Error',
@@ -1626,8 +1648,8 @@ export const becomeHost = async () => {
     const tx = await contractWithSigner.grantHostRole(signer.address)
     await tx.wait()
     toast({
-      title: 'Success!',
-      description: `You have been granted the HOST_ROLE.`,
+      title: 'You can host campaigns now',
+      description: 'Your wallet has the host role. Create your first campaign.',
     })
   } catch (error: any) {
     console.error('Error granting host role:', error)

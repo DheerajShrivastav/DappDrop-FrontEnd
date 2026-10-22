@@ -1,256 +1,95 @@
-'use client'
-
-import { useState, useEffect } from 'react'
 import type { Campaign } from '@/lib/types'
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardFooter,
-    CardHeader,
-    CardTitle,
-} from './ui/card'
-import { Badge } from './ui/badge'
-import { Users, Gift, Calendar, Rocket, XCircle, Loader2, ArrowRight, Award } from 'lucide-react'
-import Link from 'next/link'
-import Image from 'next/image'
-import { format } from 'date-fns'
-import { useWallet } from '@/context/wallet-provider'
-import { useToast } from '@/hooks/use-toast'
-import { Button } from './ui/button'
-import { openCampaign, endCampaign, isPaused } from '@/lib/web3-service'
-import { getLifecycleState, settlementModeLabel } from '@/lib/campaign-lifecycle'
-import { getStatusStyle } from '@/lib/status-styles'
-import { hasEndTimePassed, EXPIRED_OPEN_WARNING } from '@/lib/campaign-timing'
-import {
-    AlertDialog,
-    AlertDialogAction,
-    AlertDialogCancel,
-    AlertDialogContent,
-    AlertDialogDescription,
-    AlertDialogFooter,
-    AlertDialogHeader,
-    AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { cn } from '@/lib/utils'
+import { getCampaignStatus } from '@/lib/campaign-status'
+import { displayImageUrl } from '@/lib/campaign-image'
+// Direct module imports, not the '@/components/app' barrel: the barrel pulls every primitive
+// (ScheduleField's calendar, ClaimActions…) into the route's first load.
+import { CampaignStatusChip } from '@/components/app/chip'
+import { CardLink } from '@/components/app/panel'
+import { KeyValueList } from '@/components/app/kv-list'
+import { payoutShortLabel } from '@/components/app/chip-map'
+import { plural, shortAddress } from '@/components/app/format'
+import { participantsFact, rewardFact, taskCheckSummary, timeFact } from '@/app/(app)/campaigns/_lib/discovery'
 
-interface CampaignCardProps {
-    campaign: Campaign
-    onUpdate?: () => void
-}
+/**
+ * The /campaigns card (app-design §1.7), typographic: the status chip + the payout label, the
+ * serif title (2 lines max), "Hosted by 0x7a1c…9c03", three fact rows (reward · participants ·
+ * the time row, which follows the state) and a footer line. A host-uploaded cover shows as a 16:7
+ * band above the chip; with none there's no band at all (never a placeholder).
+ *
+ * The whole card is one link (CardLink). Status words come only from getCampaignStatus().
+ * Presentational: the page owns the data (whether this wallet joined, its claimable reward).
+ *
+ * 08-site phase 2 replaced the old card (gradient image, translucent chips, the hover-only host
+ * "End" button that fired before the end time, APP-08/10). The dashboard's host actions moved to
+ * the dashboard's "Needs you" rows, which lead to the campaign page's host panels.
+ */
+export function CampaignCard({
+  campaign,
+  now,
+  joined = false,
+  rewardLabel,
+  hasReward = false,
+  headingLevel = 'h2',
+}: {
+  campaign: Campaign
+  now?: Date
+  /** This connected wallet joined the campaign. */
+  joined?: boolean
+  /** "250 EXAMPLE" when this wallet has a reward it can claim now (and the amount is known). */
+  rewardLabel?: string
+  /** This wallet has a reward it can claim now (amount known or not). */
+  hasReward?: boolean
+  headingLevel?: 'h2' | 'h3'
+}) {
+  const at = now ?? new Date()
+  const status = getCampaignStatus(campaign, at)
+  const payout = payoutShortLabel(campaign.settlement?.mode)
+  const image = displayImageUrl(campaign.imageUrl)
+  const reward = rewardFact(campaign)
+  const time = timeFact(campaign, status, at)
+  const checks = taskCheckSummary(campaign)
+  const waitingForList = status.state === 'ended_finalizing' || status.state === 'overdue_fallback'
 
-export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
-    const { address } = useWallet()
-    const { toast } = useToast()
-    const [isUpdating, setIsUpdating] = useState(false)
-    const [isContractPaused, setIsContractPaused] = useState(false)
-    const [isDialogOpen, setIsDialogOpen] = useState(false)
-    const [actionToConfirm, setActionToConfirm] = useState<'open' | 'end' | null>(
-        null
-    )
-
-    useEffect(() => {
-        const checkPausedState = async () => {
-            const paused = await isPaused()
-            setIsContractPaused(paused)
-        }
-        checkPausedState()
-    }, [])
-
-    const isHost =
-        address && address.toLowerCase() === campaign.host.toLowerCase()
-
-    const handleAction = async () => {
-        if (!actionToConfirm) return
-        setIsUpdating(true)
-        setIsDialogOpen(false)
-        try {
-            if (actionToConfirm === 'open') {
-                // Check if campaign is already open
-                if (campaign.status === 'Open') {
-                    toast({
-                        title: 'Already Open',
-                        description: 'This campaign is already open.',
-                    })
-                    setIsUpdating(false)
-                    return
-                }
-
-                // Attempt to open or create new campaign
-                const resultCampaignId = await openCampaign(campaign.id, toast)
-
-                // Only redirect if a new campaign was created (ID is different)
-                if (resultCampaignId !== campaign.id) {
-                    window.location.href = `/campaign/${resultCampaignId}`
-                    return // Stop execution here since we're redirecting
-                }
-            } else if (actionToConfirm === 'end') {
-                await endCampaign(campaign.id)
-            }
-            if (onUpdate) onUpdate()
-        } catch (e) {
-            // Error toast is shown in the service
-        } finally {
-            setIsUpdating(false)
-            setActionToConfirm(null)
-        }
-    }
-
-    const openConfirmationDialog = (action: 'open' | 'end') => {
-        setActionToConfirm(action)
-        setIsDialogOpen(true)
-    }
-
-    // Participant-facing lifecycle state (NFR-9) — drives the status badge label + colour.
-    const lifecycle = getLifecycleState(campaign)
-    const maxParticipants = campaign.settlement?.maxParticipants ?? 0
-    const settlementLabel = settlementModeLabel(campaign.settlement?.mode)
-    const statusStyle = getStatusStyle(lifecycle.state)
-
-    return (
+  return (
+    <CardLink
+      href={`/campaign/${campaign.id}`}
+      title={campaign.title || `Campaign #${campaign.id}`}
+      headingLevel={headingLevel}
+      cover={image ? { src: image } : undefined}
+      top={
         <>
-            <Card className="h-full flex flex-col overflow-hidden transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-card-hover shadow-card bg-card border-border/70 hover:border-foreground/20 group">
-                <Link
-                    href={`/campaign/${campaign.id}`}
-                    className="flex flex-col flex-grow relative"
-                >
-                    <CardHeader className="p-0">
-                        <div className="relative h-52 w-full overflow-hidden">
-                            <Image
-                                src={campaign.imageUrl || '/images/campaign-placeholder.jpg'}
-                                alt={campaign.title}
-                                fill
-                                className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                data-ai-hint={campaign['data-ai-hint']}
-                                unoptimized={campaign.imageUrl?.startsWith('http')}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
-
-                            <Badge
-                                className={cn(
-                                    "absolute top-4 right-4 px-3 py-1 text-xs font-semibold backdrop-blur-md border shadow-soft",
-                                    statusStyle.badge
-                                )}
-                            >
-                                {lifecycle.state === 'open' && <span className="mr-1.5 relative flex h-1.5 w-1.5">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
-                                </span>}
-                                {lifecycle.label}
-                            </Badge>
-                            <Badge
-                                variant="secondary"
-                                className="absolute top-4 left-4 px-2.5 py-1 text-xs font-medium backdrop-blur-md border border-white/20 bg-black/40 text-white"
-                            >
-                                <Award className="h-3 w-3 mr-1.5" />
-                                {settlementLabel}
-                            </Badge>
-                        </div>
-                    </CardHeader>
-                    <div className="p-6 flex flex-col flex-grow">
-                        <CardTitle className="text-xl mb-3 font-bold tracking-tight group-hover:text-primary transition-colors line-clamp-1">
-                            {campaign.title}
-                        </CardTitle>
-                        <CardDescription className="line-clamp-2 text-sm mb-6">
-                            {campaign.description}
-                        </CardDescription>
-
-                        <div className="mt-auto space-y-3">
-                            <div className="flex items-center text-sm text-muted-foreground bg-secondary/30 p-2 rounded-md">
-                                <Gift className="h-4 w-4 mr-3 text-primary shrink-0" />
-                                <span className="truncate font-medium">{campaign.reward.name}</span>
-                            </div>
-                            <div className="flex items-center text-sm text-muted-foreground bg-secondary/30 p-2 rounded-md">
-                                <Calendar className="h-4 w-4 mr-3 text-primary shrink-0" />
-                                <span className="font-medium">Ends {format(campaign.endDate, 'MMM dd, yyyy')}</span>
-                            </div>
-                        </div>
-                    </div>
-                </Link>
-                <CardFooter className="bg-secondary/10 border-t p-4 flex justify-between items-center gap-4">
-                    <div className="flex items-center text-sm font-medium text-muted-foreground">
-                        <Users className="h-4 w-4 mr-2 text-primary/70" />
-                        <span>
-                            {campaign.participants.toLocaleString()}
-                            {maxParticipants > 0 && (
-                                <span className="text-muted-foreground/70">/{maxParticipants.toLocaleString()}</span>
-                            )}{' '}
-                            <span className="hidden sm:inline">participants</span>
-                        </span>
-                    </div>
-
-                    {isHost && onUpdate ? (
-                        <div className="flex items-center gap-2">
-                            {campaign.status === 'Draft' && (
-                                <Button
-                                    size="sm"
-                                    className="bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors"
-                                    onClick={() => openConfirmationDialog('open')}
-                                    disabled={isUpdating || isContractPaused}
-                                >
-                                    {isUpdating && actionToConfirm === 'open' ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <>
-                                            <Rocket className="h-4 w-4 mr-2" />
-                                            Launch
-                                        </>
-                                    )}
-                                </Button>
-                            )}
-                            {campaign.status === 'Open' && (
-                                <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={() => openConfirmationDialog('end')}
-                                    disabled={isUpdating || isContractPaused}
-                                >
-                                    {isUpdating && actionToConfirm === 'end' ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                        <>
-                                            <XCircle className="h-4 w-4 mr-2" />
-                                            End
-                                        </>
-                                    )}
-                                </Button>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="text-primary opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0 duration-300">
-                            <ArrowRight className="h-5 w-5" />
-                        </div>
-                    )}
-                </CardFooter>
-            </Card>
-            <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                            This action will update the campaign's status on the blockchain.
-                            {actionToConfirm === 'open' &&
-                                ' It will become visible and joinable for all participants.'}
-                            {actionToConfirm === 'end' &&
-                                ' Participants will no longer be able to join, but can start claiming rewards if they completed the tasks.'}
-                            This cannot be undone.
-                        </AlertDialogDescription>
-                        {/* Same EXPIRED_OPEN_WARNING copy as the wizard's go-live step and the campaign page. */}
-                        {actionToConfirm === 'open' && hasEndTimePassed(campaign.endDate) && (
-                            <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm font-medium text-destructive">
-                                {EXPIRED_OPEN_WARNING}
-                            </p>
-                        )}
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleAction}>
-                            Continue
-                        </AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+          <CampaignStatusChip status={status} />
+          {payout && <span className="ml-auto font-mono text-[0.75rem] text-ink-3">{payout}</span>}
         </>
-    )
+      }
+    >
+      {campaign.host && (
+        <p className="-mt-1 font-mono text-[0.75rem] text-ink-3" title={campaign.host}>
+          Hosted by {shortAddress(campaign.host)}
+        </p>
+      )}
+      <KeyValueList
+        className="mt-2"
+        items={[
+          { label: reward.label, value: reward.value },
+          { label: 'Participants', value: participantsFact(campaign) },
+          { label: time.label, value: time.value, title: time.title },
+        ]}
+      />
+      <p className="mt-auto flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-rule pt-3 text-[0.8125rem]">
+        {joined ? (
+          <span className="text-ink-2">You joined</span>
+        ) : (
+          <span className="text-ink-2">{campaign.tasks.length ? plural(campaign.tasks.length, 'task') : 'No tasks listed'}</span>
+        )}
+        {hasReward ? (
+          <span className="text-signal">{rewardLabel ? `${rewardLabel} for you` : 'A reward for you'}</span>
+        ) : waitingForList ? (
+          <span className="text-ink-3">Waiting for the host’s list</span>
+        ) : (
+          checks && <span className="text-ink-3">{checks}</span>
+        )}
+      </p>
+    </CardLink>
+  )
 }

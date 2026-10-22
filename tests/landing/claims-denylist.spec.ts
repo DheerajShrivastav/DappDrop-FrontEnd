@@ -3,8 +3,8 @@
  *
  * Every string below was a false or unsupported claim on the old landing page (fact sheet §5) or
  * a link to a channel we don't own (§6). Two scans:
- * - the prerendered HTML of the Monolith pages `/`, `/how-it-works` and `/security` from the
- *   production build (what visitors get);
+ * - the prerendered HTML of the Monolith pages (`/`, `/how-it-works`, `/security`, `/about`,
+ *   `/changelog`) from the production build (what visitors get);
  * - every source file under src/, with comments stripped (so a dead component or another page
  *   can't keep a false claim around to be re-rendered later).
  *
@@ -15,7 +15,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
-const PAGES = ['index', 'how-it-works', 'security'].map((p) => path.join(process.cwd(), `.next/server/app/${p}.html`))
+const PAGES = ['index', 'how-it-works', 'security', 'about', 'changelog'].map((p) => path.join(process.cwd(), `.next/server/app/${p}.html`))
 
 const BANNED_TEXT = [
   '10K+',

@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Bell, Check } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Button } from '@/components/ui/button'
 import { useWallet } from '@/context/wallet-provider'
 
 type Notification = {
@@ -17,19 +15,23 @@ type Notification = {
 
 const POLL_MS = 30_000
 
+export type NotificationsState = ReturnType<typeof useNotifications>
+
 /**
- * In-app notification center (PRD BR-N*). A bell in the header with an unread badge and a
- * dropdown list. Reads GET /api/notifications (scoped to the connected wallet's SIWE session);
- * renders nothing until a wallet is connected. No worker involved — in-app is a pure read path.
+ * In-app notification center (PRD BR-N*). Reads GET /api/notifications (scoped to the connected
+ * wallet's SIWE session); empty until a wallet is connected. No worker involved — in-app is a
+ * pure read path.
+ *
+ * 08-site: split into a hook + a list so the app header polls ONCE and shows the same state in
+ * two places: the bell's popover (desktop) and the phone menu's "Notifications (n new)".
  */
-export function NotificationBell() {
+export function useNotifications() {
   const { isConnected } = useWallet()
   const [items, setItems] = useState<Notification[]>([])
   const [unread, setUnread] = useState(0)
-  const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const fetchNotifications = useCallback(async () => {
+  const refresh = useCallback(async () => {
     setLoading(true)
     try {
       const res = await fetch('/api/notifications?limit=30', { credentials: 'include' })
@@ -49,21 +51,17 @@ export function NotificationBell() {
     }
   }, [])
 
-  // Poll the unread count while connected; refetch in full when the panel opens.
+  // Poll the unread count while connected.
   useEffect(() => {
     if (!isConnected) {
       setItems([])
       setUnread(0)
       return
     }
-    fetchNotifications()
-    const t = setInterval(fetchNotifications, POLL_MS)
+    refresh()
+    const t = setInterval(refresh, POLL_MS)
     return () => clearInterval(t)
-  }, [isConnected, fetchNotifications])
-
-  useEffect(() => {
-    if (open) fetchNotifications()
-  }, [open, fetchNotifications])
+  }, [isConnected, refresh])
 
   const markAllRead = async () => {
     // Optimistic — flip locally, then persist.
@@ -77,7 +75,7 @@ export function NotificationBell() {
         body: JSON.stringify({ all: true }),
       })
     } catch {
-      fetchNotifications() // reconcile on failure
+      refresh() // reconcile on failure
     }
   }
 
@@ -92,78 +90,110 @@ export function NotificationBell() {
         body: JSON.stringify({ ids: [id] }),
       })
     } catch {
-      fetchNotifications()
+      refresh()
     }
   }
+
+  return { isConnected, items, unread, loading, refresh, markAllRead, markOneRead }
+}
+
+/** "Notifications" / "Notifications, 2 new": the state in words for the bell and the menu. */
+export function notificationsLabel(unread: number): string {
+  return unread > 0 ? `Notifications, ${unread} new` : 'Notifications'
+}
+
+/** The list itself (the bell's popover and the phone menu). */
+export function NotificationList({ state, heading = true }: { state: NotificationsState; heading?: boolean }) {
+  const { items, unread, loading, markAllRead, markOneRead } = state
+  return (
+    <div>
+      {(heading || unread > 0) && (
+        <div className="flex min-h-11 items-center justify-between gap-3 border-b border-rule px-4">
+          {heading ? <span className="font-mono text-[0.75rem] uppercase tracking-[0.12em] text-ink-3">Notifications</span> : <span />}
+          {unread > 0 && (
+            <button
+              type="button"
+              onClick={markAllRead}
+              className="inline-flex min-h-11 items-center text-small text-ink-2 underline-offset-4 can-hover:hover:text-ink can-hover:hover:underline"
+            >
+              Mark all read
+            </button>
+          )}
+        </div>
+      )}
+      <div className="max-h-96 overflow-y-auto">
+        {loading && items.length === 0 ? (
+          <p className="px-4 py-8 text-center text-small text-ink-2">Loading…</p>
+        ) : items.length === 0 ? (
+          <p className="px-4 py-8 text-center text-small text-ink-2">You&apos;re all caught up.</p>
+        ) : (
+          <ul className="divide-y divide-rule">
+            {items.map((n) => (
+              <li key={n.id} className="px-4 py-3 text-small">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 [overflow-wrap:anywhere]">
+                    <p className={n.read ? 'leading-snug text-ink-2' : 'font-semibold leading-snug text-ink'}>
+                      {!n.read && (
+                        <span aria-hidden="true" className="mr-1.5 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-signal" />
+                      )}
+                      {n.title}
+                      {!n.read && <span className="sr-only"> (new)</span>}
+                    </p>
+                    <p className="mt-0.5 leading-snug text-ink-2">{n.body}</p>
+                    <p className="mt-1 font-mono text-[0.75rem] text-ink-3">{new Date(n.createdAt).toLocaleString()}</p>
+                  </div>
+                  {!n.read && (
+                    <button
+                      type="button"
+                      onClick={() => markOneRead(n.id)}
+                      className="inline-flex h-11 shrink-0 items-center rounded-full px-2 text-[0.8125rem] text-ink-2 can-hover:hover:text-ink"
+                    >
+                      Mark read<span className="sr-only">: {n.title}</span>
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The header bell: a 44 px round icon button with a gold dot when something is new (the count is
+ * in its name). Renders nothing until a wallet is connected.
+ */
+export function NotificationBell({ state }: { state: NotificationsState }) {
+  const [open, setOpen] = useState(false)
+  const { isConnected, unread, refresh } = state
+
+  useEffect(() => {
+    if (open) refresh()
+  }, [open, refresh])
 
   if (!isConnected) return null
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative"
-          aria-label={unread > 0 ? `${unread} unread notifications` : 'Notifications'}
+        <button
+          type="button"
+          className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-rule-strong text-ink can-hover:hover:border-ink"
+          aria-label={notificationsLabel(unread)}
         >
-          <Bell className="h-5 w-5" />
+          <svg viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 8a5 5 0 0 1 10 0v4l1.5 2.5h-13L5 12Z" />
+            <path d="M8.2 17a2 2 0 0 0 3.6 0" />
+          </svg>
           {unread > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-foreground px-1 text-[10px] font-medium leading-none text-background">
-              {unread > 9 ? '9+' : unread}
-            </span>
+            <span aria-hidden="true" className="absolute right-[10px] top-[9px] h-[7px] w-[7px] rounded-full bg-signal shadow-[0_0_0_2px_var(--paper)]" />
           )}
-        </Button>
+        </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <span className="text-sm font-medium">Notifications</span>
-          {unread > 0 && (
-            <button
-              onClick={markAllRead}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Mark all read
-            </button>
-          )}
-        </div>
-        <div className="max-h-96 overflow-y-auto">
-          {loading && items.length === 0 ? (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</div>
-          ) : items.length === 0 ? (
-            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
-              You&apos;re all caught up.
-            </div>
-          ) : (
-            <ul className="divide-y">
-              {items.map((n) => (
-                <li
-                  key={n.id}
-                  className={`px-4 py-3 text-sm ${n.read ? 'opacity-60' : 'bg-secondary/40'}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium leading-snug">{n.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground leading-snug">{n.body}</p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {new Date(n.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                    {!n.read && (
-                      <button
-                        onClick={() => markOneRead(n.id)}
-                        aria-label="Mark read"
-                        className="mt-0.5 shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <Check className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      <PopoverContent align="end" className="w-80 max-w-[calc(100vw-2rem)] border-rule-strong p-0">
+        <NotificationList state={state} />
       </PopoverContent>
     </Popover>
   )

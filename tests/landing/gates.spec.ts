@@ -20,6 +20,8 @@ const HEIGHT_HARD = 6600
 const DOM_MAX = 1200
 const WORDS_MAX = 300
 const PAGES = ['/', '/how-it-works', '/security'] as const
+// 08-site (2026-10-16): the whole marketing site is Monolith-themed.
+const SITE = [...PAGES, '/about', '/changelog'] as const
 const THEMES = ['obsidian', 'porcelain'] as const
 type Theme = (typeof THEMES)[number]
 
@@ -62,7 +64,7 @@ const first = (page: Page) => page.evaluate(() => (window as unknown as { __firs
 const theme = (page: Page) => page.evaluate(() => document.documentElement.dataset.theme)
 
 test.describe('static HTML', () => {
-  for (const path of PAGES) {
+  for (const path of SITE) {
     test(`${path}: no element is server-rendered invisible; no wallet code`, async ({ request }) => {
       const html = await (await request.get(path)).text()
       expect(html).not.toContain('style="opacity:0')
@@ -251,16 +253,36 @@ test.describe('themes (07-wow)', () => {
     expect(errors).toEqual([])
   })
 
-  test('/about stays light whatever the theme, with no toggle', async ({ page }) => {
-    await open(page, '/about')
-    expect(await page.evaluate(() => document.querySelector('.lp-theme'))).toBeNull()
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light')
-    expect(await page.locator('[data-theme-toggle]').count()).toBe(0)
-  })
+  for (const path of ['/about', '/changelog']) {
+    test(`${path}: Obsidian by default and a remembered Porcelain, both before first paint; the toggle works`, async ({ browser }) => {
+      const ctx = await browser.newContext({ colorScheme: 'light', viewport: { width: 1440, height: 900 } })
+      const page = await ctx.newPage()
+      await recordFirst(page)
+      await open(page, path)
+      expect(await first(page)).toEqual({ theme: 'obsidian', bg: 'rgb(5, 5, 6)' })
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('dark')
+      await page.getByRole('button', { name: 'Light theme' }).click()
+      expect(await theme(page)).toBe('porcelain')
+      await page.reload({ waitUntil: 'networkidle' })
+      expect(await first(page)).toEqual({ theme: 'porcelain', bg: 'rgb(244, 241, 234)' })
+      await expect(page.locator('[data-theme-toggle]')).toHaveAttribute('aria-pressed', 'true')
+      await ctx.close()
+    })
+
+    test(`${path}: no wallet code, framer-motion or app-route chunks`, async ({ page }) => {
+      const urls: string[] = []
+      page.on('request', (r) => urls.push(decodeURIComponent(r.url())))
+      await open(page, path)
+      expect(urls.filter((u) => /\/app\/\(app\)\//.test(u))).toEqual([])
+      const html = await page.content()
+      expect(html).not.toMatch(/rainbowkit|WagmiProvider|data-framer-appear-id/i)
+      expect(urls.filter((u) => /fonts\.g(oogleapis|static)|inter|space.?grotesk/i.test(u))).toEqual([])
+    })
+  }
 })
 
 test.describe('layout', () => {
-  for (const path of PAGES) {
+  for (const path of SITE) {
     for (const width of [320, 375, 390]) {
       test(`${path}: no horizontal overflow at ${width} px`, async ({ page }) => {
         await page.setViewportSize({ width, height: 800 })
@@ -398,11 +420,13 @@ test.describe('accessibility (axe, WCAG 2.2 AA), both themes', () => {
       expect(await axe(page)).toEqual([])
       await ctx.close()
     })
-    for (const path of ['/how-it-works', '/security']) {
-      for (const [width, height] of [
-        [375, 812],
-        [1440, 900],
-      ]) {
+    for (const [path, sizes] of [
+      ['/how-it-works', [[375, 812], [1440, 900]]],
+      ['/security', [[375, 812], [1440, 900]]],
+      ['/about', [[320, 640], [375, 812], [768, 1024], [1440, 900]]],
+      ['/changelog', [[320, 640], [375, 812], [768, 1024], [1440, 900]]],
+    ] as const) {
+      for (const [width, height] of sizes) {
         test(`${path} · ${t}: 0 violations at ${width} px`, async ({ page }) => {
           await remember(page, t)
           await page.setViewportSize({ width, height })
@@ -481,7 +505,7 @@ test.describe('subpage behaviours (moved from the old homepage)', () => {
 
 test.describe('statement footer (founder brief 2026-10-14)', () => {
   test('same structure on the three pages: columns, honest chips, the app CTA, a decorative wordmark', async ({ page }) => {
-    for (const path of PAGES) {
+    for (const path of SITE) {
       await open(page, path)
       const f = page.locator('footer[data-footer]')
       expect(await f.locator('nav h2').allTextContents()).toEqual(['Product', 'Trust', 'Developers', 'Company'])
@@ -569,7 +593,7 @@ test.describe('statement footer (founder brief 2026-10-14)', () => {
 
   test('no seam: the last section and the footer share one background', async ({ page }) => {
     for (const t of THEMES) {
-      for (const path of PAGES) {
+      for (const path of SITE) {
         await remember(page, t)
         await open(page, path)
         const [last, footer] = await page.evaluate(() => {
@@ -591,5 +615,126 @@ test.describe('statement footer (founder brief 2026-10-14)', () => {
     await page.locator('[data-back-to-top]').click()
     await page.waitForFunction(() => scrollY < 10, null, { timeout: 5000 })
     expect(await page.evaluate(() => document.activeElement?.id)).toBe('main')
+  })
+})
+
+/**
+ * 08-site phase 1: the app shell (header, footer, theme) on the app routes, both themes.
+ * The page bodies are redesigned in phase 2; their pre-existing axe findings are listed in
+ * landing-studio/08-site/build/phase1-handoff.md, so axe here covers the shell landmarks.
+ */
+const APP_ROUTES = ['/campaigns', '/campaign/4', '/create-campaign', '/dashboard'] as const
+// /dashboard still sends a disconnected visitor to / after load (APP-12): its shell can only be
+// checked before the redirect (the no-flash test). Phase 2 removes the redirect; then drop this.
+const REDIRECTS_WHEN_DISCONNECTED = new Set<string>(['/dashboard'])
+const APP_TITLES: Record<(typeof APP_ROUTES)[number], RegExp> = {
+  '/campaigns': /^Campaigns · DappDrop$/,
+  '/campaign/4': /^.+ · DappDrop$/,
+  '/create-campaign': /^New campaign · DappDrop$/,
+  '/dashboard': /^Dashboard · DappDrop$/,
+}
+
+/** App routes keep connections open (WalletConnect, polling), so never wait for networkidle:
+ * wait for the load event and the hydrated account pill instead. */
+async function openApp(page: Page, path: string) {
+  await page.goto(path, { waitUntil: 'load' })
+  await page.locator('[data-account-pill]:not([data-account-pill="loading"])').first().waitFor({ state: 'attached', timeout: 15_000 })
+  await page.evaluate(() => document.fonts.ready)
+}
+
+async function axeShell(page: Page) {
+  await page.addScriptTag({ path: AXE })
+  return page.evaluate(async () => {
+    // @ts-expect-error axe is injected above
+    const r = await window.axe.run(
+      { include: [['[data-app-header]'], ['[data-app-footer]'], ['.skip-link']] },
+      { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } },
+    )
+    return r.violations.map((v: { id: string; nodes: { target: string[] }[] }) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)
+  })
+}
+
+test.describe('app shell (08-site phase 1)', () => {
+  for (const path of APP_ROUTES) {
+    test(`${path}: a page <title> in the server HTML`, async ({ request }) => {
+      const html = await (await request.get(path)).text()
+      expect(html.match(/<title>([^<]*)<\/title>/)?.[1]).toMatch(APP_TITLES[path])
+    })
+
+    test(`${path}: Obsidian by default and a remembered Porcelain, both before first paint`, async ({ browser }) => {
+      const ctx = await browser.newContext({ colorScheme: 'light', viewport: { width: 1440, height: 900 } })
+      const page = await ctx.newPage()
+      await recordFirst(page)
+      const go = () => (REDIRECTS_WHEN_DISCONNECTED.has(path) ? page.goto(path, { waitUntil: 'domcontentloaded' }) : openApp(page, path))
+      await go()
+      expect(await first(page)).toEqual({ theme: 'obsidian', bg: 'rgb(5, 5, 6)' })
+      // Remembered Porcelain (as the toggle stores it). Not via a click: /dashboard still redirects
+      // a disconnected visitor to / after load (APP-12, fixed in phase 2).
+      await remember(page, 'porcelain')
+      await go()
+      expect(await first(page)).toEqual({ theme: 'porcelain', bg: 'rgb(244, 241, 234)' })
+      await ctx.close()
+    })
+
+    for (const t of REDIRECTS_WHEN_DISCONNECTED.has(path) ? [] : THEMES) {
+      for (const [width, height] of [
+        [320, 640],
+        [375, 812],
+        [768, 1024],
+        [1440, 900],
+      ]) {
+        test(`${path} · ${t}: shell axe 0 and no horizontal overflow at ${width} px`, async ({ page }) => {
+          await remember(page, t)
+          await page.setViewportSize({ width, height })
+          await openApp(page, path)
+          expect(await axeShell(page)).toEqual([])
+          const { sw, cw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }))
+          expect(sw).toBe(cw)
+        })
+      }
+    }
+  }
+
+  test('header: app nav, the theme toggle and the account pill; the phone menu opens as a modal', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await openApp(page, '/campaigns')
+    await page.getByRole('button', { name: 'Light theme' }).click()
+    expect(await theme(page)).toBe('porcelain')
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(244, 241, 234)')
+    await page.getByRole('button', { name: 'Light theme' }).click()
+    const nav = page.locator('[data-app-header] nav[aria-label="Main"]')
+    expect(await nav.locator('a').allInnerTexts()).toEqual(['Campaigns', 'How it works', 'Security'])
+    await expect(nav.locator('a[href="/campaigns"]')).toHaveAttribute('aria-current', 'page')
+    await expect(page.locator('[data-account-pill="connect"]')).toHaveText(/Connect wallet/)
+    await page.setViewportSize(PHONE)
+    await openApp(page, '/campaigns')
+    await page.getByRole('button', { name: 'Menu' }).click()
+    await expect(page.locator('#site-menu')).toBeVisible()
+    const heights = await page.locator('#site-menu nav a').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))
+    expect(Math.min(...heights)).toBeGreaterThanOrEqual(44)
+    await page.keyboard.press('Escape')
+    await expect(page.locator('#site-menu')).toBeHidden()
+  })
+
+  test('compact footer: four columns, the safety line, no giant wordmark', async ({ page }) => {
+    await openApp(page, '/campaigns')
+    const f = page.locator('footer[data-app-footer]')
+    expect(await f.locator('nav h2').allTextContents()).toEqual(['Product', 'Trust', 'Developers', 'Company'])
+    await expect(f).toContainText('never ask for your seed phrase or private key.')
+    expect(await f.locator('.ft-mark').count()).toBe(0)
+    expect(await f.innerText()).not.toMatch(/audit/i)
+  })
+
+  test('the primitives gallery is unreachable in a production build', async ({ request }) => {
+    const res = await request.get('/_dev/primitives')
+    expect(res.status()).toBe(404)
+    expect(await res.text()).not.toContain('Every app primitive in its states')
+  })
+
+  test('marketing pages stay wallet-free with the app theme in place', async ({ request }) => {
+    for (const path of SITE) {
+      const html = await (await request.get(path)).text()
+      expect(html).not.toMatch(/rainbowkit|WagmiProvider|app-theme/i)
+    }
   })
 })

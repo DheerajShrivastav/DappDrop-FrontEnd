@@ -9,6 +9,9 @@ export default {
         './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
         './src/components/**/*.{js,ts,jsx,tsx,mdx}',
         './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+        // status-styles.ts holds the status chip/banner classes; without this path Tailwind
+        // never generated them, so every status chip rendered as white text on transparent.
+        './src/lib/**/*.{ts,tsx}',
     ],
     theme: {
         container: {
@@ -81,6 +84,10 @@ export default {
                 ink: { DEFAULT: 'var(--ink)', 2: 'var(--ink-2)', 3: 'var(--ink-3)' },
                 rule: { DEFAULT: 'var(--rule)', strong: 'var(--rule-strong)' },
                 signal: { DEFAULT: 'var(--signal)', 'on-ink': 'var(--signal-on-ink)' },
+                // 08-site phase 1 (app routes only; src/app/(app)/app.css): text on a gold fill, and
+                // the ONE red (errors and failed transactions only) with its label colour.
+                'on-signal': 'var(--on-signal)',
+                danger: { DEFAULT: 'var(--danger)', on: 'var(--on-danger)' },
                 border: 'hsl(var(--border))',
                 input: 'hsl(var(--input))',
                 ring: 'hsl(var(--ring))',

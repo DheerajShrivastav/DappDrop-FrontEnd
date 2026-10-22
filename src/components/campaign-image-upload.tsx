@@ -2,11 +2,10 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { BrowserProvider, Eip1193Provider } from 'ethers'
-import { ImageOff, ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { useUploadThing } from '@/lib/uploadthing'
 import { useToast } from '@/hooks/use-toast'
 import { signAuthMessage } from '@/lib/wallet-auth'
-import { Button } from '@/components/ui/button'
+import { Button, Spinner } from '@/components/app'
 import { cn } from '@/lib/utils'
 // Extend window with ethereum property - matches web3-service.ts
 declare global {
@@ -253,13 +252,10 @@ export function CampaignImageUpload({
 
   const progressBar = (
     <div className="w-full max-w-xs space-y-2" aria-live="polite">
-      <p className="text-sm font-medium">{statusLabel}</p>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+      <p className="text-[0.875rem] font-medium text-ink">{statusLabel}</p>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-rule">
         <div
-          className={cn(
-            'h-full rounded-full bg-primary transition-[width] duration-300',
-            phase === 'signing' && 'animate-pulse',
-          )}
+          className="h-full rounded-full bg-ink transition-[width] duration-300"
           style={{ width: phase === 'signing' ? '100%' : `${progress}%` }}
         />
       </div>
@@ -272,6 +268,7 @@ export function CampaignImageUpload({
         ref={inputRef}
         type="file"
         accept="image/*"
+        aria-label="Cover image file"
         className="sr-only"
         tabIndex={-1}
         onChange={(e) => handleFile(e.target.files?.[0])}
@@ -280,7 +277,7 @@ export function CampaignImageUpload({
       {value ? (
         <div
           className={cn(
-            'group relative aspect-video w-full overflow-hidden rounded-lg border bg-muted',
+            'group relative min-h-[9.5rem] w-full sm:aspect-[16/7] overflow-hidden rounded-md border border-rule-strong bg-sunk',
             // 16:9 gets very short on a phone, and the broken-image message shares the card with the
             // Replace/Remove row — keep it tall enough that they can't land on top of the text.
             previewFailed && 'min-h-[12rem]',
@@ -288,12 +285,11 @@ export function CampaignImageUpload({
           {...dropHandlers}
         >
           {previewFailed ? (
-            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 pb-16 pt-6 text-center text-muted-foreground">
-              <ImageOff className="h-8 w-8" />
-              <p className="text-sm font-medium text-foreground">
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 pb-16 pt-6 text-center text-ink-2">
+              <p className="text-[0.875rem] font-medium text-ink">
                 This image couldn&apos;t be loaded
               </p>
-              <p className="text-xs">
+              <p className="text-[0.8125rem]">
                 Check that the URL points directly to an image file, or upload one instead.
               </p>
             </div>
@@ -314,33 +310,25 @@ export function CampaignImageUpload({
           )}
 
           {(busy || isDragging) && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/85 p-6 text-center backdrop-blur-sm">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-paper/90 p-6 text-center">
               {busy ? (
                 progressBar
               ) : (
                 <>
-                  <ImagePlus className="h-7 w-7 text-primary" />
-                  <p className="text-sm font-medium">Drop to replace the image</p>
+                  <p className="text-[0.875rem] font-medium text-ink">Drop to replace the image</p>
                 </>
               )}
             </div>
           )}
 
           {!busy && !isDragging && (
-            <div
-              className={cn(
-                'absolute inset-x-0 bottom-0 flex justify-end gap-2 p-3',
-                // The scrim only exists to keep the buttons legible over a photo.
-                !previewFailed && 'bg-gradient-to-t from-black/60 to-transparent pt-10',
-              )}
-            >
-              <Button type="button" size="sm" variant={previewFailed ? 'outline' : 'secondary'} onClick={openPicker}>
-                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            // Solid surface buttons keep their contrast over any photo (no gradient scrim).
+            <div className="absolute inset-x-0 bottom-0 flex justify-end gap-2 p-3">
+              <Button size="sm" variant="secondary" className="bg-surface" onClick={openPicker}>
                 Replace
               </Button>
               {onRemove && (
-                <Button type="button" size="sm" variant={previewFailed ? 'outline' : 'secondary'} onClick={onRemove}>
-                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                <Button size="sm" variant="secondary" className="bg-surface" onClick={onRemove}>
                   Remove
                 </Button>
               )}
@@ -352,7 +340,6 @@ export function CampaignImageUpload({
           role="button"
           tabIndex={busy ? -1 : 0}
           aria-disabled={busy}
-          aria-label="Upload a campaign cover image"
           onClick={openPicker}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -362,29 +349,24 @@ export function CampaignImageUpload({
           }}
           {...dropHandlers}
           className={cn(
-            'flex aspect-video w-full flex-col items-center justify-center gap-4 rounded-lg border-2 border-dashed bg-muted/30 p-6 text-center transition-colors',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-            busy
-              ? 'cursor-default border-primary/40'
-              : 'cursor-pointer hover:border-primary/60 hover:bg-primary/5',
-            isDragging && 'border-primary bg-primary/5',
+            'flex min-h-[9.5rem] w-full flex-col sm:aspect-[16/7] items-center justify-center gap-3 rounded-md border border-dashed border-rule-strong bg-sunk p-6 text-center transition-colors [transition-duration:var(--dur-micro)]',
+            'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal',
+            busy ? 'cursor-default' : 'cursor-pointer can-hover:hover:border-ink-2',
+            isDragging && 'border-ink',
           )}
         >
           {busy ? (
             <>
-              <Loader2 className="h-7 w-7 animate-spin text-primary" />
+              <Spinner className="text-ink-2" />
               {progressBar}
             </>
           ) : (
             <>
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                <ImagePlus className="h-6 w-6 text-primary" />
-              </div>
-              <div className="space-y-1">
-                <p className="text-sm font-medium">
-                  <span className="text-primary">Click to upload</span> or drag and drop
+              <div className="grid gap-1">
+                <p className="text-[0.9375rem] text-ink">
+                  <span className="underline decoration-rule-strong underline-offset-4">Choose an image</span> or drop one here
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="font-mono text-[0.75rem] text-ink-2">
                   PNG, JPG, GIF or WebP · up to 4 MB · 1200 × 675 recommended
                 </p>
               </div>

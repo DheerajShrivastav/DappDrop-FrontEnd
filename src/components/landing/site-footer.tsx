@@ -7,7 +7,7 @@ import { pillButton } from './ui'
 
 /**
  * The statement footer (founder brief 2026-10-14, polish 2026-10-15; IA §4.3; TRS F82–F85). A
- * server component on the page colour (Obsidian / Porcelain; light on /about and /changelog),
+ * server component on the page colour (Obsidian / Porcelain) on every marketing page,
  * above the fixed vault stage (z-index 1).
  *
  * - One brand moment: the giant wordmark at the bottom (aria-hidden). The left column leads with
