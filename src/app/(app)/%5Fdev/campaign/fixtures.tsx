@@ -16,6 +16,9 @@ import { ExampleChip } from '@/components/app/chip'
 import { CampaignView } from '../../campaign/[id]/_components/campaign-view'
 import { RewardPanel, reviewReason, type RewardViewState } from '../../campaign/[id]/_components/reward-panel'
 import { deadlineLine } from '../../campaign/[id]/_components/claim-section'
+import { PaymentTaskDialog } from '../../campaign/[id]/_components/payment-task-dialog'
+import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
+import { paymentRequestFromTask } from '@/lib/payment-request'
 
 const H = 60 * 60 * 1000
 const D = 24 * H
@@ -39,6 +42,22 @@ const TASKS_5: Campaign['tasks'] = [
   { id: 't4', type: 'HUMANITY_VERIFICATION', description: 'Confirm you’re a real person' },
   { id: 't5', type: 'JOIN_TELEGRAM', description: 'Join the Example Telegram group', isOptional: true },
 ]
+
+const PAY_TASK: Campaign['tasks'][number] = {
+  id: 't6',
+  type: 'ONCHAIN_TX',
+  description: 'Pay the example entry fee',
+  metadata: {
+    paymentRequired: true,
+    paymentRecipient: HOST,
+    chainId: DEPLOYMENT_CHAIN.id,
+    network: DEPLOYMENT_CHAIN.network,
+    tokenAddress: null,
+    tokenSymbol: 'ETH',
+    amount: '0.001',
+    amountDisplay: '0.001 ETH',
+  },
+}
 
 function campaign(over: Partial<Campaign> & { settlement?: Campaign['settlement'] }): Campaign {
   return {
@@ -151,6 +170,8 @@ type Fixture = {
   taskErrors?: Record<string, string>
   api?: Api
   claim?: (c: Campaign) => ReactNode
+  /** Open the payment dialog for the campaign's ONCHAIN_TX task (its [Pay] button reopens it). */
+  payDialog?: boolean
 }
 
 const AMOUNT = { value: '250', unit: 'EXAMPLE' }
@@ -195,6 +216,14 @@ const FIXTURES: Record<string, Fixture> = {
     joined: true,
     userTasks: done(['t1', 't3'], { t2: { isCompleting: true } }),
     taskErrors: { t4: 'this wallet isn’t verified as human yet.' },
+  },
+  'p-pay': {
+    label: 'Participant · open · payment task dialog',
+    campaign: campaign({ ...OPEN, tasks: [...TASKS, PAY_TASK], settlement: merkle() }),
+    connected: true,
+    joined: true,
+    userTasks: done(['t1', 't2', 't3']),
+    payDialog: true,
   },
   'p-full': { label: 'Participant · open · campaign full', campaign: campaign({ ...OPEN, participants: 500, settlement: merkle() }), connected: true },
   'p-record-end': { label: 'Participant · end time passed, not recorded', campaign: campaign({ status: 'Open', settlement: merkle() }), connected: true, joined: true, userTasks: done(['t1', 't2', 't3']) },
@@ -296,17 +325,21 @@ const FIXTURES: Record<string, Fixture> = {
 
 export function CampaignFixtures() {
   const [key, setKey] = useState<string | null>(null)
+  const [payOpen, setPayOpen] = useState(false)
   useEffect(() => {
     installExampleApi()
     const k = new URLSearchParams(window.location.search).get('state') ?? 'p-claimable'
     const f = FIXTURES[k] ?? FIXTURES['p-claimable']
     API = f.api ?? {}
     setKey(FIXTURES[k] ? k : 'p-claimable')
+    setPayOpen(!!f.payDialog)
   }, [])
 
   if (!key) return <h1 className="sr-only">Campaign fixtures</h1>
   const f = FIXTURES[key]
   const userTasks = f.userTasks ? f.userTasks.filter((u) => f.campaign.tasks.some((t) => t.id === u.taskId)) : f.campaign.tasks.map((t) => ({ taskId: t.id, completed: false }))
+  const payIndex = f.campaign.tasks.findIndex((t) => t.type === 'ONCHAIN_TX')
+  const payRequest = payIndex === -1 ? null : paymentRequestFromTask(f.campaign.tasks[payIndex], DEPLOYMENT_CHAIN.id)
 
   return (
     <>
@@ -338,7 +371,7 @@ export function CampaignFixtures() {
         taskErrors={f.taskErrors ?? {}}
         isJoined={!!f.joined}
         onConnect={() => {}}
-        onStartTask={() => {}}
+        onStartTask={(_, type) => type === 'ONCHAIN_TX' && setPayOpen(true)}
         onRecordEnd={() => {}}
         isRecordingEnd={false}
         onCopyLink={() => {}}
@@ -348,6 +381,19 @@ export function CampaignFixtures() {
         extraChips={<ExampleChip />}
         claimOverride={f.claim?.(f.campaign)}
       />
+      {payRequest && (
+        <PaymentTaskDialog
+          open={payOpen}
+          onOpenChange={setPayOpen}
+          campaignId={ID}
+          taskId={f.campaign.tasks[payIndex].id}
+          taskIndex={payIndex}
+          taskDescription={f.campaign.tasks[payIndex].description}
+          request={payRequest}
+          address={ME}
+          onVerified={async () => {}}
+        />
+      )}
     </>
   )
 }

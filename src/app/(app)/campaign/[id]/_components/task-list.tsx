@@ -4,6 +4,8 @@ import type { Campaign, UserTask, Task as TaskType } from '@/lib/types'
 import type { CampaignStatusInfo } from '@/lib/campaign-status'
 import { shortDate, shortDateTime } from '@/lib/campaign-status'
 import { TASK_VERIFICATION_METHOD } from '@/lib/task-types'
+import { DEPLOYMENT_CHAIN, deploymentChainFor } from '@/lib/deployment-chain'
+import { paymentRequestFromTask } from '@/lib/payment-request'
 import { Button, Spinner } from '@/components/app/button'
 import { Chip, VerificationChip } from '@/components/app/chip'
 import { Panel } from '@/components/app/panel'
@@ -88,6 +90,7 @@ export function TaskList({
             const u = userTasks.find((x) => x.taskId === task.id)
             const method = TASK_VERIFICATION_METHOD[task.type]
             const err = taskErrors[task.id]
+            const payment = paymentRequestFromTask(task, DEPLOYMENT_CHAIN.id)
             return (
               <li key={task.id} className="cp-row" data-task-state={u?.completed ? 'done' : u?.isCompleting ? 'checking' : err ? 'failed' : 'todo'}>
                 <span className="cp-n" aria-hidden="true">
@@ -97,10 +100,10 @@ export function TaskList({
                 <span className="cp-how">
                   {method && <VerificationChip method={method} withNote />}
                   {task.isOptional && <Chip variant="neutral">Optional</Chip>}
-                  {task.type === 'ONCHAIN_TX' && task.metadata?.paymentRequired && task.metadata.amountDisplay && (
+                  {payment && (
+                    // The real charge (amount + token), not the host's free-text display line.
                     <span className="font-mono text-[0.8125rem] text-ink-2">
-                      Pay {task.metadata.amountDisplay}
-                      {task.metadata.network ? ` on ${task.metadata.network}` : ''}
+                      Pay {payment.amountDisplay} on {deploymentChainFor(payment.chainId).name}
                     </span>
                   )}
                 </span>
@@ -124,9 +127,10 @@ export function TaskList({
                       </Button>
                     </span>
                   ) : canAct && task.type === 'ONCHAIN_TX' ? (
-                    // Pre-existing gap: the page never had a payment dialog, so [Start] did nothing.
-                    // Say so instead of offering a dead button (phase2-A-handoff.md, open issues).
-                    <span className="text-[0.8125rem] text-ink-2">Can’t be done in the app yet</span>
+                    // Opens the payment dialog (payment-task-dialog.tsx).
+                    <Button size="sm" variant="secondary" onClick={() => onStart(task.id, task.type)} aria-label={`Pay: ${task.description}`}>
+                      Pay
+                    </Button>
                   ) : canAct ? (
                     <Button size="sm" variant="secondary" onClick={() => onStart(task.id, task.type)} aria-label={`Start: ${task.description}`}>
                       Start
