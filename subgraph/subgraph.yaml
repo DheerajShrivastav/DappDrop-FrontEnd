@@ -7,6 +7,10 @@ dataSources:
     network: sepolia
     source:
       # v0.6.0 entrypoint (docs/deployments/sepolia.md). Holds all funds + campaign state.
+      # TODO(redeploy): set address + startBlock to the redeployed Web3Campaigns and its deploy
+      # block (contracts PRs #23-#26), then deploy a NEW subgraph version. The ABI in ./abis is
+      # already the redeploy's; its events are unchanged, so the mappings need no edits. The
+      # module templates follow RewardModulePinned/NFTModulePinned, so they need no address.
       address: "0xf0A2Fac02ffBA4A7762f2f0d611253B6C97bB1B3"
       abi: Web3Campaigns
       startBlock: 11314275
