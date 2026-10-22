@@ -91,17 +91,7 @@ export function CampaignLifecycleBanner({ campaign }: { campaign: Campaign }) {
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{lifecycle.label}</p>
         <p className="text-sm opacity-80">{lifecycle.detail}</p>
-        {lifecycle.inDisputeWindow && lifecycle.claimsOpenAt && (
-          <p className="mt-1 text-sm font-medium">
-            Claims open {lifecycle.claimsOpenAt.toLocaleString()}
-          </p>
-        )}
-        {lifecycle.state === 'closed_claimable' && lifecycle.sweepEligibleAt && (
-          <p className="mt-1 text-sm font-medium">
-            Unclaimed rewards return to the host after{' '}
-            {lifecycle.sweepEligibleAt.toLocaleDateString()}
-          </p>
-        )}
+        {/* The claims-open time and the claim-by date are part of `detail` (one status model). */}
 
         {inDisputeWindow && (
           <>

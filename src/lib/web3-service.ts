@@ -198,12 +198,11 @@ const mapContractDataToCampaign = (
 
   // Reward data is no longer on-chain (the `reward` struct field was removed in v0.6.0).
   // Use the stored reward name/type from off-chain metadata.
-  const rewardName =
-    campaignMetadata?.rewardName || `Reward for ${contractData.name}`
-
-  // Use stored descriptions if available, otherwise fall back to generated placeholders
-  const shortDescription = campaignMetadata?.shortDescription || `A campaign hosted by ${contractData.host}`
-  const longDescription = campaignMetadata?.longDescription || `A campaign hosted by ${contractData.host} with the name ${contractData.name}. More details can be found on the blockchain.`
+  // No invented copy: when the off-chain metadata is missing these stay empty, and the UI
+  // shows nothing (description, image) or the honest state (reward) instead.
+  const rewardName = campaignMetadata?.rewardName || ''
+  const shortDescription = campaignMetadata?.shortDescription || ''
+  const longDescription = campaignMetadata?.longDescription || ''
 
   // Use the actual dates from the blockchain
   let startDate = new Date(Number(contractData.startTime) * 1000)
@@ -293,8 +292,7 @@ const mapContractDataToCampaign = (
       amount: undefined,
       name: rewardName,
     },
-    imageUrl: imageUrl || `https://placehold.co/600x400`,
-    'data-ai-hint': 'blockchain technology',
+    imageUrl: imageUrl || '',
   }
 }
 

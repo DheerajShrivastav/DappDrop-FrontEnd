@@ -9,7 +9,9 @@ export default function MarketingLayout({
     return (
         <>
             <MarketingHeader />
-            <main className="flex-grow">{children}</main>
+            {/* The hero/bento decorations are oversized blurred blobs that bleed past the edge by
+                design; clip them horizontally so they can't widen the page on phones. */}
+            <main className="flex-grow overflow-x-clip">{children}</main>
             <Footer />
         </>
     );

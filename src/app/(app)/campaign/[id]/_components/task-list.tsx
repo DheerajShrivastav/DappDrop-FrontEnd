@@ -7,7 +7,6 @@ import {
   MessageSquare,
   Bot,
   ShieldCheck,
-  AlertTriangle,
 } from 'lucide-react'
 
 import type { Campaign, UserTask, Task as TaskType } from '@/lib/types'
@@ -23,6 +22,7 @@ import {
 import { Progress } from '@/components/ui/progress'
 import { isSelfReportedTask } from '@/lib/task-types'
 import { SelfReportedBadge } from '@/components/self-reported-badge'
+import { getCampaignStatus, shortDateTime } from '@/lib/campaign-status'
 
 // Task-type icons are categorical, not status — kept neutral/monochrome (icon shape
 // alone communicates the type; color is reserved for lifecycle/money state).
@@ -47,7 +47,6 @@ interface TaskListProps {
   campaign: Campaign
   userTasks: UserTask[]
   role: string | null
-  isTimeExpiredNotClosed?: boolean
   onOpenVerifyDialog: (taskId: string, taskType: TaskType['type']) => void
 }
 
@@ -55,34 +54,16 @@ export function TaskList({
   campaign,
   userTasks,
   role,
-  isTimeExpiredNotClosed,
   onOpenVerifyDialog,
 }: TaskListProps) {
+  // The campaign's state (and why tasks may be closed) is stated once, by the lifecycle
+  // banner above; rows just reflect it.
+  const status = getCampaignStatus(campaign)
   const completedTasksCount = userTasks.filter((ut) => ut.completed).length
   const progressPercentage = (completedTasksCount / campaign.tasks.length) * 100
 
   return (
     <>
-      {/* Expired-but-not-closed warning banner */}
-      {isTimeExpiredNotClosed && (
-        <motion.div
-          initial={{ y: -10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.4 }}
-          className="flex items-start gap-3 p-4 rounded-xl border border-status-pending-border bg-status-pending-bg text-status-pending-fg"
-        >
-          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
-          <div>
-            <p className="font-semibold text-sm">Campaign end time has passed</p>
-            <p className="text-sm mt-0.5 opacity-90">
-              This campaign has passed its end date but has not been officially
-              closed on-chain by the creator. Task interactions are disabled
-              until the campaign is closed.
-            </p>
-          </div>
-        </motion.div>
-      )}
-
       {/* Progress Card */}
       {role === 'participant' && (
         <motion.div
@@ -183,9 +164,13 @@ export function TaskList({
                     {role === 'participant' &&
                       !isCompleted &&
                       campaign.status === 'Open' &&
-                      (isTimeExpiredNotClosed ? (
+                      (status.state === 'ended_unrecorded' ? (
                         <Badge variant="outline" className="border-status-pending-border bg-status-pending-bg text-status-pending-fg">
-                          Expired
+                          Ended
+                        </Badge>
+                      ) : status.state === 'upcoming' ? (
+                        <Badge variant="outline" className="border-status-pending-border bg-status-pending-bg text-status-pending-fg">
+                          Opens {shortDateTime(campaign.startDate)}
                         </Badge>
                       ) : campaign.participants >= 1000 ? (
                         <Badge variant="destructive">

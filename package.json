@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:unit": "tsx --test 'src/**/*.test.ts'",
     "keeper": "tsx worker/keeper.ts",
     "keeper:dry-run": "tsx worker/keeper.ts --dry-run",
     "keeper:loop": "tsx worker/keeper.ts --loop",
