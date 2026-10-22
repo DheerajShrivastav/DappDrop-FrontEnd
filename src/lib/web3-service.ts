@@ -1648,8 +1648,8 @@ export const becomeHost = async () => {
     const tx = await contractWithSigner.grantHostRole(signer.address)
     await tx.wait()
     toast({
-      title: 'Success!',
-      description: `You have been granted the HOST_ROLE.`,
+      title: 'You can host campaigns now',
+      description: 'Your wallet has the host role. Create your first campaign.',
     })
   } catch (error: any) {
     console.error('Error granting host role:', error)
