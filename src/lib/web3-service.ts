@@ -15,7 +15,7 @@ import NFTSettlementModule from './abi/NFTSettlementModule.json'
 import { addDays, endOfDay, differenceInSeconds } from 'date-fns'
 import { contractErrorMessage, contractErrorName } from './contract-errors'
 import { DEPLOYMENT_CHAIN } from './deployment-chain'
-import { settlementOwedOnClose } from './campaign-status'
+import { settlementOwedOnClose } from './close-guard'
 import {
   getGraphCampaigns,
   getGraphCampaignsByHost,
