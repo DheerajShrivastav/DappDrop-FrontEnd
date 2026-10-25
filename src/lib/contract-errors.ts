@@ -468,6 +468,9 @@ const MESSAGES: Record<string, Entry> = {
 export const KNOWN_CONTRACT_ERRORS: readonly string[] = Object.keys(MESSAGES)
 
 export type ContractErrorDescription = {
+  /** revert = the contract refused it (name says which, when decodable); rejected = the user
+   * cancelled in the wallet; gas = not enough native token; network = no answer; other = anything else. */
+  kind: 'revert' | 'rejected' | 'gas' | 'network' | 'other'
   /** The decoded error name, or null when the failure wasn't a decodable revert. */
   name: string | null
   /** A short toast title (sentence case, no "Error"). */
@@ -481,6 +484,7 @@ const GENERIC_TITLE = 'The transaction didn’t go through'
 function describeBuiltin(d: DecodedContractError): ContractErrorDescription {
   if (d.name === 'Panic') {
     return {
+      kind: 'revert',
       name: 'Panic',
       title: GENERIC_TITLE,
       message:
@@ -490,7 +494,7 @@ function describeBuiltin(d: DecodedContractError): ContractErrorDescription {
     }
   }
   // An Error(string) we don't recognise: never show the raw string.
-  return { name: d.name, title: GENERIC_TITLE, message: 'The contract refused it.' }
+  return { kind: 'revert', name: d.name, title: GENERIC_TITLE, message: 'The contract refused it.' }
 }
 
 /** Plain-language title + message for any failed contract call. Never returns raw revert text. */
@@ -500,7 +504,7 @@ export function describeContractError(error: unknown, opts: { gasSymbol?: string
     const entry = MESSAGES[decoded.name]
     if (entry) {
       const message = typeof entry.message === 'function' ? entry.message({ method: decoded.method, args: decoded.args }) : entry.message
-      return { name: decoded.name, title: entry.title, message }
+      return { kind: 'revert', name: decoded.name, title: entry.title, message }
     }
     return describeBuiltin(decoded)
   }
@@ -516,26 +520,27 @@ export function describeContractError(error: unknown, opts: { gasSymbol?: string
   const code = e.code ?? e.info?.error?.code ?? e.error?.code
   const text = `${String(e.shortMessage ?? '')} ${String(e.message ?? '')}`.toLowerCase()
   if (code === 'ACTION_REJECTED' || code === 4001 || text.includes('user rejected') || text.includes('user denied')) {
-    return { name: null, title: 'Cancelled in your wallet', message: 'You cancelled in your wallet. Nothing was sent.' }
+    return { kind: 'rejected', name: null, title: 'Cancelled in your wallet', message: 'You cancelled in your wallet. Nothing was sent.' }
   }
   if (code === 'INSUFFICIENT_FUNDS' || text.includes('insufficient funds')) {
     return {
+      kind: 'gas',
       name: null,
       title: 'Not enough for gas',
       message: `This wallet doesn’t have enough ${opts.gasSymbol ?? 'ETH'} to pay for gas.`,
     }
   }
   if (code === 'CALL_EXCEPTION') {
-    return { name: null, title: GENERIC_TITLE, message: 'The contract refused it. Refresh the page to check the campaign’s current state, then try again.' }
+    return { kind: 'revert', name: null, title: GENERIC_TITLE, message: 'The contract refused it. Refresh the page to check the campaign’s current state, then try again.' }
   }
   if (code === 'NETWORK_ERROR' || code === 'TIMEOUT' || code === 'SERVER_ERROR') {
-    return { name: null, title: GENERIC_TITLE, message: 'The network didn’t answer. Try again in a moment.' }
+    return { kind: 'network', name: null, title: GENERIC_TITLE, message: 'The network didn’t answer. Try again in a moment.' }
   }
   // Our own thrown Error (a pre-check or a service message) is already plain language.
   if (typeof code !== 'string' && typeof e.message === 'string' && e.message.trim()) {
-    return { name: null, title: GENERIC_TITLE, message: e.message }
+    return { kind: 'other', name: null, title: GENERIC_TITLE, message: e.message }
   }
-  return { name: null, title: GENERIC_TITLE, message: 'Transaction failed. Please try again.' }
+  return { kind: 'other', name: null, title: GENERIC_TITLE, message: 'Transaction failed. Please try again.' }
 }
 
 /** describeContractError(...).message, for call sites that only show a line of text. */

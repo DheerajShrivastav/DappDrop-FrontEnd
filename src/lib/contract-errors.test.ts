@@ -88,7 +88,7 @@ test('a genuine ethers CallExceptionError (contract with the ABI) decodes', () =
   assert.equal(err.code, 'CALL_EXCEPTION')
   assert.equal(err.revert?.name, 'Web3Campaigns__SettlementNotPublished')
   const d = describeContractError(err)
-  assert.deepEqual(d, { name: 'Web3Campaigns__SettlementNotPublished', title: 'Can’t close yet', message: 'Publish the reward list first.' })
+  assert.deepEqual(d, { kind: 'revert', name: 'Web3Campaigns__SettlementNotPublished', title: 'Can’t close yet', message: 'Publish the reward list first.' })
 })
 
 test('a genuine ethers error with no ABI (estimateGas through the wallet) decodes from its data', () => {
@@ -104,13 +104,15 @@ test('ethers error.revert alone (data already consumed) still decodes', () => {
 
 test('app-design §3.2: the six errors that replaced revert strings use the approved copy', () => {
   const d = (name: string) => describeContractError({ data: iface.encodeErrorResult(name, []) })
-  assert.deepEqual(d('Web3Campaigns__RateLimited'), { name: 'Web3Campaigns__RateLimited', title: 'Too many actions in a row', message: 'Wait a moment, then try again.' })
+  assert.deepEqual(d('Web3Campaigns__RateLimited'), { kind: 'revert', name: 'Web3Campaigns__RateLimited', title: 'Too many actions in a row', message: 'Wait a moment, then try again.' })
   assert.deepEqual(d('Web3Campaigns__InvalidTextLength'), {
+    kind: 'revert',
     name: 'Web3Campaigns__InvalidTextLength',
     title: 'That text doesn’t fit',
     message: 'It’s empty or too long. Shorten it and try again.',
   })
   assert.deepEqual(d('Web3Campaigns__TooManyTasks'), {
+    kind: 'revert',
     name: 'Web3Campaigns__TooManyTasks',
     title: 'Too many tasks',
     message: 'A campaign can have at most 20 tasks. Remove one to continue.',
@@ -118,11 +120,13 @@ test('app-design §3.2: the six errors that replaced revert strings use the appr
   assert.equal(d('Web3Campaigns__AccountFlagged').title, 'This wallet can’t take part right now')
   assert.match(d('Web3Campaigns__AccountFlagged').message, /^If you think that’s a mistake/)
   assert.deepEqual(d('Web3Campaigns__NotInActivePeriod'), {
+    kind: 'revert',
     name: 'Web3Campaigns__NotInActivePeriod',
     title: 'This campaign isn’t running',
     message: 'It hasn’t started yet, or it has already ended.',
   })
   assert.deepEqual(d('Web3Campaigns__SettlementNotPublished'), {
+    kind: 'revert',
     name: 'Web3Campaigns__SettlementNotPublished',
     title: 'Can’t close yet',
     message: 'Publish the reward list first.',
@@ -191,9 +195,11 @@ test('fallbacks: unknown selector, wallet rejection, gas, network, our own Error
   assert.equal(unknown.name, null)
   assert.match(unknown.message, /contract refused it/)
   assert.equal(describeContractError({ code: 'CALL_EXCEPTION', data: null, shortMessage: 'missing revert data' }).name, null)
+  assert.equal(describeContractError({ code: 'ACTION_REJECTED' }).kind, 'rejected')
   assert.match(contractErrorMessage({ code: 'ACTION_REJECTED' }), /cancelled in your wallet/)
   assert.match(contractErrorMessage({ info: { error: { code: 4001 } } }), /cancelled in your wallet/)
   assert.match(contractErrorMessage({ code: 'INSUFFICIENT_FUNDS' }, { gasSymbol: 'Sepolia ETH' }), /enough Sepolia ETH/)
+  assert.equal(describeContractError({ code: 'INSUFFICIENT_FUNDS' }).kind, 'gas')
   assert.match(contractErrorMessage({ code: 'NETWORK_ERROR' }), /network didn’t answer/)
   assert.equal(contractErrorMessage(new Error('Could not read the latest block.')), 'Could not read the latest block.')
   assert.equal(contractErrorMessage(undefined), 'Transaction failed. Please try again.')

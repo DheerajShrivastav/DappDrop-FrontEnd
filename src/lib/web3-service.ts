@@ -13,6 +13,8 @@ import Web3Campaigns from './abi/Web3Campaigns.json'
 import OnChainRewardModule from './abi/OnChainRewardModule.json'
 import NFTSettlementModule from './abi/NFTSettlementModule.json'
 import { addDays, endOfDay, differenceInSeconds } from 'date-fns'
+import { contractErrorMessage, contractErrorName } from './contract-errors'
+import { DEPLOYMENT_CHAIN } from './deployment-chain'
 import {
   getGraphCampaigns,
   getGraphCampaignsByHost,
@@ -1712,11 +1714,9 @@ export const openCampaign = async (
     } catch (openError: any) {
       console.error(`Failed to open campaign ${campaignId}:`, openError)
 
-      // Previously matched a misspelled error name ('...NotYetStrated') and fell through to
-      // raw `Contract error: ${reason}` text — route through the shared mapper instead.
-      const errorMessage = openError?.reason?.includes('Web3Campaigns__CampaignAlreadyStarted')
-        ? 'This campaign has already been opened.'
-        : mapContractRevertToMessage(openError)
+      // The shared mapper reads the reverting function, so CampaignAlreadyStarted from
+      // openCampaign reads "This campaign has already been opened."
+      const errorMessage = mapContractRevertToMessage(openError)
 
       toast({
         title: 'Failed to Open Campaign',
@@ -1760,11 +1760,10 @@ export const endCampaign = async (campaignId: string) => {
     })
   } catch (error: any) {
     console.error(`Error ending campaign ${campaignId}:`, error)
-    const reason = error.reason || 'An unknown error occurred.'
     toast({
       variant: 'destructive',
-      title: 'Transaction Failed',
-      description: `Failed to end campaign. Reason: ${reason}`,
+      title: 'The end wasn’t recorded',
+      description: mapContractRevertToMessage(error),
     })
     throw error
   }
@@ -2240,154 +2239,13 @@ export const claimERC20Reward = async (
 }
 
 /**
- * NFR-10: map every contract revert reachable from the wizard/claim UI to a specific,
- * actionable message — a raw revert string reaching the user is a defect. Custom-error
- * names are matched against `error.reason`/`error.data`/`error.message` since ethers
- * surfaces them differently depending on RPC provider and call path (staticCall vs sent tx).
+ * NFR-10: map every contract revert reachable from the UI to a specific, actionable message — a
+ * raw revert string reaching the user is a defect. Since contracts PR #26 every revert is a
+ * custom error, so this decodes the revert data against the ABIs (src/lib/contract-errors.ts)
+ * instead of matching text. Kept as the service's export so existing call sites don't change.
  */
-export const mapContractRevertToMessage = (error: any): string => {
-  const raw: string =
-    error?.reason ||
-    error?.shortMessage ||
-    error?.error?.message ||
-    error?.message ||
-    ''
-
-  const has = (name: string) => raw.includes(name)
-
-  if (has('Web3Campaigns__AlreadyClaimedSettlement')) {
-    return 'This wallet has already claimed its reward for this campaign.'
-  }
-  if (has('Web3Campaigns__AlreadySwept')) {
-    return 'The host has already swept unclaimed funds for this campaign — claiming is closed.'
-  }
-  if (has('Web3Campaigns__RootDisputeWindowActive')) {
-    return 'Allocations were just published and are in their 24-hour community review window. Try again once it elapses.'
-  }
-  if (has('Web3Campaigns__MerkleRootNotSet')) {
-    return 'No reward allocation has been published for this campaign yet.'
-  }
-  if (has('Web3Campaigns__InvalidMerkleProof')) {
-    return 'This wallet has no allocation in this campaign, or the allocation data is stale — refresh and try again.'
-  }
-  if (has('Web3Campaigns__CampaignNotYetEnded')) {
-    return 'Claims open once the campaign has ended.'
-  }
-  if (has('Web3Campaigns__WrongSettlementMode')) {
-    return 'This campaign uses a different settlement mode than expected.'
-  }
-  if (has('Web3Campaigns__InsufficientEscrow')) {
-    return 'This campaign’s escrow cannot cover this claim — please contact the host.'
-  }
-  if (has('Web3Campaigns__CampaignNotFound')) {
-    return 'This campaign could not be found on-chain.'
-  }
-  if (has('Web3Campaigns__RootAlreadyPublished')) {
-    return 'A root has already been published for this campaign by the platform fallback — publish again to correct it.'
-  }
-  if (has('Web3Campaigns__ERC20RewardNotConfigured')) {
-    return 'This campaign has no ERC20 reward configured yet.'
-  }
-  if (has('Web3Campaigns__SettlementModeAlreadySet')) {
-    return 'This campaign already committed to a different settlement mode.'
-  }
-  if (has('Web3Campaigns__CallerIsNotHost')) {
-    return 'Only the campaign host can perform this action.'
-  }
-  if (has('Web3Campaigns__NotFullyCompleted')) {
-    return 'You have not currently completed all required tasks for this campaign.'
-  }
-  if (has('Web3Campaigns__NoTierMatched')) {
-    return 'Your current rank/score does not fall into any configured reward tier.'
-  }
-  if (has('OnChainRewardModule__NotAuthoritativeModule')) {
-    return 'This campaign’s reward module has changed — please refresh and try again.'
-  }
-  if (has('OnChainRewardModule__CampaignAlreadyStarted')) {
-    return 'Reward tiers can only be configured while the campaign is in Draft.'
-  }
-  if (has('NFTSettlementModule__NotAuthoritativeModule')) {
-    return 'This campaign’s NFT module has changed — please refresh and try again.'
-  }
-  if (has('NFTSettlementModule__NotCampaignHost')) {
-    return 'Only the campaign host can perform this action.'
-  }
-  if (has('Web3Campaigns__NFTNotEscrowed')) {
-    return 'This NFT is not currently escrowed for this campaign (already claimed or withdrawn).'
-  }
-  if (has('Web3Campaigns__NFTModuleMismatch')) {
-    return 'This campaign’s NFT module has changed — please refresh and try again.'
-  }
-  if (has('Web3Campaigns__GracePeriodActive')) {
-    return 'Unclaimed NFTs cannot be withdrawn until the claim grace period ends.'
-  }
-  if (has('Web3Campaigns__BatchTooLarge')) {
-    return 'Too many items in one transaction — try a smaller batch.'
-  }
-  // --- Campaign creation / Draft configuration (wizard) ---
-  // Misnamed on-chain: fires when the start time is at or before the block it was mined in,
-  // i.e. the start already passed — not that it "hasn't started yet".
-  if (has('Web3Campaigns__CampaignStartTimeNotYetStarted')) {
-    return 'The start time passed before the transaction confirmed. Choose a later start time and try again.'
-  }
-  if (has('Web3Campaigns__InvalidCampaignDuration')) {
-    return 'Campaigns must run between 1 hour and 365 days.'
-  }
-  if (has('Rate limit: too many actions')) {
-    return 'You can create one campaign every 5 minutes. Wait a few minutes and try again.'
-  }
-  if (has('Invalid name length')) {
-    return 'Campaign titles must be between 1 and 200 characters.'
-  }
-  if (has('Too many tasks per campaign')) {
-    return 'A campaign can have at most 20 tasks.'
-  }
-  if (has('Web3Campaigns__CampaignAlreadyStarted')) {
-    return 'This can only be changed while the campaign is still in Draft.'
-  }
-  if (has('Web3Campaigns__CampaignAlreadyEnded')) {
-    return 'This campaign has already ended, so it can no longer be funded.'
-  }
-  if (has('Web3Campaigns__InvalidTokenAddress')) {
-    return 'That token address is not valid for this reward.'
-  }
-  if (has('Web3Campaigns__InvalidAmount')) {
-    return 'The amount must be greater than zero.'
-  }
-  if (has('Web3Campaigns__FeeExceedsAmount')) {
-    return 'The funding amount is too small to cover the protocol fee.'
-  }
-  if (has('Web3Campaigns__NoFundsReceived')) {
-    return 'No tokens were received. Check your token balance and approval, then try again.'
-  }
-  if (has('Web3Campaigns__InvalidParticipantLimit')) {
-    return 'That participant cap is not allowed.'
-  }
-  if (has('Web3Campaigns__TooManyTiers')) {
-    return 'Reward tiers must number between 1 and 10.'
-  }
-  if (has('Web3Campaigns__InvalidTierConfiguration')) {
-    return 'The reward tiers are invalid: rank tiers must not overlap, and score tiers need different minimum scores.'
-  }
-  if (has('Web3Campaigns__ArrayLengthMismatch')) {
-    return 'Token IDs and amounts must have the same number of entries.'
-  }
-  // --- Cancel ---
-  if (has('Web3Campaigns__CampaignHasParticipants')) {
-    return 'Someone has participated in this campaign, so it can no longer be cancelled.'
-  }
-  if (has('Web3Campaigns__CampaignNotCancellable')) {
-    return 'This campaign can no longer be cancelled — its reward settlement is already committed.'
-  }
-  if (has('EnforcedPause') || has('paused')) {
-    return 'The platform is temporarily paused for maintenance. Please try again shortly.'
-  }
-  if (error?.code === 'ACTION_REJECTED') {
-    return 'Transaction was rejected in your wallet.'
-  }
-
-  return raw || 'Transaction failed. Please try again.'
-}
+export const mapContractRevertToMessage = (error: any): string =>
+  contractErrorMessage(error, { gasSymbol: DEPLOYMENT_CHAIN.gasSymbol })
 
 /**
  * Direct-RPC settlement read for the claim UI's value-bearing checks (BR-I4) — never trust
@@ -2562,81 +2420,44 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
       taskIndex,
     })
 
-    // Read the on-chain task type. In v0.6.0, completeTask self-verifies ONLY the two
-    // hold types (ONCHAIN_HOLD_ERC20 = 8, ONCHAIN_HOLD_ERC721 = 9); their in-tx balance
-    // check can make estimateGas fail with "missing revert data" when the RPC doesn't
-    // return custom error data, so those get the manual-gas-limit path below.
-    //
-    // TODO(P1): every OTHER task type (social, discord/telegram, humanity, onchain_tx) is
-    // an ATTESTED task in v0.6.0 — completeTask will revert TaskManagedBySignature for any
-    // index an attestation has touched. They must settle via the backend SIGNER_ROLE service
-    // (verifyTaskCompletionWithSignature), NOT this client call. See docs/GAP_ANALYSIS §3,
-    // docs/DECISIONS_v0.6.0.md Decision 2, PRD FR-T1/FR-T3/BR-V*. This function should narrow
-    // to self-verify hold tasks once the signer service lands.
+    // Since contracts PR #24, completeTask self-verifies ONLY the two hold types
+    // (ONCHAIN_HOLD_ERC20 = 8, ONCHAIN_HOLD_ERC721 = 9). Every other type reverts
+    // NotSelfVerifiable: it settles through the signer's attestation instead
+    // (/api/verify-task, then submitAttestationFromWallet as the fallback). Refuse it here, before
+    // the wallet is asked to pay gas for a certain revert. If the read fails, the staticCall
+    // below still stops a doomed transaction.
     let taskTypeOnChain: number | null = null
     try {
-      const taskData = await contractToRead.getCampaignTask(
-        campaignIdNumber,
-        taskIndex,
-      )
+      const taskData = await contractToRead.getCampaignTask(campaignIdNumber, taskIndex)
       taskTypeOnChain = Number(taskData.taskType)
-      console.log('On-chain task type:', taskTypeOnChain)
     } catch (e) {
-      console.warn('Could not read task type, proceeding with default flow')
+      console.warn('Could not read the task type; the staticCall pre-flight decides:', e)
+    }
+    if (
+      taskTypeOnChain !== null &&
+      taskTypeOnChain !== OnChainTaskType.ONCHAIN_HOLD_ERC20 &&
+      taskTypeOnChain !== OnChainTaskType.ONCHAIN_HOLD_ERC721
+    ) {
+      throw new Error('This task is checked by DappDrop’s verifier, not by a wallet transaction. Use the task’s Start button.')
     }
 
-    // Hold tasks (8/9) may revert during estimateGas without decodable data; handle via:
-    // 1. staticCall to detect a real revert reason
-    // 2. on success, send with default gas estimation
-    // 3. on "missing revert data", send with a manual gas limit
-    const isOnChainVerifiedTask =
-      taskTypeOnChain === OnChainTaskType.ONCHAIN_HOLD_ERC20 ||
-      taskTypeOnChain === OnChainTaskType.ONCHAIN_HOLD_ERC721
-
+    // Hold tasks check a token balance in-transaction, which can make estimateGas fail with
+    // "missing revert data" on RPCs that don't return custom-error data. So: staticCall first
+    // (a real revert surfaces as a decodable error); on "missing revert data" only, send with a
+    // manual gas limit.
     let tx
-    if (isOnChainVerifiedTask) {
-      // For on-chain verified tasks, try staticCall first to detect revert reasons
-      try {
-        await contractWithSigner.completeTask.staticCall(
-          campaignIdNumber,
-          taskIndex,
-        )
-        // staticCall succeeded — the actual tx should also succeed
-        tx = await contractWithSigner.completeTask(
-          campaignIdNumber,
-          taskIndex,
-        )
-      } catch (staticErr: any) {
-        console.warn('staticCall failed for on-chain task:', staticErr?.shortMessage || staticErr?.message)
-
-        // If "missing revert data" — the RPC just can't return the error.
-        // Try sending the tx with a manual gas limit (bypasses estimateGas).
-        if (
-          staticErr?.shortMessage?.includes('missing revert data') ||
+    try {
+      await contractWithSigner.completeTask.staticCall(campaignIdNumber, taskIndex)
+      tx = await contractWithSigner.completeTask(campaignIdNumber, taskIndex)
+    } catch (staticErr: any) {
+      const noRevertData =
+        contractErrorName(staticErr) === null &&
+        (staticErr?.shortMessage?.includes('missing revert data') ||
           staticErr?.message?.includes('missing revert data') ||
-          (staticErr?.code === 'CALL_EXCEPTION' && staticErr?.data === null)
-        ) {
-          console.log('Attempting tx with manual gas limit to bypass estimateGas...')
-          try {
-            tx = await contractWithSigner.completeTask(
-              campaignIdNumber,
-              taskIndex,
-              { gasLimit: 300000 },
-            )
-          } catch (manualGasErr: any) {
-            console.error('Manual gas tx also failed:', manualGasErr?.shortMessage || manualGasErr?.message)
-            throw manualGasErr
-          }
-        } else {
-          // staticCall gave us a real error — re-throw it
-          throw staticErr
-        }
-      }
-    } else {
-      tx = await contractWithSigner.completeTask(
-        campaignIdNumber,
-        taskIndex,
-      )
+          (staticErr?.code === 'CALL_EXCEPTION' && staticErr?.data === null))
+      if (!noRevertData) throw staticErr
+      console.warn('completeTask staticCall returned no revert data; sending with a manual gas limit')
+      tx = await contractWithSigner.completeTask(campaignIdNumber, taskIndex, { gasLimit: 300000 })
     }
 
     console.log('Transaction sent:', tx.hash)
@@ -2644,250 +2465,67 @@ export const completeTask = async (campaignId: string, taskIndex: number) => {
 
     console.log('Task completed successfully!')
   } catch (error: any) {
-    console.error('🔴 completeTask error object:', {
-      code: error?.code,
-      reason: error?.reason,
-      message: error?.message,
-      data: error?.data,
-      errorData: error?.error?.data,
-      infoErrorData: error?.info?.error?.data,
-      shortMessage: error?.shortMessage,
-      revert: error?.revert,
-      transaction: error?.transaction,
-    })
+    console.error('completeTask failed:', error)
 
-    if (error?.code === 'BAD_DATA' || error?.code === 'CALL_EXCEPTION') {
-      console.warn(
-        `Campaign ${campaignId} not found or reverted when attempting task completion.`,
-      )
-    } else {
-      console.warn(
-        `Error completing task ${taskIndex} for campaign ${campaignId}:`,
-        error?.message || 'Unknown error',
-      )
+    // A decodable custom error, a wallet rejection, or our own pre-check message: map it once
+    // (src/lib/contract-errors.ts). Only a revert with no data at all goes further.
+    if (contractErrorName(error) !== null || error?.code !== 'CALL_EXCEPTION') {
+      throw new Error(mapContractRevertToMessage(error))
     }
 
-    let description = `Failed to complete task.`
-
-    const errorMap: Record<string, string> = {
-      Web3Campaigns__CampaignNotOpen:
-        'Campaign is not open for task completion.',
-      Web3Campaigns__CampaignEnded:
-        'This campaign has ended and cannot accept tasks.',
-      Web3Campaigns__CampaignNotFound: 'Campaign not found.',
-      Web3Campaigns__CampaignStartTimeNotYetStrated:
-        'Campaign start time has not been reached yet.',
-      Web3Campaigns__TaskAlreadyCompleted:
-        'You have already completed this task.',
-      Web3Campaigns__TaskNotFound: 'Task not found in this campaign.',
-      Web3Campaigns__PosterCannotAcceptOwnTask:
-        'Campaign hosts cannot complete tasks on their own campaign.',
-      Web3Campaigns__TaskNotVerifiableByHost:
-        'This task requires host verification before completion.',
-      EnforcedPause:
-        'The contract is currently paused. Please try again later.',
-      ReentrancyGuardReentrantCall:
-        'Transaction was blocked due to reentrancy protection. Please try again.',
+    // No revert data (some RPCs, or a mined revert): simulate once to get it.
+    try {
+      await contractWithSigner.completeTask.staticCall(parseInt(campaignId, 10), taskIndex)
+    } catch (simError: any) {
+      if (contractErrorName(simError) !== null) throw new Error(mapContractRevertToMessage(simError))
     }
 
-    // Try to decode custom errors for a clearer message — check ALL possible data locations
-    const errorDataCandidates = [
-      error?.data?.data,
-      error?.data,
-      error?.error?.data,
-      error?.info?.error?.data,
-      error?.error?.error?.data,
-      error?.info?.error?.error?.data,
-      // ethers.js v6 sometimes puts it under revert
-      error?.revert?.data,
-    ].filter(
-      (d) => d && typeof d === 'string' && d.startsWith('0x') && d.length > 2,
-    )
-
-    console.log('🔍 Error data candidates found:', errorDataCandidates)
-
-    let decoded = null
-    const iface = new ethers.Interface(Web3Campaigns.abi)
-
-    for (const errorData of errorDataCandidates) {
-      try {
-        decoded = iface.parseError(errorData)
-        if (decoded?.name) {
-          console.log('✅ Decoded custom error:', decoded.name)
-          description =
-            errorMap[decoded.name] || `Contract error: ${decoded.name}`
-          break
-        }
-      } catch (decodeError) {
-        console.warn(
-          'Failed to decode error data candidate:',
-          errorData,
-          decodeError,
-        )
-      }
-    }
-
-    // If we couldn't decode from error data, try to simulate the call to get the revert data
-    if (!decoded && contractWithSigner) {
-      try {
-        console.log('🔍 Attempting eth_call simulation to get revert data...')
+    let description = 'Failed to complete task.'
+    // Last resort: check the campaign's current state to give a specific reason
+    try {
+      const contractToRead = readOnlyContract || contractWithSigner
+      if (contractToRead) {
         const campaignIdNumber = parseInt(campaignId, 10)
-        await contractWithSigner.completeTask.staticCall(
-          campaignIdNumber,
-          taskIndex,
-        )
-      } catch (simError: any) {
-        console.log('🔍 Simulation error:', {
-          code: simError?.code,
-          reason: simError?.reason,
-          data: simError?.data,
-          revert: simError?.revert,
-          shortMessage: simError?.shortMessage,
-        })
+        const campaignData =
+          await contractToRead.getCampaign(campaignIdNumber)
+        const userAddress = await (await getSigner()).getAddress()
+        const now = Math.floor(Date.now() / 1000)
 
-        // Try to extract error name from simulation
-        const simDataCandidates = [
-          simError?.data?.data,
-          simError?.data,
-          simError?.error?.data,
-          simError?.info?.error?.data,
-          simError?.revert?.data,
-        ].filter(
-          (d) =>
-            d && typeof d === 'string' && d.startsWith('0x') && d.length > 2,
-        )
-
-        for (const simData of simDataCandidates) {
+        if (Number(campaignData.status) !== 1) {
+          description = `Campaign is not open. Current status: ${['Draft', 'Open', 'Ended', 'Closed', 'Cancelled'][Number(campaignData.status)] || campaignData.status}.`
+        } else if (
+          userAddress.toLowerCase() === campaignData.host.toLowerCase()
+        ) {
+          description =
+            'Campaign hosts cannot complete tasks on their own campaign. Please use a different wallet.'
+        } else if (now > Number(campaignData.endTime)) {
+          description = 'This campaign has ended. The end time has passed.'
+        } else if (now < Number(campaignData.startTime)) {
+          description = 'Campaign start time has not been reached yet.'
+        } else {
+          // Check if task already completed
           try {
-            decoded = iface.parseError(simData)
-            if (decoded?.name) {
-              console.log(
-                '✅ Decoded custom error from simulation:',
-                decoded.name,
-              )
+            const alreadyDone = await contractToRead.hasCompletedTask(
+              campaignIdNumber,
+              userAddress,
+              taskIndex,
+            )
+            if (alreadyDone) {
+              description = 'You have already completed this task.'
+            } else {
               description =
-                errorMap[decoded.name] || `Contract error: ${decoded.name}`
-              break
+                'Transaction rejected by the smart contract. The campaign is active and the task is not yet completed. Please check the browser console for more details and try again.'
             }
           } catch {
-            // continue to next candidate
-          }
-        }
-
-        // Also check if the simulation gave us a reason string
-        if (!decoded && simError?.reason) {
-          console.log('✅ Got reason from simulation:', simError.reason)
-          // Check against known error names
-          for (const [errorName, errorMsg] of Object.entries(errorMap)) {
-            if (simError.reason.includes(errorName)) {
-              description = errorMsg
-              decoded = { name: errorName } as any
-              break
-            }
-          }
-        }
-
-        // Check shortMessage from simulation
-        if (!decoded && simError?.shortMessage) {
-          for (const [errorName, errorMsg] of Object.entries(errorMap)) {
-            if (simError.shortMessage.includes(errorName)) {
-              description = errorMsg
-              decoded = { name: errorName } as any
-              break
-            }
-          }
-        }
-      }
-    }
-
-    // Parse common smart contract errors from error.reason
-    if (!decoded && error.reason) {
-      if (error.reason.includes('CampaignNotOpen')) {
-        description = 'Campaign is not open for task completion.'
-      } else if (error.reason.includes('TaskAlreadyCompleted')) {
-        description = 'You have already completed this task.'
-      } else if (error.reason.includes('TaskNotFound')) {
-        description = 'Task not found in this campaign.'
-      } else if (error.reason.includes('PosterCannotAcceptOwnTask')) {
-        description =
-          'Campaign hosts cannot complete tasks on their own campaign.'
-      } else if (error.reason.includes('Too many rapid actions')) {
-        description = 'Please wait 30 seconds between actions.'
-      } else if (
-        error.reason.includes('Account flagged for suspicious activity')
-      ) {
-        description = 'Account flagged for suspicious activity.'
-      } else if (error.reason.includes('Campaign not in active period')) {
-        description = 'This campaign is not currently active.'
-      } else {
-        description += ` Reason: ${error.reason}`
-      }
-    } else if (!decoded && error.shortMessage) {
-      // ethers.js v6 often puts useful info in shortMessage
-      for (const [errorName, errorMsg] of Object.entries(errorMap)) {
-        if (error.shortMessage.includes(errorName)) {
-          description = errorMsg
-          break
-        }
-      }
-      if (description === 'Failed to complete task.') {
-        description = error.shortMessage
-      }
-    } else if (
-      !decoded &&
-      error.message &&
-      !error.message.includes('missing revert data') &&
-      !error.message.includes('CALL_EXCEPTION')
-    ) {
-      // Use the message only if it's our own pre-check error, not the raw ethers CALL_EXCEPTION
-      description = error.message
-    } else if (!decoded) {
-      // Last resort: check the campaign's current state to give a specific reason
-      try {
-        const contractToRead = readOnlyContract || contractWithSigner
-        if (contractToRead) {
-          const campaignIdNumber = parseInt(campaignId, 10)
-          const campaignData =
-            await contractToRead.getCampaign(campaignIdNumber)
-          const userAddress = await (await getSigner()).getAddress()
-          const now = Math.floor(Date.now() / 1000)
-
-          if (Number(campaignData.status) !== 1) {
-            description = `Campaign is not open. Current status: ${['Draft', 'Open', 'Ended', 'Closed', 'Cancelled'][Number(campaignData.status)] || campaignData.status}.`
-          } else if (
-            userAddress.toLowerCase() === campaignData.host.toLowerCase()
-          ) {
             description =
-              'Campaign hosts cannot complete tasks on their own campaign. Please use a different wallet.'
-          } else if (now > Number(campaignData.endTime)) {
-            description = 'This campaign has ended. The end time has passed.'
-          } else if (now < Number(campaignData.startTime)) {
-            description = 'Campaign start time has not been reached yet.'
-          } else {
-            // Check if task already completed
-            try {
-              const alreadyDone = await contractToRead.hasCompletedTask(
-                campaignIdNumber,
-                userAddress,
-                taskIndex,
-              )
-              if (alreadyDone) {
-                description = 'You have already completed this task.'
-              } else {
-                description =
-                  'Transaction rejected by the smart contract. The campaign is active and the task is not yet completed. Please check the browser console for more details and try again.'
-              }
-            } catch {
-              description =
-                'Transaction rejected by the smart contract. Please check the browser console for more details and try again.'
-            }
+              'Transaction rejected by the smart contract. Please check the browser console for more details and try again.'
           }
         }
-      } catch (diagError) {
-        console.warn('Diagnostic check failed:', diagError)
-        description =
-          'Transaction rejected by the smart contract. Please check the browser console for more details and try again.'
       }
+    } catch (diagError) {
+      console.warn('Diagnostic check failed:', diagError)
+      description =
+        'Transaction rejected by the smart contract. Please check the browser console for more details and try again.'
     }
 
     console.error('Parsed error description:', description)

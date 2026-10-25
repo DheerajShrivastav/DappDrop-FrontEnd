@@ -22,6 +22,7 @@ import {
   completeTask,
   submitAttestationFromWallet,
   getUserTaskCompletionStatus,
+  mapContractRevertToMessage,
 } from '@/lib/web3-service'
 
 import { Button } from '@/components/app/button'
@@ -377,14 +378,10 @@ export default function CampaignDetailsPage() {
 
       return true
     } catch (error: any) {
-      const message = String(error?.message ?? error ?? '')
-      let description = message || 'Failed to complete task.'
-      if (message.includes('not in active period')) {
-        description = 'This campaign is not currently active.'
-      } else if (message.includes('Campaign participant limit reached')) {
-        description =
-          'The maximum participant limit for this campaign has been reached.'
-      }
+      // Covers the verifier's own messages (plain Errors pass through) and the attestation
+      // self-submit's contract reverts (ParticipantLimitReached, SignatureExpired, …), decoded
+      // by custom error rather than matched as text.
+      const description = mapContractRevertToMessage(error)
       setTaskErrors((prev) => ({ ...prev, [taskId]: description }))
       toast({ variant: 'destructive', title: 'Couldn’t verify that task', description })
       return false
