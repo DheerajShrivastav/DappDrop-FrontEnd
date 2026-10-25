@@ -64,6 +64,12 @@ export const claims = {
   hostCloseGuarded: true,
   /** NFT-custody fix (OUT-C02): an NFT leaves escrow only through its own campaign. */
   nftCustodyFixed: true,
+  /**
+   * PR #26: Web3Campaigns itself refuses any fee module's skim above 10 % of what it received
+   * (FeeExceedsAmount), so no rotated-in module can take more. Unlocks the app's "the contract
+   * caps it at 10%" fee line (src/lib/protocol-fee.ts). Check: the deployed source has the cap.
+   */
+  feeCapEnforced: true,
   /** Commitment clause while the host-close gap is unfixed (moot once hostCloseGuarded). */
   hostCloseFixCommitted: true,
   /** Commitment clause while the NFT gap is unfixed (moot once nftCustodyFixed). */

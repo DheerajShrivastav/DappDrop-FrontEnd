@@ -21,6 +21,7 @@ const deployedV060: Claims = {
   rolesSplit: false,
   hostCloseGuarded: false,
   nftCustodyFixed: false,
+  feeCapEnforced: false,
   hostCloseFixCommitted: false,
   nftFixCommitted: false,
 }

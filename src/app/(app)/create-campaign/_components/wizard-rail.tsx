@@ -1,6 +1,7 @@
 'use client'
 
 import { KeyValueList, Panel, type KeyValueItem } from '@/components/app'
+import { FEE_CAP_NOTE } from '@/lib/protocol-fee'
 
 /**
  * The wizard's right rail (app-design §1.10): "Your campaign so far" and "What you'll pay". On
@@ -19,14 +20,10 @@ export function RailPanels({ soFar, pay, payNote, feeCapNote }: RailProps) {
       <Panel eyebrow="What you’ll pay">
         <KeyValueList items={pay} />
         {payNote && <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-2">{payNote}</p>}
-        {/* TODO(redeploy): the 10% fee cap ships with the contract update (app-design §3.3).
-            Turn this on (FEE_CAP_SHIPPED) only once the redeployed Web3Campaigns enforces it. */}
-        {feeCapNote && (
-          <div className="relative mt-7 rounded-md border border-dashed border-signal px-4 pb-3 pt-4">
-            <span className="absolute -top-2.5 right-3 bg-surface px-1.5 font-mono text-[0.6875rem] uppercase tracking-[0.1em] text-signal">Contract update</span>
-            <p className="text-[0.8125rem] leading-relaxed text-ink-2">The contract caps any platform fee at 10%. It’s shown on Review before you sign.</p>
-          </div>
-        )}
+        {/* app-design §3.3: on only where the deployed Web3Campaigns enforces the cap (contracts
+            PR #26, claims.feeCapEnforced). A plain line: the mockups' dashed gold "Contract
+            update" frame was a review marker, and gold is reserved for the reward and "now". */}
+        {feeCapNote && <p className="mt-3 text-[0.8125rem] leading-relaxed text-ink-2">{FEE_CAP_NOTE}</p>}
       </Panel>
     </>
   )

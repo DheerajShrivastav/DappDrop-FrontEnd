@@ -2060,19 +2060,29 @@ export const setCampaignMaxParticipantsOnChain = async (
 }
 
 /**
- * Whether a protocol fee module is currently registered (FR-H5 itemization). This
- * deployment ships with none (fees disabled, gross = net) — reading it live rather than
- * hardcoding false means the wizard stays honest if fees are ever enabled later without a
- * code change (PRD Q2 default, docs/DECISIONS_v0.6.0.md).
+ * The registered fee module's rate in basis points, for the fee line (src/lib/protocol-fee.ts):
+ * 0 = no fee module (fees off), null = a module is set but its rate couldn't be read. Derived
+ * from computeFee on a large probe amount rather than a feeBps() getter, so it works for any
+ * module honouring IFeeModule (the same flat-rate assumption as quoteProtocolFee below). If the
+ * entrypoint can't be read at all, the configured address book decides: no fee module there
+ * means 0, never an invented rate.
  */
-export const getProtocolFeeEnabled = async (): Promise<boolean> => {
+export const getProtocolFeeBps = async (): Promise<number | null> => {
   try {
     const c = getEntrypointReadContract()
     const feeModule: string = await c.getFeeModule()
-    return feeModule !== ethers.ZeroAddress
+    if (feeModule === ethers.ZeroAddress) return 0
+    const fm = new ethers.Contract(
+      feeModule,
+      ['function computeFee(uint256,uint256) view returns (uint256 feeAmount, address treasury)'],
+      c.runner,
+    )
+    const probe = ethers.parseUnits('1', 24)
+    const [fee]: [bigint] = await fm.computeFee(0, probe)
+    return Number((fee * BigInt(10000)) / probe)
   } catch (e) {
-    console.warn('getProtocolFeeEnabled failed:', e)
-    return false
+    console.warn('getProtocolFeeBps failed:', e)
+    return config.addresses.feeModule ? null : 0
   }
 }
 
