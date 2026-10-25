@@ -9,6 +9,7 @@
 import { addMilliseconds, format, isSameDay, isSameMonth, isSameYear } from 'date-fns'
 import {
   SETTLEMENT_FALLBACK_DELAY_MS,
+  settlementOwedOnClose,
   shortDate,
   shortDateTime,
   type CampaignStatusInfo,
@@ -108,10 +109,14 @@ export type HostPlan = {
   needsYou: string
 }
 
+/** Why Close is disabled while a list is owed (app-design §3.1); next to the button and in the close dialog. */
+export const CLOSE_GUARD_REASON = 'Publish the reward list first: closing without one would leave nobody able to claim.'
+
 /**
  * The host's next steps. `participants` is the on-chain count. The `close` step is guarded
- * (`closeBlocked`) when a list campaign with participants has no published list: closing then
- * would leave nobody able to claim (OUT-C03; the contract rejects it after the redeploy).
+ * (`closeBlocked`) while a campaign with participants still owes a published list: closing then
+ * would leave nobody able to claim (OUT-C03), and the contract rejects it with
+ * SettlementNotPublished (contracts PR #26).
  */
 export function hostPlan(
   campaign: CampaignStatusInput,
@@ -231,8 +236,14 @@ export function hostPlan(
     cancelled: 'This campaign was cancelled and the reward went back to you.',
   }
 
+  // The contract's own guard (contracts PR #26): closeCampaign reverts SettlementNotPublished
+  // while escrowed tokens or deposited NFTs have no published list. Mirrored from the settlement
+  // facts; only when they didn't load does the old lifecycle heuristic decide. With nobody
+  // joined the button stays live, because its dialog is where "Cancel campaign instead" lives
+  // (the dialog re-reads the guard on-chain and disables Close itself).
   const listMissing = s === 'ended_finalizing' || s === 'overdue_fallback'
-  const closeBlocked = !tiered && listMissing && joined > 0
+  const owed = settlementOwedOnClose(settlement)
+  const closeBlocked = joined > 0 && (owed === null ? !tiered && listMissing : owed)
 
   return {
     steps,

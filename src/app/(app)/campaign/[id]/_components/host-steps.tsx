@@ -12,12 +12,10 @@ import { Button } from '@/components/app/button'
 import { ConfirmDialog } from '@/components/app/confirm-dialog'
 import { Panel } from '@/components/app/panel'
 import { SectionHeader } from '@/components/app/page-header'
-import { hostPlan, isTieredMode, type HostStep } from './campaign-model'
+import { CLOSE_GUARD_REASON, hostPlan, isTieredMode, type HostStep } from './campaign-model'
 import { MerkleSettlementPanel } from './merkle-settlement-panel'
 import { NFTSettlementPanel } from './nft-settlement-panel'
 import { CloseCampaignAction, ReportsList, useHostReports } from './dispute-reports-panel'
-
-const CLOSE_GUARD_REASON = 'Publish the reward list first: closing without one would leave nobody able to claim.'
 
 /** The host bar (§2.3): "You host this campaign." + the one thing that needs them, in words. */
 export function HostBar({ needsYou }: { needsYou: string }) {
@@ -163,8 +161,9 @@ export function HostSteps({
   }
 
   const settlement = campaign.settlement?.mode === 'NFT' ? <NFTSettlementPanel campaign={campaign} /> : <MerkleSettlementPanel campaign={campaign} />
-  // TODO(redeploy): with the contract update the chain itself rejects this close (OUT-C03,
-  // `SettlementNotPublished`); `claims.hostCloseGuarded` keeps the UI guard in step with it.
+  // The chain itself rejects this close (OUT-C03, `SettlementNotPublished`, contracts PR #26);
+  // hostPlan mirrors that guard from the settlement facts, and `claims.hostCloseGuarded` (true
+  // for the redeployed contracts) keeps the UI claim in step with the deployment.
   const closeBlocked = claims.hostCloseGuarded && plan.closeBlocked
 
   const render = (step: HostStep): { action?: ReactNode; body?: ReactNode } => {

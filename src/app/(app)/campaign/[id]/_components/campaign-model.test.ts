@@ -107,3 +107,24 @@ test('date ranges read like the mockups', () => {
   assert.equal(dateRange(new Date(2026, 8, 28), new Date(2026, 9, 8)), '28 Sep – 8 Oct')
   assert.equal(dateRange(new Date(2026, 11, 28), new Date(2027, 0, 3)), '28 Dec 2026 – 3 Jan 2027')
 })
+
+test('host plan: with settlement facts loaded, the close guard follows the contract (SettlementNotPublished)', () => {
+  const MOD = '0x' + '11'.repeat(20)
+  const ended = (settlement: CampaignStatusInput['settlement'], participants = 5): CampaignStatusInput => ({
+    ...base,
+    status: 'Ended',
+    endDate: at(-1 * D),
+    participants,
+    settlement,
+  })
+  const blocked = (c: CampaignStatusInput) => hostPlan(c, getCampaignStatus(c, NOW)).closeBlocked
+  // Escrowed tokens, no list: the contract refuses close.
+  assert.equal(blocked(ended({ mode: 'UNSET', erc20EscrowedNet: '1000', erc20MerkleRoot: null })), true)
+  // Nothing escrowed (an off-chain reward): the contract lets the host close, so the UI does too.
+  assert.equal(blocked(ended({ mode: 'UNSET', erc20EscrowedNet: '0', erc20MerkleRoot: null })), false)
+  // Deposited NFTs with a published root: not blocked; without one: blocked.
+  assert.equal(blocked(ended({ mode: 'NFT', nftModule: MOD, nftMerkleRoot: '0x' + 'ab'.repeat(32), erc20EscrowedNet: '0' })), false)
+  assert.equal(blocked(ended({ mode: 'NFT', nftModule: MOD, nftMerkleRoot: null, erc20EscrowedNet: '0' })), true)
+  // Nobody joined: the button stays live so the dialog can offer "Cancel campaign instead".
+  assert.equal(blocked(ended({ mode: 'UNSET', erc20EscrowedNet: '1000', erc20MerkleRoot: null }, 0)), false)
+})

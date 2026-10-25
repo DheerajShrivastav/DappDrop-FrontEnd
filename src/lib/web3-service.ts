@@ -15,6 +15,7 @@ import NFTSettlementModule from './abi/NFTSettlementModule.json'
 import { addDays, endOfDay, differenceInSeconds } from 'date-fns'
 import { contractErrorMessage, contractErrorName } from './contract-errors'
 import { DEPLOYMENT_CHAIN } from './deployment-chain'
+import { settlementOwedOnClose } from './campaign-status'
 import {
   getGraphCampaigns,
   getGraphCampaignsByHost,
@@ -1398,6 +1399,27 @@ export const getCampaignSettlement = async (
     const nftPinned = Boolean(nftModule && nftModule !== ethers.ZeroAddress)
     const rewardPinned = Boolean(rewardModule && rewardModule !== ethers.ZeroAddress)
 
+    // The NFT list lives on the campaign's PINNED NFT module. Without it this path reported every
+    // NFT campaign as "no list yet", and the host-close guard (settlementOwedOnClose) couldn't
+    // tell whether closeCampaign would revert SettlementNotPublished. undefined = couldn't read.
+    let nftMerkleRoot: string | null | undefined
+    let nftRootPublishedAt: Date | undefined
+    if (nftPinned) {
+      try {
+        const nftContract = getNFTSettlementModuleContract(nftModule, c.runner!)
+        const [nftRoot, nftClaimableAt] = await Promise.all([
+          nftContract.getNFTMerkleRoot(id),
+          nftContract.getNFTClaimableAt(id),
+        ])
+        nftMerkleRoot = nftRoot && nftRoot !== ZERO_ROOT ? nftRoot : null
+        if (nftMerkleRoot && Number(nftClaimableAt) > 0) {
+          nftRootPublishedAt = new Date((Number(nftClaimableAt) - 24 * 3600) * 1000)
+        }
+      } catch (e) {
+        console.warn(`getCampaignSettlement: NFT root read failed for ${id}:`, e)
+      }
+    }
+
     // Mode derivation. RANK_TIERED vs SCORE_TIERED is only distinguishable via a module read
     // (CP1 fix — was a TODO): when a reward module is pinned, read the campaign's own
     // committed mode straight off it (getOnChainRewardStatus's `mode` field is campaign-level,
@@ -1435,6 +1457,8 @@ export const getCampaignSettlement = async (
       erc20RootPublishedAt,
       erc20Swept: swept,
       nftModule: nftPinned ? nftModule : undefined,
+      nftMerkleRoot,
+      nftRootPublishedAt,
       rewardModule: rewardPinned ? rewardModule : undefined,
       tierCount,
     }
@@ -1789,7 +1813,7 @@ export const closeCampaignOnChain = async (campaignId: string): Promise<string> 
 }
 
 /**
- * What a host's options are before closing (Ended -> Closed). Both answers come from the chain,
+ * What a host's options are before closing (Ended -> Closed). Every answer comes from the chain,
  * not the indexer: the participant count decides whether we tell the host "no one
  * participated", and closing vs cancelling routes escrow — subgraph lag must not drive either.
  *
@@ -1799,22 +1823,28 @@ export const closeCampaignOnChain = async (campaignId: string): Promise<string> 
  * and a staticCall can't drift from the contract. Any failure — a real revert or a flaky RPC —
  * reads as "can't cancel", which only hides the option; it never offers one that would revert.
  * Tiered campaigns always come back false here: configuring tiers locks their mode in Draft.
+ *
+ * `settlementOwed`: closeCampaign would revert SettlementNotPublished (contracts PR #26) because
+ * escrowed tokens or deposited NFTs still have no published list. Read from the same getters the
+ * contract's guard uses (settlementOwedOnClose); null = couldn't read, and the dialog then lets
+ * the contract decide (its revert is mapped to "Can't close yet. Publish the reward list first.").
  */
 export const getCloseOptions = async (
   campaignId: string,
-): Promise<{ totalParticipants: number; canCancel: boolean }> => {
+): Promise<{ totalParticipants: number; canCancel: boolean; settlementOwed: boolean | null }> => {
   const c = getReadOnlyContract()
   if (!c) throw new Error('Contract not initialized')
   const id = parseInt(campaignId, 10)
-  const data = await c.getCampaign(id)
+  const [data, settlement] = await Promise.all([c.getCampaign(id), getCampaignSettlement(campaignId)])
   const totalParticipants = Number(data.totalParticipants)
-  if (totalParticipants !== 0 || !contract) return { totalParticipants, canCancel: false }
+  const settlementOwed = settlementOwedOnClose(settlement)
+  if (totalParticipants !== 0 || !contract) return { totalParticipants, canCancel: false, settlementOwed }
   try {
     const signer = await getSigner()
     await (contract.connect(signer) as Contract).cancelCampaign.staticCall(id)
-    return { totalParticipants, canCancel: true }
+    return { totalParticipants, canCancel: true, settlementOwed }
   } catch {
-    return { totalParticipants, canCancel: false }
+    return { totalParticipants, canCancel: false, settlementOwed }
   }
 }
 

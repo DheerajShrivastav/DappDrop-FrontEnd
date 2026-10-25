@@ -81,8 +81,8 @@ export function hostNext(c: Campaign, s: CampaignStatusInfo = getCampaignStatus(
     case 'allocations_published':
       return { next: s.claimsOpenAt ? `Claims open ${shortDateTime(s.claimsOpenAt)}` : 'List in review (24 h)' }
     case 'claims_open':
-      // TODO(redeploy): after contract PRs #23–#26, close is refused until a list is published
-      // (SettlementNotPublished). Claims-open campaigns already have one, so nothing changes here.
+      // Since contracts PR #26, close is refused until a list is published (SettlementNotPublished).
+      // Claims-open campaigns already have one, so close is always the right next step here.
       return { next: 'Close when ready' }
     case 'closed_claimable':
     case 'closed_no_claimants': {
