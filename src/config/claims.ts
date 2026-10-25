@@ -29,7 +29,9 @@ export const claims = {
   // ---------------------------------------------------------------------------------------
 
   /**
-   * VERSION() of the deployed Web3Campaigns. TODO(redeploy): set to the redeployed version.
+   * VERSION() of the deployed Web3Campaigns. TODO(redeploy): set to the redeployed version, read
+   * on-chain. Note: contracts fix/nft-custody-host-close @ 2a2745a still has VERSION "0.6.0", the
+   * same string as today's deployment, unless the contracts repo bumps it before deploying.
    * null = not deployed/tagged yet; receipts then point at the verified source on the explorer,
    * never at undeployed code (D-X11).
    */
