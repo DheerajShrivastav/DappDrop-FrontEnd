@@ -30,6 +30,9 @@ import { PageContainer } from '@/components/app/page-header'
 import { useDocumentTitle } from '@/components/app/document-title'
 import { CampaignView } from './_components/campaign-view'
 import { getCampaignStatus } from '@/lib/campaign-status'
+import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
+import { paymentRequestFromTask } from '@/lib/payment-request'
+import type { PaymentVerifyResult } from '@/lib/payment-task-client'
 
 // Lazy-load heavy dialog components (only loaded when opened)
 const TaskVerificationForm = dynamic(
@@ -44,6 +47,14 @@ const HumanityVerificationModal = dynamic(
   () =>
     import('@/components/humanity-verification-modal').then((mod) => ({
       default: mod.HumanityVerificationModal,
+    })),
+  { ssr: false },
+)
+
+const PaymentTaskDialog = dynamic(
+  () =>
+    import('./_components/payment-task-dialog').then((mod) => ({
+      default: mod.PaymentTaskDialog,
     })),
   { ssr: false },
 )
@@ -105,8 +116,6 @@ export default function CampaignDetailsPage() {
   // Payment Task State
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [paymentTaskId, setPaymentTaskId] = useState<string | null>(null)
-  const [transactionHash, setTransactionHash] = useState('')
-  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
 
   const campaignId = id as string
 
@@ -133,6 +142,16 @@ export default function CampaignDetailsPage() {
     if (taskType === 'HUMANITY_VERIFICATION') {
       setIsHumanityModalOpen(true)
     } else if (taskType === 'ONCHAIN_TX') {
+      if (!isConnected || !address) {
+        toast({ variant: 'destructive', title: 'Wallet Not Connected', description: 'Please connect your wallet.' })
+        return
+      }
+      const task = campaign?.tasks.find((t) => t.id === taskId)
+      if (!task || !paymentRequestFromTask(task, DEPLOYMENT_CHAIN.id)) {
+        const description = 'this payment task’s settings are missing or incomplete. Ask the host to check it.'
+        setTaskErrors((prev) => ({ ...prev, [taskId]: description }))
+        return
+      }
       setPaymentTaskId(taskId)
       setIsPaymentDialogOpen(true)
     } else if (
@@ -210,6 +229,41 @@ export default function CampaignDetailsPage() {
     }
   }
 
+  // v0.6.0: attested tasks are recorded via an EIP-712 signature, NOT the old
+  // client completeTask (which now reverts TaskManagedBySignature). The backend signs
+  // and, by default, submits. If it couldn't submit, self-submit the returned signature
+  // from the connected wallet (BR-V3 fallback). Shared by /api/verify-task and the payment
+  // dialog (/api/tasks/verify-payment), which return the same attestation shape.
+  const recordAttestation = async (result: {
+    attested?: boolean
+    submitted?: boolean
+    attestation?: PaymentVerifyResult['attestation']
+  }) => {
+    if (!result.attested || result.submitted) return
+    if (!result.attestation?.signature) {
+      throw new Error('Verified, but completion could not be recorded on-chain. Please try again.')
+    }
+    await submitAttestationFromWallet(
+      campaignId,
+      result.attestation.participant,
+      result.attestation.taskIndex,
+      result.attestation.completed,
+      result.attestation.deadline,
+      result.attestation.signature,
+    )
+  }
+
+  // The payment dialog's last step: the server checked the payment and signed the completion.
+  // Throws back into the dialog (which keeps the payment's hash for a re-check) on failure.
+  const handlePaymentVerified = async (taskId: string, result: PaymentVerifyResult) => {
+    await recordAttestation(result)
+    setTaskErrors(({ [taskId]: _, ...rest }) => rest)
+    setUserTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, completed: true } : t)))
+    toast({ title: 'Task done', description: 'Payment checked. One step closer to your reward.' })
+    if (!isJoined) setIsJoined(true)
+    await fetchAllCampaignData(true)
+  }
+
   // Handler for task verification
   const handleTaskVerification = async (
     taskId: string,
@@ -273,28 +327,7 @@ export default function CampaignDetailsPage() {
         throw new Error(result.message || result.error || 'Verification failed.')
       }
 
-      // v0.6.0: attested tasks are recorded via an EIP-712 signature, NOT the old
-      // client completeTask (which now reverts TaskManagedBySignature). The backend signs
-      // and, by default, submits. If it couldn't submit, self-submit the returned signature
-      // from the connected wallet (BR-V3 fallback).
-      if (result.attested) {
-        if (result.submitted) {
-          // Backend already recorded completion on-chain — nothing more to do.
-        } else if (result.attestation?.signature) {
-          await submitAttestationFromWallet(
-            campaignId,
-            result.attestation.participant,
-            result.attestation.taskIndex,
-            result.attestation.completed,
-            result.attestation.deadline,
-            result.attestation.signature,
-          )
-        } else {
-          throw new Error(
-            'Verified, but completion could not be recorded on-chain. Please try again.',
-          )
-        }
-      }
+      await recordAttestation(result)
 
       toast({
         title: 'Task done',
@@ -797,6 +830,27 @@ export default function CampaignDetailsPage() {
           }}
         />
       )}
+
+      {/* Payment Task Dialog - Lazy loaded */}
+      {(() => {
+        const index = campaign.tasks.findIndex((t) => t.id === paymentTaskId)
+        const task = index === -1 ? null : campaign.tasks[index]
+        const request = task ? paymentRequestFromTask(task, DEPLOYMENT_CHAIN.id) : null
+        if (!task || !request || !address) return null
+        return (
+          <PaymentTaskDialog
+            open={isPaymentDialogOpen}
+            onOpenChange={setIsPaymentDialogOpen}
+            campaignId={campaignId}
+            taskId={task.id}
+            taskIndex={index}
+            taskDescription={task.description}
+            request={request}
+            address={address}
+            onVerified={(result) => handlePaymentVerified(task.id, result)}
+          />
+        )
+      })()}
 
       {/* Humanity Verification Modal - Lazy loaded */}
       <HumanityVerificationModal

@@ -111,6 +111,7 @@ const DEV = process.env.GATES_DEV_URL
 const STATES = [
   'p-open-visitor',
   'p-open-tasks',
+  'p-pay',
   'p-full',
   'p-record-end',
   'p-waiting',
@@ -135,7 +136,7 @@ const STATES = [
   'h-closed',
   'h-swept',
 ]
-const ALL_WIDTHS = new Set(['p-open-tasks', 'p-claimable', 'p-claim-fallback', 'h-publish', 'h-review'])
+const ALL_WIDTHS = new Set(['p-open-tasks', 'p-pay', 'p-claimable', 'p-claim-fallback', 'h-publish', 'h-review'])
 
 test.describe('campaign page fixtures (dev server)', () => {
   test.skip(!DEV, 'set GATES_DEV_URL to a dev server to gate the wallet-only states')
@@ -199,6 +200,33 @@ test.describe('campaign page fixtures (dev server)', () => {
     await expect(page.getByRole('button', { name: /^End/ })).toHaveCount(0)
     await openCampaign(page, `${DEV}/_dev/campaign?state=p-record-end`)
     await expect(page.getByRole('button', { name: 'Record the end' })).toBeVisible()
+  })
+
+  test('payment task: the dialog says what, to whom and where; a sent payment can be checked by hash; [Pay] reopens it', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-pay`)
+    const dialog = page.getByRole('dialog', { name: 'Pay 0.001 ETH' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('Pay the example entry fee')
+    await expect(dialog).toContainText('Sepolia (testnet)')
+    await expect(dialog).toContainText('DappDrop never holds it')
+    await expect(dialog.getByRole('button', { name: 'Pay 0.001 ETH' })).toBeEnabled()
+    await expect(dialog.getByRole('button', { name: 'Pay 0.001 ETH' })).toBeFocused()
+
+    await dialog.getByRole('button', { name: 'I paid already' }).click()
+    const hash = dialog.getByLabel('Transaction hash')
+    const check = dialog.getByRole('button', { name: 'Check this payment' })
+    await expect(check).toBeDisabled()
+    await hash.fill('0x1234')
+    await expect(check).toBeDisabled()
+    await hash.fill('0x' + 'ab'.repeat(32))
+    await expect(check).toBeEnabled()
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    const pay = page.getByRole('button', { name: 'Pay: Pay the example entry fee' })
+    await expect(pay).toBeVisible()
+    await pay.click()
+    await expect(page.getByRole('dialog', { name: 'Pay 0.001 ETH' })).toBeVisible()
   })
 
   test('tasks: actions for a connected wallet, the failed row says why, full uses the real cap', async ({ page }) => {
