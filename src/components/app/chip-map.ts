@@ -102,5 +102,8 @@ export const VERIFICATION_CHIP: Record<TaskVerificationMethod, ChipSpec & { labe
   contract: { variant: 'check', mark: '✓', label: 'Checked on-chain' },
   // claims.humanityNaming (founder decision D18): name Humanity Protocol only once approved.
   humanity: { variant: 'check', mark: '✓', label: claims.humanityNaming ? 'Humanity check' : 'Verified-human check' },
+  // SOCIAL_POST (#45): the server reads the public post through X's oEmbed and checks the
+  // participant's code, the host's required text and the post's real author.
+  'proof-by-post': { variant: 'check', mark: '✓', label: 'Post checked by our app' },
   'self-reported': { variant: 'self', label: 'Self-reported', note: 'Not checked automatically yet' },
 }

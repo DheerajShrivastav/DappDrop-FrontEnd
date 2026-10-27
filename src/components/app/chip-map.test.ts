@@ -45,7 +45,7 @@ test('payout labels drop the jargon, and unknown means no chip (never "TBD")', (
 test('self-reported tasks are dashed and say so; real checks carry a tick', () => {
   assert.equal(VERIFICATION_CHIP['self-reported'].variant, 'self')
   assert.equal(VERIFICATION_CHIP['self-reported'].mark, undefined)
-  for (const k of ['bot-membership', 'siwe-session', 'payment', 'contract', 'humanity'] as const) {
+  for (const k of ['bot-membership', 'siwe-session', 'payment', 'contract', 'humanity', 'proof-by-post'] as const) {
     assert.equal(VERIFICATION_CHIP[k].mark, '✓')
   }
 })
