@@ -30,6 +30,14 @@ model User {
   emailVerified DateTime?
   image         String?
   discordId     String?   @unique // Store Discord user ID
+  // Social identities, linked server-side to THIS wallet (Discord OAuth / Telegram Login Widget)
+  // so task verification never trusts an ID the client typed in. One account ↔ one wallet: the
+  // @unique constraints are the hard guarantee.
+  discordUsername  String?
+  discordLinkedAt  DateTime?
+  telegramId       String?   @unique
+  telegramUsername String?
+  telegramLinkedAt DateTime?
 
   // Humanity Protocol verification.
   // humanityVerified is the DURABLE status (docs/HUMANITY_GATING.md: "one OAuth, once per
