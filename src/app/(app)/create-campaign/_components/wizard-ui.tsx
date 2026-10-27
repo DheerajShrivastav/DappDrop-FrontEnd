@@ -99,12 +99,15 @@ export function CheckRow({
  */
 export function SetupChecklist({
   title,
+  why,
   steps,
   action,
   missingActionText,
   notes,
 }: {
   title: string
+  /** One line on why this setup is needed, above the steps. */
+  why?: React.ReactNode
   steps: React.ReactNode[]
   action?: { label: string; href: string }
   /** Shown in place of the action when it isn't configured. */
@@ -129,6 +132,7 @@ export function SetupChecklist({
       </button>
       {open && (
         <div id={id} className="grid gap-4 border-t border-rule px-4 py-4">
+          {why && <p className="text-[0.875rem] leading-relaxed text-ink">{why}</p>}
           <ol className="grid gap-2.5">
             {steps.map((s, i) => (
               <li key={i} className="flex gap-3 text-[0.875rem] leading-relaxed text-ink-2">
@@ -140,6 +144,7 @@ export function SetupChecklist({
           {action ? (
             <a href={action.href} target="_blank" rel="noopener noreferrer" className={buttonClass({ variant: 'secondary', size: 'sm', className: 'justify-self-start' })}>
               {action.label} <span aria-hidden="true">↗</span>
+              <span className="sr-only"> (opens in a new tab)</span>
             </a>
           ) : (
             missingActionText && <Notice tone="error">{missingActionText}</Notice>

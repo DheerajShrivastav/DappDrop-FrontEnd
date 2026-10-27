@@ -10,9 +10,14 @@ import { isSelfReportedTask, SELF_REPORTED_TASK_NOTE, TASK_VERIFICATION_METHOD }
 import type { TaskType } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { X_REQUIRED_TEXT_MAX } from '@/lib/x-task-fields'
+import { discordBotInviteHref, telegramBotName } from '@/lib/invite-links'
 import { TASK_TYPE_OPTIONS, fieldId, taskTypeLabel, type CampaignFormValues } from './campaign-form'
 import { num } from './task-summary-row'
 import { CheckRow, Notice, SetupChecklist } from './wizard-ui'
+
+/** The DappDrop bots hosts add to their server / group. Production reads the app config; the dev
+ * fixture passes stand-ins. Both are validated before they're shown (src/lib/invite-links.ts). */
+export type BotConfig = { discordBotInviteUrl?: string; telegramBotUsername?: string }
 
 /**
  * One task, expanded: type (with how it's checked), what participants do, the type's own
@@ -24,13 +29,18 @@ export function TaskEditor({
   canRemove,
   onRemove,
   onDone,
+  bots,
 }: {
   index: number
   canRemove: boolean
   onRemove: () => void
   /** Collapse this task (only offered once it's complete). */
   onDone?: () => void
+  /** Dev fixture only: stand-ins for the bot config. */
+  bots?: BotConfig
 }) {
+  const botInvite = discordBotInviteHref((bots ?? config).discordBotInviteUrl)
+  const tgBot = telegramBotName((bots ?? config).telegramBotUsername)
   const form = useFormContext<CampaignFormValues>()
   const { control } = form
   const task = useWatch({ control, name: `tasks.${index}` })
@@ -157,7 +167,7 @@ export function TaskEditor({
 
       {type === 'JOIN_DISCORD' && (
         <>
-          {!config.discordBotInviteUrl && (
+          {!botInvite && (
             <Notice tone="error" title="Discord checks won’t work yet">
               The DappDrop Discord bot isn’t set up, so Discord join tasks can’t be verified. Contact support.
             </Notice>
@@ -180,19 +190,20 @@ export function TaskEditor({
             control={control}
             name={`tasks.${index}.discordInviteLink`}
             render={({ field, fieldState }) => (
-              <Field id={fieldId(`tasks.${index}.discordInviteLink`)} label="Discord invite link" help="The link participants use to join your server." error={fieldState.error?.message}>
+              <Field id={fieldId(`tasks.${index}.discordInviteLink`)} label="Discord invite link" help="Participants see it on the campaign page as “Join the server”." error={fieldState.error?.message}>
                 {(p) => <Input {...p} placeholder="e.g. https://discord.gg/yourcode or just yourcode" {...field} value={field.value ?? ''} />}
               </Field>
             )}
           />
           <SetupChecklist
             title="Required: add the DappDrop bot to your server"
+            why="Our bot checks membership: it confirms each participant is in your server, so it has to be a member too."
             steps={[
               'Open the invite below and pick your server.',
               'Keep the “View Server Members” and “Read Message History” permissions ticked.',
               'Authorize. Join tasks are then checked automatically.',
             ]}
-            action={config.discordBotInviteUrl ? { label: 'Add the DappDrop bot to your server', href: config.discordBotInviteUrl } : undefined}
+            action={botInvite ? { label: 'Add the DappDrop bot to your server', href: botInvite } : undefined}
             missingActionText="The Discord bot invite link isn’t configured. Contact support."
           />
         </>
@@ -200,7 +211,7 @@ export function TaskEditor({
 
       {type === 'JOIN_TELEGRAM' && (
         <>
-          {!config.telegramBotUsername && (
+          {!tgBot && (
             <Notice tone="error" title="Telegram checks won’t work yet">
               The DappDrop Telegram bot isn’t set up, so Telegram join tasks can’t be verified. Contact support.
             </Notice>
@@ -229,21 +240,22 @@ export function TaskEditor({
             control={control}
             name={`tasks.${index}.telegramInviteLink`}
             render={({ field, fieldState }) => (
-              <Field id={fieldId(`tasks.${index}.telegramInviteLink`)} label="Telegram invite link" help="The link participants use to join your channel or group." error={fieldState.error?.message}>
+              <Field id={fieldId(`tasks.${index}.telegramInviteLink`)} label="Telegram invite link" help="Participants see it on the campaign page as “Join the group”." error={fieldState.error?.message}>
                 {(p) => <Input {...p} placeholder="e.g. https://t.me/yourchannel or https://t.me/+invitecode" {...field} value={field.value ?? ''} />}
               </Field>
             )}
           />
           <SetupChecklist
             title="Required: add the DappDrop bot to your channel or group"
+            why="Our bot checks membership: it confirms each participant is in your group or channel, so it has to be in it too."
             steps={[
               <>
-                Add <span className="font-medium text-ink">@{config.telegramBotUsername || 'the DappDrop bot'}</span> to your channel or group.
+                Add <span className="font-medium text-ink">{tgBot ? `@${tgBot}` : 'the DappDrop bot'}</span> to your channel or group.
               </>,
               'For a channel, make it an admin. In a group it can be a regular member.',
               'Make sure it can read messages and, for groups, see the member list.',
             ]}
-            action={config.telegramBotUsername ? { label: `Open @${config.telegramBotUsername}`, href: `https://t.me/${config.telegramBotUsername}` } : undefined}
+            action={tgBot ? { label: `Open @${tgBot}`, href: `https://t.me/${tgBot}` } : undefined}
             missingActionText="The Telegram bot username isn’t configured. Contact support."
           />
         </>

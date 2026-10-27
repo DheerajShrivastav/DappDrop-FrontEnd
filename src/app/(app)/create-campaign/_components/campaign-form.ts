@@ -5,6 +5,7 @@ import { isPositiveDecimalString, nftRowsFromStrings, nftRowsProblem, rankTierPr
 import type { TaskType } from '@/lib/types'
 import { claims } from '@/config/claims'
 import { normalizeRequiredText, normalizeXHandle, parseXPostUrl, X_REQUIRED_TEXT_MAX } from '@/lib/x-task-fields'
+import { normalizeDiscordInvite, normalizeTelegramInvite } from '@/lib/invite-links'
 
 /**
  * The wizard's form model: the zod schema, its value type and the task-type list. Moved out of
@@ -130,6 +131,13 @@ export const taskSchema = z
           message: 'Discord Invite Link is required.',
           path: ['discordInviteLink'],
         })
+      } else if (!normalizeDiscordInvite(data.discordInviteLink)) {
+        // Participants get this as their "Join the server" link (src/lib/invite-links.ts).
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Use a Discord invite link, like https://discord.gg/yourcode.',
+          path: ['discordInviteLink'],
+        })
       }
     }
 
@@ -145,6 +153,12 @@ export const taskSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'Telegram Invite Link is required.',
+          path: ['telegramInviteLink'],
+        })
+      } else if (!normalizeTelegramInvite(data.telegramInviteLink)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Use a Telegram link, like https://t.me/yourgroup or https://t.me/+invitecode.',
           path: ['telegramInviteLink'],
         })
       }
