@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { Controller, FormProvider, useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { BrowserProvider } from 'ethers'
@@ -92,9 +93,17 @@ import {
 import { AiDraftPanel, type GenerationError } from './ai-draft'
 import { GoLiveChecklist } from './go-live'
 import { HostGate, type HostGatePreview } from './host-gate'
-import { TaskEditor, TaskSummaryRow } from './task-editor'
+import { TaskSummaryRow } from './task-summary-row'
 import { RailPanels, WizardRail, WizardRailDisclosure } from './wizard-rail'
 import { CheckRow, CopyableAddress, Notice, ReviewSection } from './wizard-ui'
+
+// Step 2 only: the expanded task editor (type menu, Discord/Telegram/payment/Humanity/X fields)
+// loads when the host reaches it, not with the route (keeps /create-campaign within its
+// first-load budget once #45's X fields landed in it).
+const TaskEditor = dynamic(() => import('./task-editor').then((m) => m.TaskEditor), {
+  ssr: false,
+  loading: () => <div className="h-[22rem] rounded-[10px] border border-rule-strong bg-surface" aria-hidden="true" />,
+})
 
 /**
  * /create-campaign: the host gate, then the campaign wizard (08-site phase 2, app-design §2.4–2.5).
