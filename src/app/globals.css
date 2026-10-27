@@ -528,8 +528,8 @@
    landing-studio/07-wow/prototypes/src/page.css. Obsidian (dark + gold) is the default for
    everyone, whatever the OS preference; Porcelain (light) sits behind the header toggle.
    - <html data-theme> is set before paint by THEME_SCRIPT (src/components/landing/theme.ts).
-   - Scope: only inside .lp-theme (the (landing) layout: /, /how-it-works, /security). The app
-     routes, /about and /changelog keep the light tokens above, even though <html> carries
+   - Scope: only inside .lp-theme (the (landing) layout: /, /how-it-works, /security, /about,
+     /changelog). The app routes keep the light tokens above, even though <html> carries
      data-theme everywhere.
    - The tokens are declared as --ob-* / --pc-* hex values so scripts/contrast-check.mjs can read
      them; the legacy names (--paper, --ink…) are remapped below, so every landing component

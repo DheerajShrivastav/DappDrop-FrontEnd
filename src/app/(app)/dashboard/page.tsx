@@ -1,248 +1,86 @@
+'use client'
 
-'use client';
-import { getCampaignStatus } from '@/lib/campaign-status';
+import { useCallback, useEffect, useState } from 'react'
+import { useAccount } from 'wagmi'
+import { useWallet } from '@/context/wallet-provider'
+import type { Campaign } from '@/lib/types'
+import { getCampaignsByHostAddress } from '@/lib/web3-service'
+import { DashboardView, type DashboardGate, type OverviewStats } from './_components/dashboard-view'
 
-import { useEffect, useState, useCallback } from 'react';
-import { useWallet } from '@/context/wallet-provider';
-import { useRouter } from 'next/navigation';
-import { Loader2, PlusCircle, BarChart3, Rocket, Users, LayoutDashboard, Zap, ShieldCheck } from 'lucide-react';
-import Link from 'next/link';
-import { motion } from 'framer-motion';
-
-import type { Campaign } from '@/lib/types';
-import { getCampaignsByHostAddress } from '@/lib/web3-service';
-import { CampaignCard } from '@/components/campaign-card';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-
+/**
+ * /dashboard: the host's home (app-design §2.6). The view is ./_components/dashboard-view.tsx.
+ *
+ * APP-12: a disconnected visitor used to get a destructive "Unauthorized" toast and a redirect to
+ * `/`, and a non-host "Access Denied" and the same redirect. Both are now in-place states
+ * ("Connect the wallet you host with." / "This wallet doesn't host any campaigns yet.").
+ *
+ * Data, unchanged: the host's campaigns from getCampaignsByHostAddress (indexer first, RPC
+ * fallback), and the DB-native overview (/api/campaigns/analytics-overview, needs the SIWE
+ * session): sponsored claims and Humanity-excluded wallets.
+ */
 export default function DashboardPage() {
-  const { address, role, isConnected } = useWallet();
-  const router = useRouter();
-  const { toast } = useToast();
-  const [hostCampaigns, setHostCampaigns] = useState<Campaign[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  // P3 CP3 — cross-campaign analytics overview, extends this dashboard's existing stat cards
-  // (doesn't duplicate them: those are on-chain-derived, these are DB-native aggregates).
-  const [overviewStats, setOverviewStats] = useState<{
-    totalSponsoredClaims: number
-    totalHumanityExcluded: number
-    totalVerificationFailures: number
-  } | null>(null);
+  const { address, role, isConnected, connectWallet } = useWallet()
+  // wagmi restores a previous session after hydration: until it settles, don't flash "Connect".
+  const { status: accountStatus } = useAccount()
+  const [campaigns, setCampaigns] = useState<Campaign[] | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [overview, setOverview] = useState<OverviewStats>({ status: 'loading' })
+  // The server and the first client render can't know the wallet: show the skeleton, not "Connect".
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
 
-  const fetchHostCampaigns = useCallback(async () => {
-    if (role === 'host' && address) {
-      setIsLoading(true);
-      const fetchedCampaigns = await getCampaignsByHostAddress(address);
-      setHostCampaigns(fetchedCampaigns);
-      setIsLoading(false);
-
-      if (fetchedCampaigns.length > 0) {
-        fetch(`/api/campaigns/analytics-overview?campaignIds=${fetchedCampaigns.map((c) => c.id).join(',')}`, {
-          credentials: 'include',
-        })
-          .then((res) => (res.ok ? res.json() : null))
-          .then(setOverviewStats)
-          .catch(() => setOverviewStats(null));
-      }
+  const load = useCallback(async () => {
+    if (role !== 'host' || !address) return
+    setCampaigns(null)
+    setLoadError(null)
+    setOverview({ status: 'loading' })
+    let failed: string | null = null
+    let list: Campaign[] = []
+    try {
+      list = await getCampaignsByHostAddress(address, { onError: (reason) => (failed = reason) })
+    } catch (e) {
+      failed = e instanceof Error && e.message ? `${e.message}.` : 'The request failed.'
     }
-  }, [role, address]);
+    setLoadError(failed)
+    setCampaigns(list)
+    if (failed || list.length === 0) return
+
+    fetch(`/api/campaigns/analytics-overview?campaignIds=${list.map((c) => c.id).join(',')}`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((o: { totalSponsoredClaims?: number; totalHumanityExcluded?: number } | null) =>
+        setOverview(
+          o && typeof o.totalSponsoredClaims === 'number'
+            ? { status: 'ok', sponsoredClaims: o.totalSponsoredClaims, humanityExcluded: o.totalHumanityExcluded ?? 0 }
+            : { status: 'error' },
+        ),
+      )
+      .catch(() => setOverview({ status: 'error' }))
+  }, [role, address])
 
   useEffect(() => {
-    if (!isConnected) {
-      toast({
-        variant: 'destructive',
-        title: 'Unauthorized',
-        description: 'Please connect your wallet to view this page.'
-      });
-      router.push('/');
-      return;
-    }
-    if (role && role !== 'host') {
-      toast({
-        variant: 'destructive',
-        title: 'Access Denied',
-        description: 'You do not have permission to view this page.'
-      });
-      router.push('/');
-      return;
-    }
-    if (role === 'host') {
-      fetchHostCampaigns();
-    }
-  }, [isConnected, role, router, toast, fetchHostCampaigns]);
+    load()
+  }, [load])
 
-  const onCampaignUpdate = () => {
-    fetchHostCampaigns();
-  };
-
-  if (!role) {
-    return (
-      <div className="flex items-center justify-center min-h-[calc(100vh-8rem)]">
-        <Loader2 className="h-16 w-16 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  // Calculate statistics
-  const totalCampaigns = hostCampaigns.length;
-  // Time-aware: an on-chain Open campaign past its end time is not active.
-  const activeCampaigns = hostCampaigns.filter(c => getCampaignStatus(c).state === 'open').length;
-  const totalParticipants = hostCampaigns.reduce((acc, curr) => acc + curr.participants, 0);
-
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1
-      }
-    }
-  };
-
-  const item = {
-    hidden: { y: 20, opacity: 0 },
-    show: { y: 0, opacity: 1 }
-  };
+  const settling = !mounted || accountStatus === 'reconnecting' || accountStatus === 'connecting'
+  const gate: DashboardGate = settling
+    ? 'checking'
+    : !isConnected
+      ? 'disconnected'
+      : role === null
+        ? 'checking'
+        : role === 'host'
+          ? 'host'
+          : 'not-host'
 
   return (
-    <div className="container mx-auto px-4 py-12 min-h-screen bg-gradient-soft">
-      <motion.div
-        variants={container}
-        initial="hidden"
-        animate="show"
-        className="space-y-8"
-      >
-        {/* Header Section */}
-        <motion.div variants={item} className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-              Host Dashboard
-            </h1>
-            <p className="text-muted-foreground mt-1 text-lg">
-              Manage your campaigns and view participant data.
-            </p>
-          </div>
-          <Button asChild size="lg" className="shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all">
-            <Link href="/create-campaign">
-              <PlusCircle className="mr-2 h-5 w-5" /> Create New Campaign
-            </Link>
-          </Button>
-        </motion.div>
-
-        {/* Statistics Cards */}
-        <motion.div variants={item} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-100 shadow-sm hover:shadow-md transition-all duration-300 group">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Total Campaigns</p>
-                <h3 className="text-3xl font-bold text-blue-600">{totalCampaigns}</h3>
-              </div>
-              <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
-                <BarChart3 className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-green-50 to-white border-green-100 shadow-sm hover:shadow-md transition-all duration-300 group">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Active Now</p>
-                <h3 className="text-3xl font-bold text-green-600">{activeCampaigns}</h3>
-              </div>
-              <div className="h-12 w-12 rounded-full bg-green-100 flex items-center justify-center text-green-600 group-hover:scale-110 transition-transform">
-                <Rocket className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-100 shadow-sm hover:shadow-md transition-all duration-300 group">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Total Participants</p>
-                <h3 className="text-3xl font-bold text-purple-600">{totalParticipants.toLocaleString()}</h3>
-              </div>
-              <div className="h-12 w-12 rounded-full bg-purple-100 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
-                <Users className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-amber-50 to-white border-amber-100 shadow-sm hover:shadow-md transition-all duration-300 group">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Sponsored Claims</p>
-                <h3 className="text-3xl font-bold text-amber-600">
-                  {overviewStats ? overviewStats.totalSponsoredClaims.toLocaleString() : '—'}
-                </h3>
-              </div>
-              <div className="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
-                <Zap className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-slate-50 to-white border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 group">
-            <CardContent className="p-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Humanity-Excluded</p>
-                <h3 className="text-3xl font-bold text-slate-600">
-                  {overviewStats ? overviewStats.totalHumanityExcluded.toLocaleString() : '—'}
-                </h3>
-              </div>
-              <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-600 group-hover:scale-110 transition-transform">
-                <ShieldCheck className="h-6 w-6" />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Campaigns Grid */}
-        <motion.div variants={item}>
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold tracking-tight">Your Campaigns</h2>
-          </div>
-
-          {isLoading ? (
-            <div className="flex justify-center items-center h-64 bg-card/50 rounded-xl border border-dashed">
-              <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
-          ) : hostCampaigns.length > 0 ? (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {hostCampaigns.map((campaign, index) => (
-                <motion.div
-                  key={campaign.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.1 }}
-                >
-                  <CampaignCard campaign={campaign} onUpdate={onCampaignUpdate} />
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="text-center py-20 bg-card/50 rounded-xl border-2 border-dashed border-muted flex flex-col items-center justify-center"
-            >
-              <div className="h-20 w-20 rounded-full bg-muted/30 flex items-center justify-center mb-6">
-                <LayoutDashboard className="h-10 w-10 text-muted-foreground" />
-              </div>
-              <h3 className="text-2xl font-bold mb-2">No campaigns yet</h3>
-              <p className="text-muted-foreground max-w-md mx-auto mb-8 text-lg">
-                Get started by creating your first campaign to engage with your community.
-              </p>
-              <Button asChild size="lg" className="shadow-lg">
-                <Link href="/create-campaign">
-                  <PlusCircle className="mr-2 h-5 w-5" />
-                  Create Your First Campaign
-                </Link>
-              </Button>
-            </motion.div>
-          )}
-        </motion.div>
-      </motion.div>
-    </div>
-  );
+    <DashboardView
+      gate={gate}
+      address={isConnected ? address : null}
+      onConnect={connectWallet}
+      campaigns={campaigns}
+      loadError={loadError}
+      onRetry={load}
+      overview={overview}
+    />
+  )
 }

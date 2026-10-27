@@ -7,7 +7,7 @@ import { THEME_COLOR } from '@/components/landing/theme'
 import { display, mono } from '@/app/_fonts/landing-fonts'
 
 /**
- * 07-wow: the Monolith pages (/, /how-it-works, /security). Server components only, no wallet
+ * 07-wow / 08-site: the Monolith marketing pages (/, /how-it-works, /security, /about, /changelog). Server components only, no wallet
  * code. `.lp-theme` scopes the Obsidian / Porcelain tokens (globals.css); <html data-theme> is set
  * before paint by the root layout's inline script. The app routes stay light.
  */
@@ -23,7 +23,7 @@ export default function LandingLayout({ children }: { children: React.ReactNode 
       <a href="#main" className="skip-link">
         Skip to main content
       </a>
-      <SiteHeader themed />
+      <SiteHeader />
       {/* tabIndex -1: the skip link and in-page jumps move keyboard focus here too. */}
       <main id="main" tabIndex={-1} className="flex-grow outline-none">
         {children}

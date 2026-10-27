@@ -35,7 +35,7 @@ export function OpenExpiredCampaignDialog({
           <AlertDialogDescription>{EXPIRED_OPEN_WARNING}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Don’t open</AlertDialogCancel>
+          <AlertDialogCancel>Not now</AlertDialogCancel>
           <AlertDialogAction onClick={onConfirm}>Open anyway</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

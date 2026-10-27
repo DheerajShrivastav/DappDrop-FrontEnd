@@ -6,9 +6,8 @@ import { THEME_SCRIPT } from '@/components/landing/theme';
 
 // The root layout is deliberately thin: it renders on every route, including the landing page,
 // which has a hard JS and font budget. App-only pieces live where they're used:
-// - Inter / Space Grotesk: src/app/_fonts/app-fonts.tsx, rendered by (app)/layout and the
-//   about/changelog pages;
-// - framer-motion's MotionConfig and the Toaster: (app)/layout.tsx.
+// - the app theme (app.css), the wallet providers, framer-motion's MotionConfig and the Toaster:
+//   (app)/layout.tsx. Both route groups use the landing's two font files (no Inter / Space Grotesk).
 const TITLE = 'DappDrop: Web3 quest campaigns with rewards in on-chain escrow';
 const DESCRIPTION = `Run token and NFT reward campaigns with on-chain escrow. Reward lists are public for 24 hours before claims open. Public beta on ${networkLabel}.`;
 
@@ -26,8 +25,8 @@ export const metadata: Metadata = {
     // the Newsreader wordmark.
 };
 
-// QW-05: the app is light-only, declared to the browser (form controls, scrollbars) as well as in
-// CSS. The Monolith pages override this in src/app/(landing)/layout.tsx.
+// The fallback for routes outside both route groups (the root not-found). The Monolith pages
+// override it in src/app/(landing)/layout.tsx and src/app/(app)/layout.tsx.
 export const viewport: Viewport = {
     colorScheme: 'light',
     themeColor: '#F6F4EF',

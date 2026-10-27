@@ -12,7 +12,11 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 
-const css = readFileSync(path.join(process.cwd(), 'src/app/globals.css'), 'utf8')
+// globals.css holds every theme token; the app's stylesheet adds the one red (--ob-danger /
+// --pc-danger), loaded on app routes only.
+const css =
+  readFileSync(path.join(process.cwd(), 'src/app/globals.css'), 'utf8') +
+  readFileSync(path.join(process.cwd(), 'src/app/(app)/app.css'), 'utf8')
 
 /** --name: #RRGGBB tokens, and --status-*: H S% L% tokens (converted to hex). */
 const tokens = {}
@@ -154,6 +158,67 @@ for (const [prefix, theme] of [
     if (!ok) failed++
     rows.push({ pair: `${prefix}-${fg} on ${prefix}-${bg}`, use: `${theme}: ${use}`, ratio: +r.toFixed(2), floor, ok })
   }
+}
+
+// 08-site phase 1: the app's extra pairs, per theme. --on-signal is the page colour in Obsidian
+// and the surface colour in Porcelain (app-design §1.1); --danger is the one red (errors and
+// failed transactions only); --on-danger is the label on a red fill (never an action).
+const APP_PAIRS = {
+  ob: [
+    ['paper', 'signal', TEXT, 'on-signal: label on the gold reward button / claimable chip'],
+    ['danger', 'paper', TEXT, 'error text on the page'],
+    ['danger', 'surface', TEXT, 'error text on cards, toasts, dialogs'],
+    ['danger', 'sunk', TEXT, 'error text on inputs'],
+    ['danger', 'paper', UI, 'error border on the page'],
+    ['danger', 'sunk', UI, 'error border on an input'],
+    ['paper', 'danger', TEXT, 'on-danger: label on a red fill'],
+    ['rule-strong', 'sunk', UI, 'input border on sunk'],
+    ['ink-3', 'sunk', TEXT, 'placeholder text in inputs'],
+  ],
+  pc: [
+    ['surface', 'signal', TEXT, 'on-signal: label on the gold reward button / claimable chip'],
+    ['danger', 'paper', TEXT, 'error text on the page'],
+    ['danger', 'surface', TEXT, 'error text on cards, toasts, dialogs'],
+    ['danger', 'sunk', TEXT, 'error text on inputs'],
+    ['danger', 'paper', UI, 'error border on the page'],
+    ['danger', 'sunk', UI, 'error border on an input'],
+    ['surface', 'danger', TEXT, 'on-danger: label on a red fill'],
+    ['rule-strong', 'sunk', UI, 'input border on sunk'],
+    ['ink-3', 'sunk', TEXT, 'placeholder text in inputs'],
+  ],
+}
+for (const [prefix, pairs] of Object.entries(APP_PAIRS)) {
+  const theme = prefix === 'ob' ? 'Obsidian' : 'Porcelain'
+  for (const [fg, bg, floor, use] of pairs) {
+    const a = tokens[`${prefix}-${fg}`]
+    const b = tokens[`${prefix}-${bg}`]
+    if (!a || !b) {
+      failed++
+      rows.push({ pair: `${prefix}-${fg} on ${prefix}-${bg}`, use: `${theme} app: ${use}`, ratio: 'missing token', floor, ok: false })
+      continue
+    }
+    const r = ratio(a, b)
+    const ok = r >= floor
+    if (!ok) failed++
+    rows.push({ pair: `${prefix}-${fg} on ${prefix}-${bg}`, use: `${theme} app: ${use}`, ratio: +r.toFixed(2), floor, ok })
+  }
+}
+// The red must never pass for the gold (an error must not look like a call to action): their
+// mutual contrast is reported, and the hue gap is checked (≥ 20° on the colour wheel).
+const hue = (h) => {
+  const [r, g, b] = rgb(h).map((c) => c / 255)
+  const mx = Math.max(r, g, b)
+  const mn = Math.min(r, g, b)
+  if (mx === mn) return 0
+  const d = mx - mn
+  const x = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4
+  return x * 60
+}
+for (const prefix of ['ob', 'pc']) {
+  const gap = Math.abs(hue(tokens[`${prefix}-danger`]) - hue(tokens[`${prefix}-signal`]))
+  const ok = Math.min(gap, 360 - gap) >= 20
+  if (!ok) failed++
+  rows.push({ pair: `${prefix}-danger vs ${prefix}-signal`, use: 'hue gap (red ≠ gold)', ratio: `${Math.round(Math.min(gap, 360 - gap))}°`, floor: '≥ 20°', ok })
 }
 
 console.table(rows)

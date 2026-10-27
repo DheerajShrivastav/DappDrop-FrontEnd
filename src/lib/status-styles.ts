@@ -43,35 +43,39 @@ export type StatusStyle = {
   Icon: LucideIcon
 }
 
+// 08-site phase 1: the old --status-* palette is retired in the app (app-design §1.1); these
+// buckets now use the Monolith tokens, so the existing chips and banners read in both themes
+// until phase 2 moves them to <CampaignStatusChip/> (src/components/app). Gold fill = claimable
+// only; no red here (the red is for errors and failed transactions).
 const STATUS_STYLES: Record<StatusBucket, StatusStyle> = {
   open: {
-    badge: 'bg-status-open-solid text-white border-transparent',
-    banner: 'bg-status-open-bg border-status-open-border text-status-open-fg',
-    icon: 'text-status-open-fg',
+    badge: 'bg-transparent border-ink-2 text-ink',
+    banner: 'bg-surface border-rule-strong text-ink',
+    icon: 'text-ink',
     Icon: CircleDot,
   },
   claimable: {
-    badge: 'bg-status-claimable-solid text-white border-transparent',
-    banner: 'bg-status-claimable-bg border-status-claimable-border text-status-claimable-fg',
-    icon: 'text-status-claimable-fg',
+    badge: 'bg-signal text-on-signal border-transparent',
+    banner: 'bg-surface border-signal text-ink',
+    icon: 'text-signal',
     Icon: Trophy,
   },
   pending: {
-    badge: 'bg-status-pending-solid text-white border-transparent',
-    banner: 'bg-status-pending-bg border-status-pending-border text-status-pending-fg',
-    icon: 'text-status-pending-fg',
+    badge: 'bg-transparent border-ink-3 text-ink-2',
+    banner: 'bg-surface border-rule-strong text-ink',
+    icon: 'text-ink-2',
     Icon: Clock,
   },
   closed: {
-    badge: 'bg-status-closed-solid text-white border-transparent',
-    banner: 'bg-status-closed-bg border-status-closed-border text-status-closed-fg',
-    icon: 'text-status-closed-fg',
+    badge: 'bg-transparent border-rule-strong text-ink-2',
+    banner: 'bg-surface border-rule text-ink-2',
+    icon: 'text-ink-2',
     Icon: CheckCircle2,
   },
   cancelled: {
-    badge: 'bg-status-cancelled-solid text-white border-transparent',
-    banner: 'bg-status-cancelled-bg border-status-cancelled-border text-status-cancelled-fg',
-    icon: 'text-status-cancelled-fg',
+    badge: 'bg-transparent border-dashed border-rule-strong text-ink-2',
+    banner: 'bg-surface border-dashed border-rule-strong text-ink-2',
+    icon: 'text-ink-2',
     Icon: Ban,
   },
 }

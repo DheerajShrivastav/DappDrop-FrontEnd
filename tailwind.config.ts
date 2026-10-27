@@ -84,6 +84,10 @@ export default {
                 ink: { DEFAULT: 'var(--ink)', 2: 'var(--ink-2)', 3: 'var(--ink-3)' },
                 rule: { DEFAULT: 'var(--rule)', strong: 'var(--rule-strong)' },
                 signal: { DEFAULT: 'var(--signal)', 'on-ink': 'var(--signal-on-ink)' },
+                // 08-site phase 1 (app routes only; src/app/(app)/app.css): text on a gold fill, and
+                // the ONE red (errors and failed transactions only) with its label colour.
+                'on-signal': 'var(--on-signal)',
+                danger: { DEFAULT: 'var(--danger)', on: 'var(--on-danger)' },
                 border: 'hsl(var(--border))',
                 input: 'hsl(var(--input))',
                 ring: 'hsl(var(--ring))',

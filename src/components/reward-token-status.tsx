@@ -1,6 +1,5 @@
 'use client'
 
-import { AlertTriangle, CheckCircle2, Loader2, XCircle } from 'lucide-react'
 import type { RewardTokenCheck } from '@/hooks/use-reward-token-check'
 import { chainName, formatTokenAmount, parseTokenAmount } from '@/lib/reward-plan'
 import { cn } from '@/lib/utils'
@@ -96,17 +95,21 @@ export function tokenVerdict(
 
 export function RewardTokenStatus({ verdict }: { verdict: TokenVerdict | null }) {
   if (!verdict) return null
-  const Icon =
-    verdict.tone === 'checking' ? Loader2 : verdict.tone === 'ok' ? CheckCircle2 : verdict.tone === 'warn' ? AlertTriangle : XCircle
+  // A definite problem is an error (red); "couldn't check" is a warning (gold `!`).
+  const mark = verdict.tone === 'ok' ? '✓' : verdict.tone === 'checking' ? null : '!'
   return (
     <p
-      className={cn(
-        'flex items-start gap-2 text-sm',
-        verdict.tone === 'block' ? 'text-destructive' : 'text-muted-foreground',
-      )}
+      className={cn('flex items-baseline gap-2 text-[0.8125rem] leading-snug', verdict.tone === 'block' ? 'text-danger' : 'text-ink-2')}
       aria-live="polite"
+      data-token-status={verdict.tone}
     >
-      <Icon className={cn('mt-0.5 h-4 w-4 shrink-0', verdict.tone === 'checking' && 'animate-spin')} />
+      {mark ? (
+        <span aria-hidden="true" className={cn('font-mono font-semibold', verdict.tone === 'warn' && 'text-signal', verdict.tone === 'ok' && 'text-ink')}>
+          {mark}
+        </span>
+      ) : (
+        <span aria-hidden="true" className="inline-block h-3 w-3 shrink-0 animate-spin rounded-full border-[1.5px] border-current border-r-transparent" />
+      )}
       <span>{verdict.message}</span>
     </p>
   )

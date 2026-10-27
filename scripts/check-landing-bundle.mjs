@@ -77,4 +77,34 @@ else if (kb > WARN_KB) console.warn(`⚠ ${line} > ${WARN_KB} kB target`)
 else console.log(`✔ ${line} ≤ ${WARN_KB} kB target`)
 
 if (failures === 0) console.log('✔ no framer-motion, wagmi or RainbowKit code on /')
+
+// 08-site: the other marketing pages stay as lean as / (no wallet code, no framer-motion, no
+// (app) chunks). Same scan, no size budget.
+for (const page of ['how-it-works', 'security', 'about', 'changelog']) {
+  const file = path.join(NEXT, `server/app/${page}.html`)
+  if (!existsSync(file)) {
+    fail(`/${page} is not prerendered (static)`)
+    continue
+  }
+  const doc = readFileSync(file, 'utf8')
+  const chunks = new Set([...doc.matchAll(/static\/chunks\/[^"\\?]+?\.js/g)].map((m) => m[0]))
+  let bad = 0
+  for (const f of chunks) {
+    if (/app\/\(app\)\//.test(f)) {
+      fail(`/${page} loads an (app) route chunk: ${f}`)
+      bad++
+      continue
+    }
+    if (!existsSync(path.join(NEXT, f))) continue
+    const text = readFileSync(path.join(NEXT, f), 'utf8')
+    for (const [lib, sigs] of Object.entries(SIGNATURES)) {
+      const hit = sigs.find((sig) => text.includes(sig))
+      if (hit) {
+        fail(`${lib} code ("${hit}") in a chunk /${page} loads: ${f}`)
+        bad++
+      }
+    }
+  }
+  if (!bad) console.log(`✔ /${page}: static, no wallet / framer-motion / (app) chunks`)
+}
 process.exit(failures ? 1 : 0)

@@ -11,7 +11,7 @@
  * behind the copy. Capture it from the production build at 1200×630, DPR 1, with
  * /?vaultposter&vault=high (frozen hero, no grain), the page and the in-scene labels hidden.
  * Re-run when the H1, the network or the page titles change:
- *   node scripts/generate-og-image.mjs [--network "Sepolia testnet"] [--still path/to/poster.avif]
+ *   node scripts/generate-og-image.mjs [--network "Sepolia testnet"] [--still path/to/poster.avif] [--only about,changelog]
  * Uses Playwright's Chromium (dev dependency) or CHROME_PATH.
  */
 import { chromium } from '@playwright/test'
@@ -43,7 +43,21 @@ const CARDS = [
     title: 'Check our work.',
     alt: `DappDrop security: check our work. Not audited yet. Public beta on ${net}.`,
   },
+  {
+    dir: 'src/app/(landing)/about',
+    eyebrow: 'About',
+    title: 'Quest campaigns, settled on-chain.',
+    alt: `About DappDrop: quest campaigns, settled on-chain. Public beta on ${net}.`,
+  },
+  {
+    dir: 'src/app/(landing)/changelog',
+    eyebrow: 'Changelog',
+    title: 'What’s shipped.',
+    alt: `The DappDrop changelog: what's shipped. Public beta on ${net}.`,
+  },
 ]
+// --only about,changelog: regenerate just those cards (matched on the end of `dir`).
+const only = arg('--only')?.split(',')
 
 const vault = still
   ? `<img class="still" src="data:image/${path.extname(still).slice(1)};base64,${readFileSync(still).toString('base64')}" alt="">`
@@ -74,7 +88,7 @@ h1{font-family:N;font-weight:300;font-size:76px;line-height:1;letter-spacing:-.0
 
 const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {})
 const tab = await browser.newPage({ viewport: { width: 1200, height: 630 } })
-for (const c of CARDS) {
+for (const c of CARDS.filter((c) => !only || only.some((o) => c.dir.endsWith(o)))) {
   await tab.setContent(page(c))
   await tab.evaluate(() => document.fonts.ready)
   for (const name of ['opengraph-image', 'twitter-image']) {
