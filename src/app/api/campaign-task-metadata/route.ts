@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireSessionWallet } from '@/lib/task-verification-auth'
 import { HostCheckUnavailableError, requireCampaignHost } from '@/lib/require-host'
+import { normalizeDiscordInvite, normalizeTelegramInvite } from '@/lib/invite-links'
 
 /**
  * POST — write a task's off-chain verification config. HOST-ONLY.
@@ -52,6 +53,19 @@ export async function POST(request: Request) {
       )
     }
 
+    // Invite links are shown to participants as "Join" links, so only real Discord / Telegram
+    // invites are stored, in their canonical https form (src/lib/invite-links.ts; the campaign
+    // page checks them again before rendering). An omitted link stays omitted (an update keeps
+    // the stored value), as before.
+    const discordInvite = discordInviteLink ? normalizeDiscordInvite(String(discordInviteLink)) : discordInviteLink
+    if (discordInviteLink && !discordInvite) {
+      return NextResponse.json({ error: 'That isn’t a Discord invite link (https://discord.gg/…).' }, { status: 400 })
+    }
+    const telegramInvite = telegramInviteLink ? normalizeTelegramInvite(String(telegramInviteLink)) : telegramInviteLink
+    if (telegramInviteLink && !telegramInvite) {
+      return NextResponse.json({ error: 'That isn’t a Telegram invite link (https://t.me/…).' }, { status: 400 })
+    }
+
     try {
       await requireCampaignHost(campaignId, auth.wallet)
     } catch (e) {
@@ -74,9 +88,9 @@ export async function POST(request: Request) {
       },
       update: {
         taskType,
-        discordInviteLink,
+        discordInviteLink: discordInvite,
         discordServerId: body.discordServerId || null,
-        telegramInviteLink,
+        telegramInviteLink: telegramInvite,
         telegramChatId,
         requiresHumanityVerification: requiresHumanityVerification || false,
         metadata: metadata && typeof metadata === 'object' ? metadata : null,
@@ -85,9 +99,9 @@ export async function POST(request: Request) {
         campaignId,
         taskIndex,
         taskType,
-        discordInviteLink,
+        discordInviteLink: discordInvite,
         discordServerId: body.discordServerId || null,
-        telegramInviteLink,
+        telegramInviteLink: telegramInvite,
         telegramChatId,
         requiresHumanityVerification: requiresHumanityVerification || false,
         metadata: metadata && typeof metadata === 'object' ? metadata : undefined,

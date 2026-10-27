@@ -8,6 +8,7 @@ import type {
   TaskType,
 } from './types'
 import { fromOnChainTaskType, toOnChainTaskType, OnChainTaskType } from './task-types'
+import { withCommunityMetadata } from './invite-links'
 import config from '@/app/config'
 import Web3Campaigns from './abi/Web3Campaigns.json'
 import OnChainRewardModule from './abi/OnChainRewardModule.json'
@@ -1500,12 +1501,10 @@ export const getCampaignByIdWithMetadata = async (
           const meta = taskMetadata.find((tm) => tm.taskIndex === index)
           if (!meta) return task
 
-          if (task.type === 'JOIN_DISCORD' && meta.discordInviteLink) {
-            return { ...task, discordInviteLink: meta.discordInviteLink }
-          }
-
-          if (task.type === 'JOIN_TELEGRAM' && meta.telegramInviteLink) {
-            return { ...task, telegramInviteLink: meta.telegramInviteLink }
+          // Discord / Telegram: the chain reads both as JOIN_DISCORD (one shared enum slot), so
+          // the saved taskType decides; only a valid invite link is attached (invite-links.ts).
+          if (task.type === 'JOIN_DISCORD' || task.type === 'JOIN_TELEGRAM') {
+            return withCommunityMetadata(task, meta)
           }
 
           if (
