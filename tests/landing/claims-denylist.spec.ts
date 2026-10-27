@@ -89,6 +89,19 @@ test('07-wow truth rules: "audited" only as a disclosure, no "open source" witho
   if (!claims.licenseFile) assert.ok(!/open[ -]source/i.test(text), '"open source" shown without a LICENSE file (C6)')
 })
 
+test('shipped tasks are never called "in review": linked accounts (#44) and Post on X (#45)', async () => {
+  const text = landingText()
+  const { claims } = await import('../../src/config/claims')
+  if (claims.accountLinkingLive) {
+    assert.ok(!/Linking Discord to a wallet: in review|Linked accounts: in review/i.test(text), 'linked accounts shown as in review')
+  }
+  if (claims.xPostCheckLive) {
+    assert.ok(!/Post on X\s+In review/i.test(text), 'Post on X shown as in review')
+    // ...and X follows / likes / reposts stay self-reported (no automatic X check exists for them).
+    assert.match(text, /Follow, like or repost on X\s+Live · self-reported/)
+  }
+})
+
 // ---------------------------------------------------------------------------------------------
 // Source scan: all of src/, comments stripped.
 // ---------------------------------------------------------------------------------------------

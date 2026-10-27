@@ -24,6 +24,9 @@ const deployedV060: Claims = {
   feeCapEnforced: false,
   hostCloseFixCommitted: false,
   nftFixCommitted: false,
+  // #44 / #45 shipped on 2026-10-27, after v0.6.0's era: linking and post checks weren't live.
+  accountLinkingLive: false,
+  xPostCheckLive: false,
 }
 
 test('the v0.6.0 truth (all fix flags off) is Stage 1', () => {
@@ -50,6 +53,14 @@ test('the shipped config is the one-wallet redeploy: every fix on, roles not spl
   assert.equal(launchStage, 1)
   assert.match(claimsVersion, /^s1-[0-9a-f]{8}$/)
   assert.equal(deriveLaunchStage({ ...claims, rolesSplit: true }), 2)
+})
+
+test('the shipped config has #44 / #45 live: linked accounts and checked posts on X', () => {
+  assert.equal(claims.accountLinkingLive, true)
+  assert.equal(claims.xPostCheckLive, true)
+  // Flipping either one is a different claims version (analytics readings stay clean).
+  assert.notEqual(deriveClaimsVersion(claims), deriveClaimsVersion({ ...claims, accountLinkingLive: false }))
+  assert.notEqual(deriveClaimsVersion(claims), deriveClaimsVersion({ ...claims, xPostCheckLive: false }))
 })
 
 test('claimsVersion is stable and changes when any flag flips', () => {

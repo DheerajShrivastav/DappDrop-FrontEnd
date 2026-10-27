@@ -162,6 +162,19 @@ test.describe('homepage copy and contract markup (07-wow)', () => {
     expect(words).toBeLessThanOrEqual(WORDS_MAX)
   })
 
+  test('tasks say how they are checked: Post on X is checked (#45), follows on X stay self-reported', async ({ page }) => {
+    await open(page)
+    expect(await page.locator('[aria-labelledby="chips-checked"] li').allInnerTexts()).toEqual(['Join Discord', 'Join Telegram', 'Post on X', 'Verified human', 'Connect wallet'])
+    expect(await page.locator('[aria-labelledby="chips-self"] li').allInnerTexts()).toEqual(['Follow on X'])
+    await open(page, '/how-it-works')
+    const tasks = page.locator('#tasks')
+    await expect(tasks).not.toContainText(/in review/i)
+    await expect(tasks).toContainText('Participants connect Discord through Discord’s own sign-in')
+    await expect(tasks).toContainText('Participants connect Telegram through Telegram’s login widget')
+    await expect(tasks.locator('li', { hasText: /^\s*Post on X/ })).toContainText('Live')
+    await expect(tasks.locator('li', { hasText: 'Follow, like or repost on X' })).toContainText('Live · self-reported')
+  })
+
   test('the vault stage renders once inside <main>, before the sections, and is aria-hidden', async ({ page }) => {
     await open(page)
     const r = await page.evaluate(() => {
