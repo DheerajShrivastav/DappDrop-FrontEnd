@@ -1,9 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Loader2, Flag, MessageSquare } from 'lucide-react'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
+import { Button } from '@/components/app/button'
 import {
   Dialog,
   DialogContent,
@@ -13,15 +11,14 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
+import { Textarea, controlClass } from '@/components/app/field'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 
 const CATEGORIES: { value: string; label: string }[] = [
-  { value: 'missing_allocation', label: "I'm missing an allocation" },
+  { value: 'missing_allocation', label: 'I’m missing from the list' },
   { value: 'wrong_amount', label: 'My amount looks wrong' },
-  { value: 'sybil_suspected', label: 'Suspected sybil / farming' },
+  { value: 'sybil_suspected', label: 'Looks like fake or farmed wallets' },
   { value: 'other', label: 'Other' },
 ]
 
@@ -30,7 +27,7 @@ const CATEGORIES: { value: string; label: string }[] = [
  * platform team, nothing more. The required non-blocking copy near submit is load-bearing — do
  * not remove it or soften its meaning, only its wording.
  */
-export function ReportConcernDialog({ campaignId }: { campaignId: string }) {
+export function ReportConcernDialog({ campaignId, isConnected = true }: { campaignId: string; isConnected?: boolean }) {
   const { toast } = useToast()
   const [isOpen, setIsOpen] = useState(false)
   const [category, setCategory] = useState('')
@@ -71,12 +68,12 @@ export function ReportConcernDialog({ campaignId }: { campaignId: string }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Failed to submit report')
       toast({
-        title: existingReport ? 'Report updated' : 'Report submitted',
-        description: 'The host and platform team have been notified.',
+        title: existingReport ? 'Report updated' : 'Report sent',
+        description: 'The host and the DappDrop team can see it now.',
       })
       setIsOpen(false)
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Could not submit report', description: e.message })
+      toast({ variant: 'destructive', title: 'Your report didn’t go through', description: e.message })
     } finally {
       setIsSubmitting(false)
     }
@@ -84,44 +81,39 @@ export function ReportConcernDialog({ campaignId }: { campaignId: string }) {
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <Button variant="outline" size="sm" onClick={() => setIsOpen(true)}>
-        <Flag className="mr-2 h-4 w-4" /> Report a concern
-      </Button>
+      <button type="button" className="dd-link inline cursor-pointer bg-transparent p-0 font-[inherit] text-[length:inherit]" onClick={() => setIsOpen(true)}>
+        Report a concern
+      </button>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Report a concern</DialogTitle>
           <DialogDescription>
             {existingReport
-              ? 'You already have a report on file for this allocation — submitting again updates it.'
-              : 'Tell the host and platform team what looks wrong with the published allocation.'}
+              ? 'You already have a report on this list. Sending again updates it.'
+              : 'Tell the host and the DappDrop team what looks wrong with the published list.'}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-2">
+        <div className="grid gap-4 py-2">
           {existingReport?.status === 'REVIEWED' && (
-            <Alert>
-              <MessageSquare className="h-4 w-4" />
-              <AlertTitle>
-                Host reviewed your report
-                {existingReport.reviewedAt
-                  ? ` on ${new Date(existingReport.reviewedAt).toLocaleDateString()}`
-                  : ''}
-              </AlertTitle>
-              <AlertDescription>
-                {existingReport.hostResponse?.trim() ? (
-                  <p className="whitespace-pre-wrap">{existingReport.hostResponse.trim()}</p>
-                ) : (
-                  <p className="text-muted-foreground">
-                    The host marked this report as reviewed without leaving a written reply.
-                  </p>
-                )}
-              </AlertDescription>
-            </Alert>
+            <div className="rounded-[10px] border border-rule bg-sunk p-4 text-small">
+              <p className="font-semibold text-ink">
+                The host reviewed your report
+                {existingReport.reviewedAt ? ` on ${new Date(existingReport.reviewedAt).toLocaleDateString()}` : ''}
+              </p>
+              {existingReport.hostResponse?.trim() ? (
+                <p className="mt-1 whitespace-pre-wrap text-ink-2">{existingReport.hostResponse.trim()}</p>
+              ) : (
+                <p className="mt-1 text-ink-2">They marked it as reviewed without a written reply.</p>
+              )}
+            </div>
           )}
-          <div className="space-y-2">
-            <Label htmlFor="report-category">Category</Label>
+          <div className="grid gap-2">
+            <label htmlFor="report-category" className="text-small font-semibold text-ink">
+              What kind of problem?
+            </label>
             <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger id="report-category">
-                <SelectValue placeholder="Select a category" />
+              <SelectTrigger id="report-category" className={controlClass('justify-between')}>
+                <SelectValue placeholder="Choose one" />
               </SelectTrigger>
               <SelectContent>
                 {CATEGORIES.map((c) => (
@@ -132,38 +124,42 @@ export function ReportConcernDialog({ campaignId }: { campaignId: string }) {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="report-reason">What's wrong?</Label>
+          <div className="grid gap-2">
+            <label htmlFor="report-reason" className="text-small font-semibold text-ink">
+              What’s wrong?
+            </label>
             <Textarea
               id="report-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Describe the issue — the more specific, the easier it is for the host to check."
+              placeholder="The more specific, the easier it is for the host to check."
               maxLength={2000}
               rows={4}
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            Reports are sent to the host and the platform team during the review window.
-            Reporting does not pause claims — the host decides whether to publish a corrected
-            allocation.
+          <p className="text-[0.8125rem] text-ink-2">
+            Reports go to the host and the DappDrop team. Reporting doesn’t pause claims: the host decides whether to publish a
+            corrected list.
           </p>
           {existingReport && (
-            <p className="text-xs text-muted-foreground">
-              Updating this report sets it back to open so the host looks again. Any reply the host
-              already left stays visible here.
+            <p className="text-[0.8125rem] text-ink-2">
+              Updating sets the report back to open, so the host looks again. Any reply the host left stays visible here.
             </p>
           )}
         </div>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline" disabled={isSubmitting}>
-              Cancel
+            <Button variant="secondary" disabled={isSubmitting}>
+              Not now
             </Button>
           </DialogClose>
-          <Button onClick={handleSubmit} disabled={isSubmitting || !category || !reason.trim()}>
-            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {existingReport ? 'Update report' : 'Submit report'}
+          <Button
+            onClick={handleSubmit}
+            loading={isSubmitting}
+            disabled={!isConnected || !category || !reason.trim()}
+            disabledReason={!isConnected ? 'Connect your wallet first: a report is tied to the wallet that sends it.' : undefined}
+          >
+            {isSubmitting ? 'Sending…' : existingReport ? 'Update the report' : 'Send the report'}
           </Button>
         </DialogFooter>
       </DialogContent>

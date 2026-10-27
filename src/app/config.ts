@@ -35,15 +35,26 @@ export type ChainAddressBook = {
 }
 
 // Versioned address book, keyed by chainId. Source of truth:
-// Dapp-Drop-Smart-Contract/docs/deployments/sepolia.md (v0.6.0, 2026-07-20).
+// Dapp-Drop-Smart-Contract/docs/deployments/sepolia.md (v0.7.0, 2026-10-27; contracts dev @ 5aa3e13).
+//
+// The v0.7.0 redeploy (contracts PRs #23-#26) deployed EVERY contract fresh and together; never
+// pair this Web3Campaigns with an older module. The NEXT_PUBLIC_* env overrides below win over these
+// values, so an override left pointing at v0.6.0 would keep the app on the old contracts. With a
+// new deployment also update subgraph/subgraph.yaml and src/config/claims.ts (deploy facts).
+// src/config/hidden-campaigns.ts is keyed by entrypoint, so a new entrypoint hides nothing.
 const ADDRESS_BOOK: Record<number, ChainAddressBook> = {
   // Sepolia (dev/beta)
   11155111: {
-    entrypoint: '0xf0A2Fac02ffBA4A7762f2f0d611253B6C97bB1B3',
-    onChainRewardModule: '0x167475bcB8BE2346A8DFAbdAC017e388B56F35B4',
-    nftSettlementModule: '0xf85Fe37e9dA3Ae5529a39fc47eb6780934f69747',
-    feeModule: null, // FEE_BPS unset at deploy — fees disabled (PRD Q2 default: gross = net)
-    deployBlock: 11314275,
+    // v0.7.0 Web3Campaigns (contracts PRs #23-#26).
+    entrypoint: '0xC562505899faCee1F8f755F009cf6FbA3EA3E8Da',
+    // v0.7.0 OnChainRewardModule (fixed, PR #23).
+    onChainRewardModule: '0xDF0A0dd1459401EB75dBD2B64b9713B59626D19B',
+    // v0.7.0 NFTSettlementModule.
+    nftSettlementModule: '0xeb1229154D92234641000991345Ed725B112dB09',
+    // No FeeModule: the v0.7.0 deploy ran with FEE_BPS unset (free; founder decision 2026-10-27).
+    feeModule: null,
+    // The block the v0.7.0 Web3Campaigns was deployed in (also the subgraph's startBlock).
+    deployBlock: 12006087,
   },
   // Future L2 (PRD §6.1 open decision) — add its entry here + env overrides; no code change.
 }

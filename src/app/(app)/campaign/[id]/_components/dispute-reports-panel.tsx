@@ -2,14 +2,8 @@
 
 import { formatAllocationAmount, formatNFTAllocation } from '@/lib/allocation-format'
 import { useEffect, useState, useCallback } from 'react'
-import { Loader2, MessageSquareWarning, XCircle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -19,12 +13,13 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useToast } from '@/hooks/use-toast'
 import type { Campaign } from '@/lib/types'
-import {
-  cancelCampaignOnChain,
-  closeCampaignOnChain,
-  getCloseOptions,
-  mapContractRevertToMessage,
-} from '@/lib/web3-service'
+import { cancelCampaignOnChain, closeCampaignOnChain, getCloseOptions, mapContractRevertToMessage } from '@/lib/web3-service'
+import { describeContractError } from '@/lib/contract-errors'
+import { CLOSE_GUARD_REASON } from './campaign-model'
+import { Button, Spinner, buttonClass } from '@/components/app/button'
+import { Chip } from '@/components/app/chip'
+import { Textarea } from '@/components/app/field'
+import { plural, shortAddress } from '@/components/app/format'
 
 type Report = {
   id: string
@@ -47,60 +42,114 @@ type Report = {
   } | null
 }
 
+const CATEGORY_LABEL: Record<string, string> = {
+  missing_allocation: 'Missing from the list',
+  wrong_amount: 'Amount looks wrong',
+  sybil_suspected: 'Fake or farmed wallets',
+  other: 'Other',
+}
+
 /**
- * Host resolution flow for reported concerns (P4 Part 4), shared by the ERC20 and NFT
- * settlement panels — same reports data model, same close-guard, regardless of settlement mode.
- * Re-proposing/republishing itself is NOT duplicated here — that flow already lives in each
- * settlement panel; this section is where the host reviews WHY they might want to.
+ * The host's reports against the published list (P4 Part 4), shared by the ERC20 and NFT
+ * campaigns. One fetch feeds both the reports list (step 05) and the close dialog's warning
+ * (step 06): closing freezes the list permanently, so the dialog counts EVERY unresolved report,
+ * including ones against an earlier list that a republish may never have addressed.
  */
-export function DisputeReportsPanel({
-  campaign,
-  onStatusChange,
-}: {
-  campaign: Campaign
-  /** Called after a successful close/cancel so the page re-reads the new status. */
-  onStatusChange?: () => void
-}) {
-  const { toast } = useToast()
+export function useHostReports(campaignId: string, enabled: boolean) {
   const [reports, setReports] = useState<Report[]>([])
   const [priorRootReports, setPriorRootReports] = useState<Report[]>([])
-  const [merkleRoot, setMerkleRoot] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [responses, setResponses] = useState<Record<string, string>>({})
-  const [isResolving, setIsResolving] = useState<string | null>(null)
-  const [isCloseConfirmOpen, setIsCloseConfirmOpen] = useState(false)
-  const [isClosing, setIsClosing] = useState(false)
-  const [isCancelling, setIsCancelling] = useState(false)
-  // Fetched fresh from chain each time the close dialog opens — see getCloseOptions.
-  const [closeOptions, setCloseOptions] = useState<
-    { totalParticipants: number; canCancel: boolean } | null
-  >(null)
-  const [isLoadingCloseOptions, setIsLoadingCloseOptions] = useState(false)
 
   const fetchReports = useCallback(async () => {
     setIsLoading(true)
     try {
-      const res = await fetch(`/api/campaigns/${campaign.id}/reports`, { credentials: 'include' })
+      const res = await fetch(`/api/campaigns/${campaignId}/reports`, { credentials: 'include' })
       const data = await res.json()
-      setReports(res.ok ? data.reports ?? [] : [])
-      setPriorRootReports(res.ok ? data.priorRootReports ?? [] : [])
-      setMerkleRoot(data.merkleRoot ?? null)
+      setReports(res.ok ? (data.reports ?? []) : [])
+      setPriorRootReports(res.ok ? (data.priorRootReports ?? []) : [])
     } catch {
       setReports([])
       setPriorRootReports([])
     } finally {
       setIsLoading(false)
     }
-  }, [campaign.id])
+  }, [campaignId])
 
   useEffect(() => {
-    fetchReports()
-  }, [fetchReports])
+    if (enabled) fetchReports()
+  }, [enabled, fetchReports])
+
+  const openCount = [...reports, ...priorRootReports].filter((r) => r.status === 'OPEN').length
+  return { reports, priorRootReports, isLoading, refetch: fetchReports, openCount }
+}
+
+export type HostReports = ReturnType<typeof useHostReports>
+
+function ReportItem({
+  r,
+  earlier,
+  response,
+  onResponse,
+  onResolve,
+  resolving,
+}: {
+  r: Report
+  earlier?: boolean
+  response: string
+  onResponse: (v: string) => void
+  onResolve: () => void
+  resolving: boolean
+}) {
+  const yours = r.allocation
+    ? `${r.allocation.rewardKind === 'NFT' ? formatNFTAllocation(r.allocation.standard, r.allocation.tokenId, r.allocation.amount) : formatAllocationAmount(r.allocation.amount, r.allocation.decimals, r.allocation.symbol)} · ${plural(r.allocation.tasksCompleted, 'task')} done`
+    : 'not on the current list'
+  return (
+    <li className="grid gap-2 border-b border-rule py-4 last:border-0">
+      <div className="flex flex-wrap items-center gap-2 text-small">
+        <span className="font-mono text-ink" title={r.reporterWallet}>
+          {shortAddress(r.reporterWallet)}
+        </span>
+        <Chip variant={r.status === 'OPEN' ? 'attention' : 'closed'} mark={r.status === 'OPEN' ? '!' : '✓'}>
+          {r.status === 'OPEN' ? 'Open' : 'Reviewed'}
+        </Chip>
+        <Chip variant="neutral">{CATEGORY_LABEL[r.category] ?? r.category}</Chip>
+        <span className="font-mono text-[0.8125rem] text-ink-2">{new Date(r.createdAt).toLocaleString()}</span>
+      </div>
+      <p className="text-small text-ink [overflow-wrap:anywhere]">{r.reason}</p>
+      <p className="text-[0.8125rem] text-ink-2">On the list: {yours}</p>
+      {earlier && <p className="font-mono text-[0.75rem] text-ink-2 [overflow-wrap:anywhere]">Earlier list {r.merkleRoot}</p>}
+      {r.status === 'OPEN' ? (
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-start">
+          {!earlier && (
+            <Textarea
+              aria-label={`Your reply to ${shortAddress(r.reporterWallet)} (optional)`}
+              placeholder="A reply to the reporter (optional)"
+              value={response}
+              onChange={(e) => onResponse(e.target.value)}
+              rows={2}
+            />
+          )}
+          <Button size="sm" variant="secondary" onClick={onResolve} loading={resolving}>
+            Mark reviewed
+          </Button>
+        </div>
+      ) : (
+        r.hostResponse && <p className="text-[0.8125rem] italic text-ink-2">Your reply: {r.hostResponse}</p>
+      )}
+    </li>
+  )
+}
+
+/** The reports against the published list (step 05). No SLA and no automatic action: the host decides. */
+export function ReportsList({ campaignId, data }: { campaignId: string; data: HostReports }) {
+  const { toast } = useToast()
+  const [responses, setResponses] = useState<Record<string, string>>({})
+  const [isResolving, setIsResolving] = useState<string | null>(null)
 
   const handleResolve = async (reportId: string) => {
     setIsResolving(reportId)
     try {
-      const res = await fetch(`/api/campaigns/${campaign.id}/reports/${reportId}/resolve`, {
+      const res = await fetch(`/api/campaigns/${campaignId}/reports/${reportId}/resolve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -108,36 +157,99 @@ export function DisputeReportsPanel({
       })
       if (!res.ok) throw new Error((await res.json()).error || 'Failed to update report')
       toast({ title: 'Report marked reviewed' })
-      await fetchReports()
+      await data.refetch()
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Could not update report', description: e.message })
+      toast({ variant: 'destructive', title: 'The report wasn’t updated', description: e.message })
     } finally {
       setIsResolving(null)
     }
   }
 
+  if (data.isLoading) return null
+  return (
+    <div className="grid gap-3" data-reports>
+      <p className="text-small font-semibold text-ink">
+        Reports on this list <span className="font-mono font-normal text-ink-2">· {data.reports.length}</span>
+      </p>
+      {data.reports.length === 0 ? (
+        <p className="text-small text-ink-2">No reports on this list.</p>
+      ) : (
+        <ul className="border-t border-rule">
+          {data.reports.map((r) => (
+            <ReportItem
+              key={r.id}
+              r={r}
+              response={responses[r.id] ?? ''}
+              onResponse={(v) => setResponses((p) => ({ ...p, [r.id]: v }))}
+              onResolve={() => handleResolve(r.id)}
+              resolving={isResolving === r.id}
+            />
+          ))}
+        </ul>
+      )}
+      {/* Reports on a list you've since replaced stay reachable: a republish restarts the window
+          but doesn't necessarily address what these reporters raised. */}
+      {data.priorRootReports.length > 0 && (
+        <>
+          <p className="mt-2 text-small font-semibold text-ink">
+            Reports on earlier lists <span className="font-mono font-normal text-ink-2">· {data.priorRootReports.length}</span>
+          </p>
+          <ul className="border-t border-rule">
+            {data.priorRootReports.map((r) => (
+              <ReportItem key={r.id} r={r} earlier response="" onResponse={() => {}} onResolve={() => handleResolve(r.id)} resolving={isResolving === r.id} />
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
+ * [Close campaign] and its dialog (step 06). The dialog reads the chain fresh each time it opens
+ * (getCloseOptions): with nobody joined it offers "Cancel campaign instead" (an immediate refund).
+ *
+ * `blockedReason`: the host-close guard (OUT-C03) for a campaign with participants that still
+ * owes a published list (hostPlan's closeBlocked). The contract itself refuses that close with
+ * `SettlementNotPublished` (contracts PR #26). The dialog re-reads the guard on-chain when it
+ * opens (getCloseOptions().settlementOwed) and disables Close with the reason; if a close is sent
+ * anyway, the revert reads "Can't close yet. Publish the reward list first."
+ */
+export function CloseCampaignAction({
+  campaign,
+  openReports,
+  primary,
+  blockedReason,
+  onStatusChange,
+}: {
+  campaign: Campaign
+  openReports: number
+  primary: boolean
+  blockedReason?: string
+  onStatusChange?: () => void
+}) {
+  const { toast } = useToast()
+  const [open, setOpen] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [closeOptions, setCloseOptions] = useState<{ totalParticipants: number; canCancel: boolean; settlementOwed: boolean | null } | null>(null)
+  const [isLoadingCloseOptions, setIsLoadingCloseOptions] = useState(false)
+  const isNFT = campaign.settlement?.mode === 'NFT' || campaign.reward.type === 'ERC721'
+
   useEffect(() => {
-    if (!isCloseConfirmOpen) return
+    if (!open) return
     let cancelled = false
     setCloseOptions(null)
     setIsLoadingCloseOptions(true)
     getCloseOptions(campaign.id)
-      .then((o) => {
-        if (!cancelled) setCloseOptions(o)
-      })
+      .then((o) => !cancelled && setCloseOptions(o))
       // A failed read just means no zero-participant warning/cancel offer; closing still works.
-      .catch(() => {
-        if (!cancelled) setCloseOptions(null)
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingCloseOptions(false)
-      })
+      .catch(() => !cancelled && setCloseOptions(null))
+      .finally(() => !cancelled && setIsLoadingCloseOptions(false))
     return () => {
       cancelled = true
     }
-  }, [isCloseConfirmOpen, campaign.id])
-
-  const isNFT = campaign.settlement?.mode === 'NFT' || campaign.reward.type === 'ERC721'
+  }, [open, campaign.id])
 
   const handleCancelInstead = async () => {
     setIsCancelling(true)
@@ -145,14 +257,12 @@ export function DisputeReportsPanel({
       const txHash = await cancelCampaignOnChain(campaign.id)
       toast({
         title: 'Campaign cancelled',
-        description: isNFT
-          ? `Your NFTs can be withdrawn now. Tx: ${txHash}`
-          : `The escrowed tokens were refunded to you. Tx: ${txHash}`,
+        description: isNFT ? `Your NFTs can be withdrawn now. Tx: ${txHash}` : `The escrowed tokens went back to your wallet. Tx: ${txHash}`,
       })
-      setIsCloseConfirmOpen(false)
+      setOpen(false)
       onStatusChange?.()
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Failed to cancel campaign', description: mapContractRevertToMessage(e) })
+      toast({ variant: 'destructive', title: 'The campaign wasn’t cancelled', description: mapContractRevertToMessage(e) })
     } finally {
       setIsCancelling(false)
     }
@@ -162,181 +272,90 @@ export function DisputeReportsPanel({
     setIsClosing(true)
     try {
       const txHash = await closeCampaignOnChain(campaign.id)
-      toast({ title: 'Campaign closed', description: `Tx: ${txHash}` })
-      setIsCloseConfirmOpen(false)
+      toast({ title: 'Campaign closed', description: `Participants have 30 days to claim. Tx: ${txHash}` })
+      setOpen(false)
       onStatusChange?.()
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Failed to close campaign', description: mapContractRevertToMessage(e) })
+      const d = describeContractError(e)
+      toast({
+        variant: 'destructive',
+        title: d.name === 'Web3Campaigns__SettlementNotPublished' ? d.title : 'The campaign wasn’t closed',
+        description: d.message,
+      })
     } finally {
       setIsClosing(false)
     }
   }
 
-  if (campaign.status !== 'Ended') return null // closeCampaign only makes sense from Ended
-  if (isLoading) return null
+  if (blockedReason) {
+    return (
+      <Button size="sm" variant="secondary" disabled disabledReason={blockedReason}>
+        Close campaign
+      </Button>
+    )
+  }
 
-  // Closing freezes the allocation permanently, so the guard counts EVERY unresolved report —
-  // including ones against an earlier root, which a republish may never have addressed.
-  const openReports = [...reports, ...priorRootReports].filter((r) => r.status === 'OPEN')
-
+  const busy = isClosing || isCancelling
+  // The chain's answer, read as the dialog opened: closing would revert SettlementNotPublished.
+  const owed = closeOptions?.settlementOwed === true
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <MessageSquareWarning className="h-5 w-5" /> Reported Concerns
-        </CardTitle>
-        <CardDescription>
-          {merkleRoot
-            ? `Reports against the currently published root. No SLA, no automated action — you decide whether to respond or re-propose a corrected allocation above.`
-            : 'No published allocation yet, so nothing to report against.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {reports.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No reports for the current published allocation.</p>
-        ) : (
-          <div className="space-y-3">
-            {reports.map((r) => (
-              <div key={r.id} className="rounded-md border p-3 space-y-2">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-mono text-xs">{r.reporterWallet}</span>
-                  <Badge variant={r.status === 'OPEN' ? 'destructive' : 'secondary'}>{r.status}</Badge>
-                  <Badge variant="outline">{r.category}</Badge>
-                  <span className="text-muted-foreground text-xs">{new Date(r.createdAt).toLocaleString()}</span>
-                </div>
-                <p className="text-sm">{r.reason}</p>
-                <p className="text-xs text-muted-foreground">
-                  Their allocation:{' '}
-                  {r.allocation
-                    ? `${
-                        r.allocation.rewardKind === 'NFT'
-                          ? formatNFTAllocation(r.allocation.standard, r.allocation.tokenId, r.allocation.amount)
-                          : formatAllocationAmount(r.allocation.amount, r.allocation.decimals, r.allocation.symbol)
-                      } · ${r.allocation.tasksCompleted} task(s) completed`
-                    : 'none found in the current allocation'}
-                </p>
-                {r.status === 'OPEN' ? (
-                  <div className="flex gap-2">
-                    <Textarea
-                      placeholder="Optional response to the reporter"
-                      value={responses[r.id] ?? ''}
-                      onChange={(e) => setResponses((prev) => ({ ...prev, [r.id]: e.target.value }))}
-                      rows={2}
-                      className="text-sm"
-                    />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleResolve(r.id)}
-                      disabled={isResolving === r.id}
-                    >
-                      {isResolving === r.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Mark reviewed
-                    </Button>
-                  </div>
-                ) : (
-                  r.hostResponse && <p className="text-xs italic text-muted-foreground">Response: {r.hostResponse}</p>
-                )}
-              </div>
-            ))}
-          </div>
+    <AlertDialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
+      <Button size="sm" variant={primary ? 'primary' : 'secondary'} onClick={() => setOpen(true)}>
+        Close campaign
+      </Button>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Close this campaign?</AlertDialogTitle>
+          <AlertDialogDescription>
+            The list is frozen, and participants then have 30 days to claim. You can’t undo this or correct the list afterwards.
+            {openReports > 0 ? ` ${plural(openReports, 'report')} on the list ${openReports === 1 ? 'is' : 'are'} still open.` : ''}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        {isLoadingCloseOptions && (
+          <p className="flex items-center gap-2 text-small text-ink-2" role="status">
+            <Spinner /> Checking participation on-chain…
+          </p>
         )}
-
-        {/* Reports pinned to a root you've since replaced. Kept reachable deliberately: a
-            republish restarts the window but does NOT necessarily address what these reporters
-            raised, and root-scoped views alone would bury them permanently. */}
-        {priorRootReports.length > 0 && (
-          <div className="space-y-3 border-t pt-4">
-            <p className="text-sm font-medium">
-              Reports against earlier allocations ({priorRootReports.length})
+        {closeOptions?.totalParticipants === 0 && (
+          <div className="grid gap-3 rounded-[10px] border border-rule bg-sunk p-4 text-small">
+            <p className="font-semibold text-ink">
+              {owed
+                ? 'Nobody joined, and no reward list is published, so the contract won’t close this campaign.'
+                : 'Nobody joined. Closing locks the reward for 30 days before you can take it back.'}
             </p>
-            {priorRootReports.map((r) => (
-              <div key={r.id} className="rounded-md border border-dashed p-3 space-y-1">
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="font-mono text-xs">{r.reporterWallet}</span>
-                  <Badge variant={r.status === 'OPEN' ? 'destructive' : 'secondary'}>{r.status}</Badge>
-                  <Badge variant="outline">{r.category}</Badge>
-                  <span className="text-muted-foreground text-xs">{new Date(r.createdAt).toLocaleString()}</span>
-                </div>
-                <p className="text-sm">{r.reason}</p>
-                <p className="text-xs text-muted-foreground font-mono truncate">root {r.merkleRoot}</p>
-                {r.status === 'OPEN' && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleResolve(r.id)}
-                    disabled={isResolving === r.id}
-                  >
-                    {isResolving === r.id && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Mark reviewed
+            {closeOptions.canCancel && (
+              <>
+                <p className="text-ink-2">
+                  {isNFT
+                    ? 'Cancel instead and your NFTs can be withdrawn right away, with no 30-day wait.'
+                    : 'Cancel instead and the reward comes back to you straight away, in the same transaction.'}
+                </p>
+                <div>
+                  <Button variant="secondary" size="sm" onClick={handleCancelInstead} loading={isCancelling} disabled={isClosing}>
+                    {isCancelling ? 'Cancelling…' : 'Cancel campaign instead'}
                   </Button>
-                )}
-                {r.status !== 'OPEN' && r.hostResponse && (
-                  <p className="text-xs italic text-muted-foreground">Response: {r.hostResponse}</p>
-                )}
-              </div>
-            ))}
+                </div>
+              </>
+            )}
           </div>
         )}
-
-        <div className="border-t pt-4">
-          <AlertDialog open={isCloseConfirmOpen} onOpenChange={setIsCloseConfirmOpen}>
-            <Button variant="destructive" onClick={() => setIsCloseConfirmOpen(true)}>
-              <XCircle className="mr-2 h-4 w-4" /> Close Campaign
-            </Button>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Close this campaign?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Closing freezes the allocation permanently — corrections become impossible.
-                  {openReports.length > 0
-                    ? ` ${openReports.length} unresolved report(s) exist for the current allocation.`
-                    : ''}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              {isLoadingCloseOptions && (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Checking participation on-chain…
-                </p>
-              )}
-              {closeOptions?.totalParticipants === 0 && (
-                <div className="space-y-3 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
-                  <p className="font-medium text-destructive">
-                    No one participated. Closing locks the escrowed rewards for 30 days before you can
-                    withdraw them.
-                  </p>
-                  {closeOptions.canCancel && (
-                    <>
-                      <p>
-                        {isNFT
-                          ? 'Cancel instead and your NFTs become withdrawable right away, with no 30-day wait.'
-                          : 'Cancel instead and the escrowed tokens are refunded to you immediately, in the same transaction.'}
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCancelInstead}
-                        disabled={isCancelling || isClosing}
-                      >
-                        {isCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        Cancel campaign instead
-                      </Button>
-                    </>
-                  )}
-                </div>
-              )}
-              <AlertDialogFooter>
-                {/* "Back", not "Cancel": next to "Cancel campaign instead", a bare "Cancel"
-                    reads as the destructive on-chain action rather than dismissing the dialog. */}
-                <AlertDialogCancel disabled={isClosing || isCancelling}>Back</AlertDialogCancel>
-                <AlertDialogAction disabled={isClosing || isCancelling} onClick={handleClose}>
-                  {isClosing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Close Campaign'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
-      </CardContent>
-    </Card>
+        <AlertDialogFooter>
+          {/* "Not now", not "Cancel": next to "Cancel campaign instead", a bare "Cancel" reads as
+              the on-chain action rather than dismissing the dialog. */}
+          <AlertDialogCancel className={buttonClass({ variant: 'secondary' })} disabled={busy}>
+            Not now
+          </AlertDialogCancel>
+          <Button
+            variant="danger"
+            onClick={handleClose}
+            loading={isClosing}
+            disabled={isCancelling || owed}
+            disabledReason={owed ? CLOSE_GUARD_REASON : undefined}
+          >
+            {isClosing ? 'Closing…' : 'Close campaign'}
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }

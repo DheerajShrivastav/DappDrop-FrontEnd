@@ -1,0 +1,350 @@
+/**
+ * 08-site phase 2 (Builder A): gates for the campaign page, /campaign/[id].
+ *
+ * Production build (npm run build && GATES_PORT=3201 npm run test:gates):
+ * - /campaign/1 on the gated deployment, read live (RPC fallback): FULL-page axe 0 in both themes
+ *   at 320/375/768/1440 and no horizontal scroll, then what the chain says it must be. The v0.7.0
+ *   redeploy (2026-10-27) launched with getCampaignCount() = 0, so until its first campaign
+ *   exists this is the in-page not-found state; after that it's a real campaign (one h1, the
+ *   ribbon, the rail). (Before the redeploy these gates read v0.6.0's #4 and #6; their
+ *   state-specific checks moved to the p-claim-visitor / p-record-end-visitor fixtures below.)
+ * - the not-found state; the dev fixture route is a 404.
+ *
+ * Wallet-only states (connected, host, claimable…) render only on the dev fixture route
+ * /_dev/campaign, which 404s in production. Point GATES_DEV_URL at a dev server to gate them too:
+ *   GATES_DEV_URL=http://localhost:3200 npx playwright test app-campaign
+ */
+import { test, expect, type Page } from '@playwright/test'
+import { deployedCampaignCount } from './deployment'
+
+const AXE = require.resolve('axe-core/axe.min.js')
+const THEMES = ['obsidian', 'porcelain'] as const
+const WIDTHS: [number, number][] = [
+  [320, 640],
+  [375, 812],
+  [768, 1024],
+  [1440, 900],
+]
+// The gated deployment's first campaign id (ids restart at 1 on every redeploy).
+const FIRST = '/campaign/1'
+
+async function remember(page: Page, theme: string) {
+  await page.addInitScript((t) => {
+    try {
+      localStorage.setItem('dd-theme', t)
+    } catch {}
+  }, theme)
+}
+
+/** Load, wait for the hydrated account pill and for the campaign (or its error state). */
+async function openCampaign(page: Page, url: string) {
+  await page.goto(url, { waitUntil: 'load', timeout: 120_000 })
+  await page.locator('[data-account-pill]:not([data-account-pill="loading"])').first().waitFor({ state: 'attached', timeout: 30_000 })
+  await page.locator('.cp-ribbon-wrap, main h2').first().waitFor({ timeout: 60_000 })
+  // Let the claim panel / reward list settle (their skeletons are aria-busy).
+  await page.waitForFunction(() => !document.querySelector('main [aria-busy="true"]'), null, { timeout: 30_000 }).catch(() => {})
+  await page.evaluate(() => document.fonts.ready)
+}
+
+async function axe(page: Page) {
+  await page.addScriptTag({ path: AXE })
+  return page.evaluate(async () => {
+    // @ts-expect-error axe is injected above
+    const r = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } })
+    return r.violations.map((v: { id: string; nodes: { target: string[] }[] }) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)
+  })
+}
+
+const overflow = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+
+test.describe('campaign page (08-site phase 2)', () => {
+  test.describe.configure({ timeout: 180_000 })
+
+  for (const path of [FIRST]) {
+    for (const t of THEMES) {
+      for (const [width, height] of WIDTHS) {
+        test(`${path} · ${t} · ${width} px: full-page axe 0, no horizontal scroll`, async ({ page }) => {
+          await remember(page, t)
+          await page.setViewportSize({ width, height })
+          await openCampaign(page, path)
+          expect(await axe(page)).toEqual([])
+          expect(await overflow(page)).toBe(0)
+        })
+      }
+    }
+  }
+
+  test('/campaign/1 is what the chain says: not found while the deployment has no campaigns, else a real campaign page', async ({ page }) => {
+    const count = await deployedCampaignCount()
+    await openCampaign(page, FIRST)
+    await expect(page.locator('h1')).toHaveCount(1)
+    if (count === 0) {
+      // v0.7.0 at launch: nothing to show, and the page says so instead of inventing a campaign.
+      await expect(page.getByText('We couldn’t find campaign #1.')).toBeVisible({ timeout: 60_000 })
+      await expect(page.getByText('It doesn’t exist on Sepolia testnet, or the network didn’t answer.')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Browse campaigns' })).toHaveAttribute('href', '/campaigns')
+      await expect(page.locator('.cp-ribbon')).toHaveCount(0)
+      await expect(page.getByRole('complementary', { name: 'Campaign facts' })).toHaveCount(0)
+    } else {
+      const name = (await page.locator('h1').innerText()).trim()
+      await expect(page).toHaveTitle(`${name} · DappDrop`)
+      await expect(page.locator('.cp-ribbon [aria-current="step"]')).toHaveCount(1)
+      await expect(page.getByRole('complementary', { name: 'Campaign facts' })).toContainText('Sepolia testnet')
+      await expect(page.locator('main')).not.toContainText(/Reward for|TBD|Campaign Info/)
+      // Not connected: nobody is offered a task action without a wallet.
+      await expect(page.getByRole('button', { name: /^Start/ })).toHaveCount(0)
+    }
+  })
+
+  test('the campaign one past the deployment’s count is not found', async ({ page }) => {
+    const next = (await deployedCampaignCount()) + 1
+    await page.goto(`/campaign/${next}`, { waitUntil: 'load' })
+    await expect(page.getByText(`We couldn’t find campaign #${next}.`)).toBeVisible({ timeout: 60_000 })
+  })
+
+  test('an unknown campaign renders the in-page not-found state with a way back', async ({ page }) => {
+    await page.goto('/campaign/999999', { waitUntil: 'load' })
+    await expect(page.getByText('We couldn’t find campaign #999999.')).toBeVisible({ timeout: 60_000 })
+    await expect(page.getByRole('link', { name: 'Browse campaigns' })).toHaveAttribute('href', '/campaigns')
+  })
+
+  test('the campaign fixtures are unreachable in a production build', async ({ request }) => {
+    const res = await request.get('/_dev/campaign')
+    expect(res.status()).toBe(404)
+  })
+})
+
+// ---------------------------------------------------------------------------------------------
+// Dev fixtures (only with GATES_DEV_URL): every wallet-only state.
+// ---------------------------------------------------------------------------------------------
+const DEV = process.env.GATES_DEV_URL
+const STATES = [
+  'p-open-visitor',
+  'p-open-tasks',
+  'p-pay',
+  'p-discord-connect',
+  'p-discord-linked',
+  'p-telegram-linked',
+  'p-telegram-unset',
+  'p-post',
+  'p-post-no-handle',
+  'p-follow',
+  'p-full',
+  'p-record-end',
+  'p-record-end-visitor',
+  'p-waiting',
+  'p-review',
+  'p-claimable',
+  'p-claim-processing',
+  'p-claim-fallback',
+  'p-claim-by',
+  'p-claimed',
+  'p-not-on-list',
+  'p-swept',
+  'p-claim-visitor',
+  'p-nft',
+  'p-tiered',
+  'p-tiered-no-rank',
+  'h-draft',
+  'h-open',
+  'h-record-end',
+  'h-publish',
+  'h-review',
+  'h-numbers',
+  'h-close',
+  'h-closed',
+  'h-swept',
+]
+const ALL_WIDTHS = new Set(['p-open-tasks', 'p-pay', 'p-discord-connect', 'p-post', 'p-claimable', 'p-claim-fallback', 'h-publish', 'h-review'])
+
+test.describe('campaign page fixtures (dev server)', () => {
+  test.skip(!DEV, 'set GATES_DEV_URL to a dev server to gate the wallet-only states')
+  test.describe.configure({ timeout: 180_000 })
+
+  for (const state of STATES) {
+    for (const t of THEMES) {
+      for (const [width, height] of WIDTHS.filter(([w]) => ALL_WIDTHS.has(state) || w === 375 || w === 1440)) {
+        test(`${state} · ${t} · ${width} px: full-page axe 0, no horizontal scroll`, async ({ page }) => {
+          await remember(page, t)
+          await page.setViewportSize({ width, height })
+          await openCampaign(page, `${DEV}/_dev/campaign?state=${state}`)
+          expect(await axe(page)).toEqual([])
+          expect(await overflow(page)).toBe(0)
+        })
+      }
+    }
+  }
+
+  test('claimable: gas-free is the gold primary, the wallet claim sits next to it, and both are reachable by keyboard', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-claimable`)
+    const gasFree = page.getByRole('button', { name: 'Claim 250 EXAMPLE, gas-free' })
+    const own = page.getByRole('button', { name: 'Claim with my wallet' })
+    await expect(gasFree).toBeEnabled()
+    await expect(own).toBeEnabled()
+    await page.getByRole('link', { name: 'Campaigns' }).first().focus()
+    const reached: string[] = []
+    for (let i = 0; i < 40 && reached.length < 2; i++) {
+      await page.keyboard.press('Tab')
+      const text = await page.evaluate(() => (document.activeElement?.tagName === 'BUTTON' ? document.activeElement.textContent?.trim() : '') ?? '')
+      if (/gas-free|my wallet/.test(text) && !reached.includes(text)) reached.push(text)
+    }
+    expect(reached).toEqual(['Claim 250 EXAMPLE, gas-free', 'Claim with my wallet'])
+  })
+
+  test('review window: both claim buttons are disabled, with the time in words', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-review`)
+    await expect(page.getByRole('button', { name: /gas-free/ })).toBeDisabled()
+    await expect(page.locator('[data-reward-state="review"]')).toContainText(/Claims open \d+ \w+, \d\d:\d\d \(in /)
+  })
+
+  test('gas-free unavailable: the wallet claim becomes the primary, with the reason and a retry', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-claim-fallback`)
+    await expect(page.locator('[data-claim-actions="wallet"]')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Claim 250 EXAMPLE with my wallet' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'Try gas-free again' })).toBeVisible()
+  })
+
+  test('host: the close guard says why Close is disabled while the list is unpublished', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=h-publish`)
+    await expect(page.locator('[data-host-bar]')).toContainText('publish the reward list by')
+    await expect(page.locator('[data-step="list"]')).toHaveAttribute('aria-current', 'step')
+    const close = page.getByRole('button', { name: 'Close campaign' })
+    await expect(close).toBeDisabled()
+    await expect(close).toHaveAccessibleDescription(/Publish the reward list first/)
+    await expect(page.getByRole('button', { name: 'Publish the list' })).toBeEnabled()
+  })
+
+  // Moved from the v0.6.0 deployment's /campaign/4 (claims stage, not connected).
+  test('claims open, not connected: one h1 (the name), one current ribbon stop, the claim panel asks to connect, the rail', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-claim-visitor`)
+    await expect(page.locator('h1')).toHaveCount(1)
+    await expect(page.locator('.cp-ribbon [aria-current="step"]')).toHaveCount(1)
+    await expect(page.locator('[data-reward-state="connect"]')).toContainText('Connect your wallet to see if you have a reward.')
+    await expect(page.getByRole('complementary', { name: 'Campaign facts' })).toContainText('Sepolia testnet')
+    await expect(page.locator('main')).not.toContainText(/Reward for|TBD|Campaign Info/)
+  })
+
+  // Moved from the v0.6.0 deployment's /campaign/6 (end time passed, not recorded, not connected).
+  test('end not recorded, not connected: the ribbon says so, tasks are closed and say when, no actions without a wallet', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-record-end-visitor`)
+    await expect(page.locator('.cp-ribbon [aria-current="step"]')).toContainText('not recorded yet')
+    await expect(page.locator('main')).toContainText('Tasks closed when the campaign ended on')
+    await expect(page.getByRole('button', { name: /^Start/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Record the end' })).toHaveCount(0)
+  })
+
+  test('host: an open campaign has no End button; any wallet past the end time can record it', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=h-open`)
+    await expect(page.getByRole('button', { name: /^End/ })).toHaveCount(0)
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-record-end`)
+    await expect(page.getByRole('button', { name: 'Record the end' })).toBeVisible()
+  })
+
+  test('payment task: the dialog says what, to whom and where; a sent payment can be checked by hash; [Pay] reopens it', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-pay`)
+    const dialog = page.getByRole('dialog', { name: 'Pay 0.001 ETH' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('Pay the example entry fee')
+    await expect(dialog).toContainText('Sepolia (testnet)')
+    await expect(dialog).toContainText('DappDrop never holds it')
+    await expect(dialog.getByRole('button', { name: 'Pay 0.001 ETH' })).toBeEnabled()
+    await expect(dialog.getByRole('button', { name: 'Pay 0.001 ETH' })).toBeFocused()
+
+    await dialog.getByRole('button', { name: 'I paid already' }).click()
+    const hash = dialog.getByLabel('Transaction hash')
+    const check = dialog.getByRole('button', { name: 'Check this payment' })
+    await expect(check).toBeDisabled()
+    await hash.fill('0x1234')
+    await expect(check).toBeDisabled()
+    await hash.fill('0x' + 'ab'.repeat(32))
+    await expect(check).toBeEnabled()
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    const pay = page.getByRole('button', { name: 'Pay: Pay the example entry fee' })
+    await expect(pay).toBeVisible()
+    await pay.click()
+    await expect(page.getByRole('dialog', { name: 'Pay 0.001 ETH' })).toBeVisible()
+  })
+
+  test('tasks: actions for a connected wallet, the failed row says why, full uses the real cap', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-open-tasks`)
+    await expect(page.locator('[data-task-state="failed"]')).toContainText('Couldn’t verify')
+    await expect(page.getByRole('button', { name: /^Start/ })).toHaveCount(1)
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-full`)
+    await expect(page.locator('main')).toContainText('This campaign is full (500 of 500).')
+  })
+
+  // #44: Discord / Telegram accounts are linked on the server, never typed in.
+  test('linked accounts: the check stays disabled, with its reason, until an account is linked; no ID field', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-discord-connect`)
+    const dialog = page.getByRole('dialog', { name: 'Join the Discord server' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('[data-linked-account="unlinked"]')).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Connect Discord' })).toBeEnabled()
+    const check = dialog.getByRole('button', { name: 'Check my membership' })
+    await expect(check).toBeDisabled()
+    await expect(check).toHaveAccessibleDescription('Connect your Discord account first.')
+    // Nothing identifying can be typed: no text inputs at all.
+    await expect(dialog.locator('input')).toHaveCount(0)
+
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-discord-linked`)
+    const linked = page.getByRole('dialog', { name: 'Join the Discord server' })
+    await expect(linked.locator('[data-linked-account="linked"]')).toContainText('Discord connected as example_tester')
+    await expect(linked.getByRole('button', { name: 'Disconnect' })).toBeVisible()
+    await expect(linked.getByRole('button', { name: 'Check my membership' })).toBeEnabled()
+
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-telegram-linked`)
+    await expect(page.getByRole('dialog', { name: 'Join the Telegram group' }).locator('[data-linked-account="linked"]')).toContainText('Telegram connected as example_tester')
+  })
+
+  // #45: SOCIAL_POST is a real check (proof-by-post).
+  test('proof-by-post: the code and required text, the compose link, and "Check my post" only with a handle and a valid link', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-post`)
+    const dialog = page.getByRole('dialog', { name: 'Write a post on X' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('Post checked by our app')
+    await expect(dialog).not.toContainText('Self-reported')
+    await expect(dialog.locator('.dd-kv')).toContainText('#ExampleWeek')
+    await expect(dialog.locator('.dd-kv')).toContainText('DD-EXAMPL')
+    await expect(dialog.getByRole('link', { name: /Write the post on X/ })).toHaveAttribute('href', `https://x.com/intent/post?text=${encodeURIComponent('#ExampleWeek DD-EXAMPL')}`)
+    await expect(dialog.locator('[data-x-handle="saved"]')).toBeVisible()
+    const check = dialog.getByRole('button', { name: 'Check my post' })
+    await expect(check).toBeDisabled()
+    await expect(check).toHaveAccessibleDescription('Paste the link to your post.')
+    const link = dialog.getByLabel('Link to your post')
+    await link.fill('https://example.com/not-x')
+    await expect(check).toBeDisabled()
+    await link.fill('https://x.com/example_tester/status/1234567890')
+    await expect(check).toBeEnabled()
+
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-post-no-handle`)
+    const fresh = page.getByRole('dialog', { name: 'Write a post on X' })
+    const check2 = fresh.getByRole('button', { name: 'Check my post' })
+    await expect(check2).toHaveAccessibleDescription('Save your X handle first.')
+    await fresh.getByLabel('Your X handle').fill('@example_tester')
+    await fresh.getByRole('button', { name: 'Save handle' }).click()
+    await expect(fresh.locator('[data-x-handle="saved"]')).toContainText('Saved')
+    await expect(check2).toHaveAccessibleDescription('Paste the link to your post.')
+  })
+
+  test('self-reported X task: labelled, the host’s handle in the intent link, and "I’ve done it" only after opening X', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-follow`)
+    const dialog = page.getByRole('dialog', { name: 'Follow on X' })
+    await expect(dialog).toContainText('Self-reported')
+    await expect(dialog.getByRole('link', { name: /Follow @example on X/ })).toHaveAttribute('href', 'https://x.com/intent/follow?screen_name=example')
+    const done = dialog.getByRole('button', { name: 'I’ve done it' })
+    await expect(done).toBeDisabled()
+    await expect(done).toHaveAccessibleDescription('Open the task on X first.')
+    await expect(dialog.getByLabel('Your X handle')).toBeVisible()
+  })
+
+  test('host: More numbers lists participants’ X handles, labelled unverified', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=h-numbers`)
+    const table = page.locator('details.cp-details table')
+    await expect(table).toContainText('X handle')
+    await expect(table).toContainText('(unverified)')
+    await expect(table.getByRole('link', { name: '@example_tester' })).toHaveAttribute('href', 'https://x.com/example_tester')
+  })
+})

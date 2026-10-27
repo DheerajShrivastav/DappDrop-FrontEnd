@@ -75,9 +75,11 @@ Web3Provider (RainbowKit + Wagmi + React Query)
 
 ### Task verification flow
 
-All task types route through `POST /api/verify-task` for server-side proof validation before the frontend calls `completeTask()` on-chain. The exception is `HUMANITY_VERIFICATION`, which calls `GET /api/verify-humanity` to check cached status in the `User` table.
+Since contracts PR #24, `completeTask()` on-chain self-verifies only `ONCHAIN_HOLD_ERC20` / `ONCHAIN_HOLD_ERC721` (a balance check in the transaction); every other type reverts `NotSelfVerifiable`. Those types go through `POST /api/verify-task` (and `GET /api/verify-humanity` for `HUMANITY_VERIFICATION`), where the backend checks the task and the `SIGNER_ROLE` key signs an EIP-712 attestation that is submitted via `verifyTaskCompletionWithSignature` (or self-submitted from the wallet with `submitAttestationFromWallet` if the backend couldn't). The `completeTask()` wrapper in `web3-service.ts` refuses non-hold types and uses `staticCall` as a pre-flight before sending.
 
-For `ONCHAIN_TX` and `HUMANITY_VERIFICATION` task types, `completeTask()` in `web3-service.ts` uses `staticCall` as a pre-flight check before sending the real transaction, to surface contract revert reasons as readable errors rather than generic wallet rejections.
+### Contract errors
+
+The contracts revert with custom errors only (no revert strings since PR #26). Decode them with `src/lib/contract-errors.ts` (`describeContractError` / `contractErrorMessage` / `contractErrorName`), or `mapContractRevertToMessage` from `web3-service.ts`. Never match revert text with `.includes(...)`.
 
 ### Campaign lifecycle
 

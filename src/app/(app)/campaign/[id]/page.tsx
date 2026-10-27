@@ -18,49 +18,22 @@ import {
   hasParticipated,
   getCampaignParticipants,
   getCampaignParticipantAddresses,
-  openCampaign,
   endCampaign,
   completeTask,
   submitAttestationFromWallet,
   getUserTaskCompletionStatus,
+  mapContractRevertToMessage,
 } from '@/lib/web3-service'
 
-import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
-import { Loader2, SearchX } from 'lucide-react'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-
-// Extracted sub-components
-import { CampaignHero } from './_components/campaign-hero'
-import { CampaignSidebar } from './_components/campaign-sidebar'
-import { TaskList } from './_components/task-list'
-import { CampaignLifecycleBanner } from './_components/campaign-lifecycle-banner'
-import { hasEndTimePassed, EXPIRED_OPEN_WARNING } from '@/lib/campaign-timing'
+import { Button } from '@/components/app/button'
+import { EmptyState, LoadingRegion, Skeleton, ClaimSkeleton, RowsSkeleton } from '@/components/app/states'
+import { PageContainer } from '@/components/app/page-header'
+import { useDocumentTitle } from '@/components/app/document-title'
+import { CampaignView } from './_components/campaign-view'
 import { getCampaignStatus } from '@/lib/campaign-status'
-import { MerkleSettlementPanel } from './_components/merkle-settlement-panel'
-import { ClaimPanel } from './_components/claim-panel'
-import { TieredClaimPanel } from './_components/tiered-claim-panel'
-import { TieredLeaderboard } from './_components/tiered-leaderboard'
-import { NFTClaimPanel } from './_components/nft-claim-panel'
-import { NFTSettlementPanel } from './_components/nft-settlement-panel'
-import { PublicAllocationView } from './_components/public-allocation-view'
-import { DisputeReportsPanel } from './_components/dispute-reports-panel'
+import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
+import { paymentRequestFromTask } from '@/lib/payment-request'
+import type { PaymentVerifyResult } from '@/lib/payment-task-client'
 
 // Lazy-load heavy dialog components (only loaded when opened)
 const TaskVerificationForm = dynamic(
@@ -75,6 +48,14 @@ const HumanityVerificationModal = dynamic(
   () =>
     import('@/components/humanity-verification-modal').then((mod) => ({
       default: mod.HumanityVerificationModal,
+    })),
+  { ssr: false },
+)
+
+const PaymentTaskDialog = dynamic(
+  () =>
+    import('./_components/payment-task-dialog').then((mod) => ({
+      default: mod.PaymentTaskDialog,
     })),
   { ssr: false },
 )
@@ -98,28 +79,22 @@ const CampaignFunnelAnalytics = dynamic(
 export default function CampaignDetailsPage() {
   const params = useParams()
   const { id } = params
-  const { isConnected, role, address } = useWallet()
+  const { isConnected, role, address, connectWallet } = useWallet()
   const { toast } = useToast()
 
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [userTasks, setUserTasks] = useState<UserTask[]>([])
-  const [isClaiming, setIsClaiming] = useState(false)
   const [isJoined, setIsJoined] = useState(false)
   const [participants, setParticipants] = useState<ParticipantData[]>([])
   const [participantAddresses, setParticipantAddresses] = useState<string[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isActivating, setIsActivating] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
+  // The last verification failure per task, in words: the row shows "! Couldn't verify: …".
+  const [taskErrors, setTaskErrors] = useState<Record<string, string>>({})
+  const [isRecordingEnd, setIsRecordingEnd] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const fetchInFlightRef = useRef<Promise<void> | null>(null)
   const lastFetchRef = useRef(0)
-
-  // Winner selection state
-  const [numberOfWinners, setNumberOfWinners] = useState(1)
-  const [selectionMethod, setSelectionMethod] = useState<
-    'random' | 'first' | 'last'
-  >('random')
-  const [selectedWinners, setSelectedWinners] = useState<string[]>([])
-  const [isWinnerDialogOpen, setIsWinnerDialogOpen] = useState(false)
 
   // Discord Verification State
   const [isVerifyDialogOpen, setIsVerifyDialogOpen] = useState(false)
@@ -142,16 +117,6 @@ export default function CampaignDetailsPage() {
   // Payment Task State
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [paymentTaskId, setPaymentTaskId] = useState<string | null>(null)
-  const [transactionHash, setTransactionHash] = useState('')
-  const [isVerifyingPayment, setIsVerifyingPayment] = useState(false)
-
-  // Campaign Action State (Launch/End) for hosts
-  const [isCampaignActionDialogOpen, setIsCampaignActionDialogOpen] =
-    useState(false)
-  const [campaignActionToConfirm, setCampaignActionToConfirm] = useState<
-    'launch' | 'end' | null
-  >(null)
-  const [isUpdatingCampaign, setIsUpdatingCampaign] = useState(false)
 
   const campaignId = id as string
 
@@ -170,7 +135,7 @@ export default function CampaignDetailsPage() {
       return
     }
 
-    console.log('Opening verify dialog for task:', taskId, taskType)
+    setTaskErrors(({ [taskId]: _, ...rest }) => rest)
     setVerifyingTaskId(taskId)
     setVerifyingTaskType(taskType)
 
@@ -178,6 +143,16 @@ export default function CampaignDetailsPage() {
     if (taskType === 'HUMANITY_VERIFICATION') {
       setIsHumanityModalOpen(true)
     } else if (taskType === 'ONCHAIN_TX') {
+      if (!isConnected || !address) {
+        toast({ variant: 'destructive', title: 'Wallet Not Connected', description: 'Please connect your wallet.' })
+        return
+      }
+      const task = campaign?.tasks.find((t) => t.id === taskId)
+      if (!task || !paymentRequestFromTask(task, DEPLOYMENT_CHAIN.id)) {
+        const description = 'this payment task’s settings are missing or incomplete. Ask the host to check it.'
+        setTaskErrors((prev) => ({ ...prev, [taskId]: description }))
+        return
+      }
       setPaymentTaskId(taskId)
       setIsPaymentDialogOpen(true)
     } else if (
@@ -235,14 +210,15 @@ export default function CampaignDetailsPage() {
       await fetchAllCampaignData()
       if (!isJoined) setIsJoined(true)
       toast({
-        title: 'Task Completed!',
-        description: 'Great job, one step closer to your reward.',
+        title: 'Task done',
+        description: 'One step closer to your reward.',
       })
     } catch (error: any) {
       const message = String(error?.message ?? error ?? '')
+      setTaskErrors((prev) => ({ ...prev, [taskId]: message || 'the transaction didn’t go through.' }))
       toast({
         variant: 'destructive',
-        title: 'Error',
+        title: 'The task wasn’t completed',
         description: message || 'Failed to complete task.',
       })
     } finally {
@@ -252,6 +228,46 @@ export default function CampaignDetailsPage() {
         ),
       )
     }
+  }
+
+  // v0.6.0: attested tasks are recorded via an EIP-712 signature, NOT the old
+  // client completeTask (which now reverts TaskManagedBySignature). The backend signs
+  // and, by default, submits. If it couldn't submit, self-submit the returned signature
+  // from the connected wallet (BR-V3 fallback). Shared by /api/verify-task and the payment
+  // dialog (/api/tasks/verify-payment), which return the same attestation shape.
+  const recordAttestation = async (result: {
+    attested?: boolean
+    submitted?: boolean
+    attestation?: PaymentVerifyResult['attestation']
+  }) => {
+    if (!result.attested || result.submitted) return
+    if (!result.attestation?.signature) {
+      throw new Error('Verified, but completion could not be recorded on-chain. Please try again.')
+    }
+    await submitAttestationFromWallet(
+      campaignId,
+      result.attestation.participant,
+      result.attestation.taskIndex,
+      result.attestation.completed,
+      result.attestation.deadline,
+      result.attestation.signature,
+    )
+  }
+
+  // The payment dialog's last step: the server checked the payment and signed the completion.
+  // Throws back into the dialog (which keeps the payment's hash for a re-check) on failure.
+  const handlePaymentVerified = async (taskId: string, result: PaymentVerifyResult) => {
+    try {
+      await recordAttestation(result)
+    } catch (e) {
+      // The self-submit's contract revert, decoded (the dialog shows this message as is).
+      throw new Error(mapContractRevertToMessage(e))
+    }
+    setTaskErrors(({ [taskId]: _, ...rest }) => rest)
+    setUserTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, completed: true } : t)))
+    toast({ title: 'Task done', description: 'Payment checked. One step closer to your reward.' })
+    if (!isJoined) setIsJoined(true)
+    await fetchAllCampaignData(true)
   }
 
   // Handler for task verification
@@ -317,32 +333,11 @@ export default function CampaignDetailsPage() {
         throw new Error(result.message || result.error || 'Verification failed.')
       }
 
-      // v0.6.0: attested tasks are recorded via an EIP-712 signature, NOT the old
-      // client completeTask (which now reverts TaskManagedBySignature). The backend signs
-      // and, by default, submits. If it couldn't submit, self-submit the returned signature
-      // from the connected wallet (BR-V3 fallback).
-      if (result.attested) {
-        if (result.submitted) {
-          // Backend already recorded completion on-chain — nothing more to do.
-        } else if (result.attestation?.signature) {
-          await submitAttestationFromWallet(
-            campaignId,
-            result.attestation.participant,
-            result.attestation.taskIndex,
-            result.attestation.completed,
-            result.attestation.deadline,
-            result.attestation.signature,
-          )
-        } else {
-          throw new Error(
-            'Verified, but completion could not be recorded on-chain. Please try again.',
-          )
-        }
-      }
+      await recordAttestation(result)
 
       toast({
-        title: 'Task Completed!',
-        description: 'Great job, one step closer to your reward.',
+        title: 'Task done',
+        description: 'One step closer to your reward.',
       })
 
       // Refresh campaign data to update participant count and other blockchain data
@@ -354,15 +349,12 @@ export default function CampaignDetailsPage() {
 
       return true
     } catch (error: any) {
-      const message = String(error?.message ?? error ?? '')
-      let description = message || 'Failed to complete task.'
-      if (message.includes('not in active period')) {
-        description = 'This campaign is not currently active.'
-      } else if (message.includes('Campaign participant limit reached')) {
-        description =
-          'The maximum participant limit for this campaign has been reached.'
-      }
-      toast({ variant: 'destructive', title: 'Error', description })
+      // Covers the verifier's own messages (plain Errors pass through) and the attestation
+      // self-submit's contract reverts (ParticipantLimitReached, SignatureExpired, …), decoded
+      // by custom error rather than matched as text.
+      const description = mapContractRevertToMessage(error)
+      setTaskErrors((prev) => ({ ...prev, [taskId]: description }))
+      toast({ variant: 'destructive', title: 'Couldn’t verify that task', description })
       return false
     } finally {
       setUserTasks((prevTasks) =>
@@ -384,7 +376,10 @@ export default function CampaignDetailsPage() {
       if (fetchInFlightRef.current) return fetchInFlightRef.current
 
       const fetchPromise = (async () => {
+        // Refetches keep the page on screen (open dialogs, claim state); only the first load
+        // shows the skeleton. Before, every refetch swapped the whole page for a skeleton.
         setIsLoading(true)
+        setLoadFailed(false)
         const fetchedCampaign = await getCampaignByIdWithMetadata(
           campaignId,
           forceRefresh,
@@ -430,11 +425,7 @@ export default function CampaignDetailsPage() {
             setParticipants([])
           }
         } else {
-          toast({
-            variant: 'destructive',
-            title: 'Campaign Not Found',
-            description: 'Could not load data for this campaign.',
-          })
+          setLoadFailed(true)
         }
         setIsLoading(false)
       })()
@@ -707,19 +698,12 @@ export default function CampaignDetailsPage() {
     setVerifyingTaskType(null)
   }
 
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({
-        title: campaign?.title,
-        text: campaign?.longDescription,
-        url: window.location.href,
-      })
-    } else {
-      navigator.clipboard.writeText(window.location.href)
-      toast({
-        title: 'Link Copied!',
-        description: 'Campaign link copied to clipboard.',
-      })
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      toast({ title: 'Link copied', description: 'The campaign link is on your clipboard.' })
+    } catch {
+      toast({ variant: 'destructive', title: 'The link wasn’t copied', description: 'Your browser blocked the clipboard. Copy the address bar instead.' })
     }
   }
 
@@ -727,54 +711,20 @@ export default function CampaignDetailsPage() {
     setIsRefreshing(true)
     await fetchAllCampaignData(true)
     setIsRefreshing(false)
-    toast({
-      title: 'Refreshed!',
-      description: 'Campaign data has been updated.',
-    })
+    toast({ title: 'Up to date', description: 'The campaign was read again from the chain.' })
   }
 
-  const openCampaignActionDialog = (action: 'launch' | 'end') => {
-    setCampaignActionToConfirm(action)
-    setIsCampaignActionDialogOpen(true)
-  }
-
-  const handleConfirmCampaignAction = async () => {
-    if (!campaignActionToConfirm || !campaign) return
-
-    setIsUpdatingCampaign(true)
+  // "Record the end": endCampaign is permissionless once the end time has passed, so any
+  // connected wallet may send it. endCampaign reports its own success / failure toasts.
+  const handleRecordEnd = async () => {
+    setIsRecordingEnd(true)
     try {
-      if (campaignActionToConfirm === 'launch') {
-        if (campaign.status !== 'Draft') {
-          toast({
-            variant: 'destructive',
-            title: 'Already Launched',
-            description: 'This campaign is already open.',
-          })
-          return
-        }
-        const resultCampaignId = await openCampaign(campaignId, toast)
-        if (resultCampaignId !== campaignId) {
-          window.location.href = `/campaign/${resultCampaignId}`
-          return
-        }
-        toast({
-          title: 'Campaign Launched!',
-          description: 'Your campaign is now live and accepting participants.',
-        })
-      } else if (campaignActionToConfirm === 'end') {
-        await endCampaign(campaignId)
-        toast({
-          title: 'Campaign Ended',
-          description: 'Your campaign has been closed.',
-        })
-      }
+      await endCampaign(campaignId)
       await fetchAllCampaignData(true)
-    } catch (error) {
-      // Error toast is shown in the service
+    } catch {
+      // The error toast is shown by the service.
     } finally {
-      setIsUpdatingCampaign(false)
-      setIsCampaignActionDialogOpen(false)
-      setCampaignActionToConfirm(null)
+      setIsRecordingEnd(false)
     }
   }
 
@@ -789,122 +739,82 @@ export default function CampaignDetailsPage() {
   const displayStatus = campaign ? getCampaignStatus(campaign) : null
   const isTimeExpiredNotClosed = displayStatus?.state === 'ended_unrecorded'
 
-  if (isLoading) {
+  useDocumentTitle(campaign?.title)
+
+  if (!campaign && (isLoading || !loadFailed)) {
     return (
-      <div className="min-h-screen">
-        <Skeleton className="h-[400px] w-full rounded-none" />
-        <div className="container mx-auto px-4 py-12">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-2 space-y-6">
-              <Skeleton className="h-32 w-full rounded-xl" />
-              <Skeleton className="h-64 w-full rounded-xl" />
-            </div>
-            <div className="space-y-6">
-              <Skeleton className="h-96 w-full rounded-xl" />
-            </div>
+      <PageContainer className="pt-4 md:pt-6">
+        <h1 className="sr-only">Campaign #{campaignId}</h1>
+        <LoadingRegion label="Loading the campaign" className="grid gap-4">
+          <Skeleton className="h-11 w-28" />
+          <div className="flex gap-2">
+            <Skeleton className="h-[1.625rem] w-24 rounded-full" />
+            <Skeleton className="h-[1.625rem] w-40 rounded-full" />
           </div>
-        </div>
-      </div>
+          <Skeleton className="h-12 w-3/4 max-w-xl" />
+          <Skeleton className="h-5 w-2/3 max-w-md" />
+          <Skeleton className="mt-6 h-4 w-full max-w-3xl" />
+          <div className="mt-6 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="grid gap-8">
+              <ClaimSkeleton />
+              <RowsSkeleton count={3} />
+            </div>
+            <Skeleton className="h-72 w-full" />
+          </div>
+        </LoadingRegion>
+      </PageContainer>
     )
   }
 
   if (!campaign) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Card className="max-w-md shadow-elevated">
-          <CardHeader>
-            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-full bg-secondary">
-              <SearchX className="h-5 w-5 text-muted-foreground" />
-            </div>
-            <CardTitle>Campaign not found</CardTitle>
-            <CardDescription>
-              This campaign doesn't exist or has been removed.
-            </CardDescription>
-          </CardHeader>
-          <CardFooter>
-            <Button asChild>
-              <Link href="/">Return Home</Link>
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
+      <PageContainer>
+        <h1 className="sr-only">Campaign #{campaignId}</h1>
+        <EmptyState
+          title={`We couldn’t find campaign #${campaignId}.`}
+          body="It doesn’t exist on Sepolia testnet, or the network didn’t answer."
+          action={
+            <>
+              <Button onClick={() => fetchAllCampaignData(true)}>Try again</Button>
+              <Button asChild variant="secondary">
+                <Link href="/campaigns" prefetch={false}>
+                  Browse campaigns
+                </Link>
+              </Button>
+            </>
+          }
+        />
+      </PageContainer>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-soft">
-      {/* Hero Section */}
-      <CampaignHero campaign={campaign} />
-
-      {/* Lifecycle state ladder (NFR-9): honest, named state with claim/sweep timing. */}
-      <div className="container mx-auto px-4 pt-8 space-y-6">
-        <CampaignLifecycleBanner campaign={campaign} />
-        {/* Public, unauthenticated once a root is published (P4 Part 1, BR-M4) — the banner's
-            "View all allocations" link anchors here. */}
-        <PublicAllocationView campaign={campaign} />
-      </div>
-
-      {/* Main Content */}
-      <div className="container mx-auto px-4 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column - Tasks */}
-          <div className="lg:col-span-2 space-y-6">
-            <TaskList
-              campaign={campaign}
-              userTasks={userTasks}
-              role={role}
-              onOpenVerifyDialog={handleOpenVerifyDialog}
-            />
-
-            {/* Self-claim (FR-C1/C2) — any connected wallet with an allocation (Merkle-only;
-                each panel early-returns null when campaign.settlement.mode doesn't match) */}
-            <ClaimPanel campaign={campaign} />
-            <TieredClaimPanel campaign={campaign} />
-            <TieredLeaderboard campaign={campaign} />
-            <NFTClaimPanel campaign={campaign} />
-
-            {/* Host-only: review & publish the allocation (FR-M3). Each panel is guarded to its
-                own settlement mode — never shown for a tiered or cross-mode campaign. */}
-            {isHostOfCampaign && <MerkleSettlementPanel campaign={campaign} />}
-            {isHostOfCampaign && <NFTSettlementPanel campaign={campaign} />}
-
-            {/* Host resolution flow for reported concerns + the close-campaign guard (P4 Part 4) */}
-            {isHostOfCampaign && (
-              <DisputeReportsPanel campaign={campaign} onStatusChange={() => fetchAllCampaignData(true)} />
-            )}
-
-            {/* Host-only: funnel/completion/claim-rate analytics + CSV export (P3 CP3) */}
-            {isHostOfCampaign && <CampaignFunnelAnalytics campaign={campaign} />}
-
-            {/* Participant Analytics - Only for Host */}
-            {isHostOfCampaign && (
-              <CampaignAnalytics
-                campaign={campaign}
-                participants={participants}
-                participantAddresses={participantAddresses}
-                isLoading={isLoading}
-              />
-            )}
-          </div>
-
-          {/* Right Column - Info Sidebar */}
-          <div className="space-y-6">
-            <CampaignSidebar
-              campaign={campaign}
-              participantCount={campaign.participants}
-              isHostOfCampaign={!!isHostOfCampaign}
-              isRefreshing={isRefreshing}
-              isUpdatingCampaign={isUpdatingCampaign}
-              isTimeExpiredNotClosed={!!isTimeExpiredNotClosed}
-              campaignActionToConfirm={campaignActionToConfirm}
-              onShare={handleShare}
-              onRefresh={handleRefresh}
-              onCampaignAction={openCampaignActionDialog}
-            />
-          </div>
-        </div>
-      </div>
-
+    <>
+      <CampaignView
+        campaign={campaign}
+        address={address}
+        isConnected={isConnected}
+        isHost={!!isHostOfCampaign}
+        userTasks={userTasks}
+        taskErrors={taskErrors}
+        isJoined={isJoined}
+        onConnect={connectWallet}
+        onStartTask={handleOpenVerifyDialog}
+        onRecordEnd={handleRecordEnd}
+        isRecordingEnd={isRecordingEnd}
+        onCopyLink={handleCopyLink}
+        onRefresh={handleRefresh}
+        isRefreshing={isRefreshing}
+        onStatusChange={() => fetchAllCampaignData(true)}
+        moreNumbers={
+          isHostOfCampaign ? (
+            <>
+              <CampaignFunnelAnalytics campaign={campaign} />
+              <CampaignAnalytics campaign={campaign} participants={participants} participantAddresses={participantAddresses} isLoading={isLoading} />
+            </>
+          ) : undefined
+        }
+      />
       {/* Task Verification Dialog - Lazy loaded */}
       {verifyingTaskType && (
         <TaskVerificationForm
@@ -923,6 +833,27 @@ export default function CampaignDetailsPage() {
         />
       )}
 
+      {/* Payment Task Dialog - Lazy loaded */}
+      {(() => {
+        const index = campaign.tasks.findIndex((t) => t.id === paymentTaskId)
+        const task = index === -1 ? null : campaign.tasks[index]
+        const request = task ? paymentRequestFromTask(task, DEPLOYMENT_CHAIN.id) : null
+        if (!task || !request || !address) return null
+        return (
+          <PaymentTaskDialog
+            open={isPaymentDialogOpen}
+            onOpenChange={setIsPaymentDialogOpen}
+            campaignId={campaignId}
+            taskId={task.id}
+            taskIndex={index}
+            taskDescription={task.description}
+            request={request}
+            address={address}
+            onVerified={(result) => handlePaymentVerified(task.id, result)}
+          />
+        )
+      })()}
+
       {/* Humanity Verification Modal - Lazy loaded */}
       <HumanityVerificationModal
         isOpen={isHumanityModalOpen}
@@ -939,54 +870,6 @@ export default function CampaignDetailsPage() {
         }
       />
 
-      {/* Campaign Action Confirmation Dialog */}
-      <AlertDialog
-        open={isCampaignActionDialogOpen}
-        onOpenChange={setIsCampaignActionDialogOpen}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {campaignActionToConfirm === 'launch'
-                ? 'Launch Campaign?'
-                : 'End Campaign?'}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {campaignActionToConfirm === 'launch'
-                ? 'This will make your campaign live and allow participants to join and complete tasks. This action cannot be undone.'
-                : 'This will close your campaign and stop accepting new participants. Completed tasks will remain recorded. This action cannot be undone.'}
-            </AlertDialogDescription>
-            {/* openCampaign has no on-chain timing check, so an expired Draft opens fine — and
-                is immediately endable by anyone. Say so before the host signs. */}
-            {campaignActionToConfirm === 'launch' &&
-              campaign &&
-              hasEndTimePassed(campaign.endDate) && (
-                <p className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm font-medium text-destructive">
-                  {EXPIRED_OPEN_WARNING}
-                </p>
-              )}
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isUpdatingCampaign}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmCampaignAction}
-              disabled={isUpdatingCampaign}
-              className={
-                campaignActionToConfirm === 'end'
-                  ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
-                  : ''
-              }
-            >
-              {isUpdatingCampaign ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : null}
-              {campaignActionToConfirm === 'launch' ? 'Launch' : 'End Campaign'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+    </>
   )
 }

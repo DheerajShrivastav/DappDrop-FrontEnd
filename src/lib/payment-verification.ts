@@ -12,6 +12,24 @@ export interface PaymentVerificationResult {
   error?: string
 }
 
+/** A payment task with no token contract (null, '', '0x0' or the zero address) pays in the
+ * network's own token (ETH). The wizard saves `null` for that case. */
+export function isNativePaymentToken(tokenAddress: string | null | undefined): boolean {
+  return !tokenAddress || tokenAddress === '0x0' || tokenAddress.toLowerCase() === ethers.ZeroAddress
+}
+
+/** The wizard saves `amount` in whole token units ("0.001"); a transaction carries base units
+ * (wei for ETH). Null when the amount isn't a positive decimal with at most `decimals` places. */
+export function toBaseUnits(amount: string | null | undefined, decimals: number): bigint | null {
+  if (typeof amount !== 'string' || !/^\d+(\.\d+)?$/.test(amount.trim())) return null
+  try {
+    const value = ethers.parseUnits(amount.trim(), decimals)
+    return value > BigInt(0) ? value : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Verify a payment transaction on the blockchain
  * Similar to verifying an ONCHAIN_TX task
@@ -20,12 +38,16 @@ export interface PaymentVerificationResult {
  * must come FROM them: tx.from for native payments, and for ERC-20 both tx.from and the matching
  * Transfer's `from`. Without this, anyone could submit someone else's payment hash first and take
  * the credit (transactionHash is unique, so the real payer would then be locked out).
+ *
+ * `expectedAmount` is in whole token units, as the wizard saves it ("0.001"). It's converted to
+ * base units with 18 decimals for ETH, or the token's own `decimals()` for an ERC-20. (It used
+ * to be compared as a raw wei string, so no payment task made in the wizard could ever pass.)
  */
 export async function verifyPaymentTransaction(
   txHash: string,
   expectedRecipient: string,
   expectedAmount: string,
-  tokenAddress: string,
+  tokenAddress: string | null,
   network: string,
   expectedSender: string,
 ): Promise<PaymentVerificationResult> {
@@ -73,12 +95,16 @@ export async function verifyPaymentTransaction(
     }
 
     // Check if native token (ETH/MATIC) or ERC-20
-    const isNative =
-      tokenAddress === '0x0' || tokenAddress === ethers.ZeroAddress
+    const isNative = isNativePaymentToken(tokenAddress)
 
     if (isNative) {
       // Verify native token payment (ETH, MATIC, etc.)
       console.log('💰 Verifying native token payment')
+
+      const expected = toBaseUnits(expectedAmount, 18)
+      if (expected === null) {
+        return { verified: false, error: 'This task’s payment amount is not set up correctly. Ask the host to fix it.' }
+      }
 
       if (tx.to?.toLowerCase() !== expectedRecipient.toLowerCase()) {
         return {
@@ -87,10 +113,10 @@ export async function verifyPaymentTransaction(
         }
       }
 
-      if (tx.value.toString() !== expectedAmount) {
+      if (tx.value !== expected) {
         return {
           verified: false,
-          error: `Wrong amount: expected ${expectedAmount} wei, got ${tx.value.toString()} wei`,
+          error: `Wrong amount: expected ${ethers.formatEther(expected)}, got ${ethers.formatEther(tx.value)}`,
         }
       }
 
@@ -100,6 +126,20 @@ export async function verifyPaymentTransaction(
       // Verify ERC-20 token payment
       console.log('🪙 Verifying ERC-20 token payment')
 
+      const token = tokenAddress as string
+      let decimals: number
+      try {
+        const erc20 = new ethers.Contract(token, ['function decimals() view returns (uint8)'], provider)
+        decimals = Number(await erc20.decimals())
+      } catch {
+        return { verified: false, error: 'Couldn’t read the payment token’s decimals. Ask the host to check the token address.' }
+      }
+      const expectedBase = toBaseUnits(expectedAmount, decimals)
+      if (expectedBase === null) {
+        return { verified: false, error: 'This task’s payment amount is not set up correctly. Ask the host to fix it.' }
+      }
+      const expectedBaseStr = expectedBase.toString()
+
       const erc20Interface = new ethers.Interface([
         'event Transfer(address indexed from, address indexed to, uint256 value)',
       ])
@@ -107,7 +147,7 @@ export async function verifyPaymentTransaction(
       // Every Transfer of this token in the tx; then look for the one that IS the payment. Taking
       // the first Transfer log (as before) could pick an unrelated transfer in a multi-step tx.
       const transfers = receipt.logs
-        .filter((log) => log.address.toLowerCase() === tokenAddress.toLowerCase())
+        .filter((log) => log.address.toLowerCase() === token.toLowerCase())
         .map((log) => {
           try {
             const parsed = erc20Interface.parseLog({ topics: log.topics as string[], data: log.data })
@@ -129,7 +169,7 @@ export async function verifyPaymentTransaction(
 
       const recipient = expectedRecipient.toLowerCase()
       const match = transfers.find(
-        (t) => t.from === sender && t.to === recipient && t.value === expectedAmount,
+        (t) => t.from === sender && t.to === recipient && t.value === expectedBaseStr,
       )
       if (!match) {
         const toRecipient = transfers.filter((t) => t.to === recipient)
@@ -144,7 +184,7 @@ export async function verifyPaymentTransaction(
         }
         return {
           verified: false,
-          error: `Wrong amount: expected ${expectedAmount}, got ${toRecipient.map((t) => t.value).join(', ')}`,
+          error: `Wrong amount: expected ${expectedAmount}, got ${toRecipient.map((t) => ethers.formatUnits(t.value, decimals)).join(', ')}`,
         }
       }
 
@@ -168,8 +208,10 @@ export interface PaymentInfo {
   paymentRecipient: string
   chainId: number
   network: string
-  tokenAddress: string
+  /** null (or empty) = the network's own token. */
+  tokenAddress: string | null
   tokenSymbol: string
+  /** Whole token units, e.g. "0.001". */
   amount: string
   amountDisplay: string
 }

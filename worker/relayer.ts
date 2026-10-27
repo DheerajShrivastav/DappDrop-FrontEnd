@@ -64,6 +64,7 @@ import {
   getNFTSettlementModuleContract,
   mapContractRevertToMessage,
 } from '@/lib/web3-service'
+import { contractErrorName } from '@/lib/contract-errors'
 import { evaluateSponsorshipGates, getKillSwitch, setKillSwitch, recordSponsorshipSpend } from '@/lib/relayer-gates'
 import { notifySponsoredClaimConfirmed } from '@/lib/notifications'
 import { prisma } from '@/lib/prisma'
@@ -222,19 +223,14 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
   try {
     await targetContract[methodName].staticCall(...claimArgs)
   } catch (e: unknown) {
-    const raw =
-      (e as { reason?: string })?.reason ||
-      (e as { shortMessage?: string })?.shortMessage ||
-      (e as { error?: { message?: string } })?.error?.message ||
-      (e as Error)?.message ||
-      ''
     const reason = mapContractRevertToMessage(e)
     // RootDisputeWindowActive/MerkleRootNotSet only ever apply to ERC20_MERKLE (tiered has no
     // root); CampaignNotYetEnded can apply to either kind if enqueued just before Ended.
+    const errorName = contractErrorName(e)
     const isTransient =
-      raw.includes('Web3Campaigns__RootDisputeWindowActive') ||
-      raw.includes('Web3Campaigns__MerkleRootNotSet') ||
-      raw.includes('Web3Campaigns__CampaignNotYetEnded')
+      errorName === 'Web3Campaigns__RootDisputeWindowActive' ||
+      errorName === 'Web3Campaigns__MerkleRootNotSet' ||
+      errorName === 'Web3Campaigns__CampaignNotYetEnded'
 
     if (isTransient && row.attempts < MAX_ATTEMPTS) {
       await prisma.sponsoredClaim.update({
@@ -329,13 +325,7 @@ export async function processClaim(claimId: string, wallet: ethers.Wallet): Prom
           console.warn('[relayer] failed to record reverted-tx gas (non-fatal):', recordError)
         }
       }
-      const raw =
-        (e as { reason?: string })?.reason ||
-        (e as { shortMessage?: string })?.shortMessage ||
-        (e as { error?: { message?: string } })?.error?.message ||
-        (e as Error)?.message ||
-        ''
-      if (raw.includes('Web3Campaigns__AlreadyClaimedSettlement')) {
+      if (contractErrorName(e) === 'Web3Campaigns__AlreadyClaimedSettlement') {
         // Idempotent race: self-claim (or a prior stuck attempt that actually landed) beat
         // this attempt. Not a relayer failure — nothing was lost, nothing double-paid.
         await prisma.sponsoredClaim.update({

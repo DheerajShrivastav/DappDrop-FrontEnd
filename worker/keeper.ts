@@ -46,6 +46,7 @@ import 'dotenv/config'
 import { ethers } from 'ethers'
 import config from '@/app/config'
 import { getAllCampaigns, getEntrypointContract, getEntrypointReadContract } from '@/lib/web3-service'
+import { contractErrorName } from '@/lib/contract-errors'
 import { prisma } from '@/lib/prisma'
 import type { Campaign } from '@/lib/types'
 
@@ -160,22 +161,15 @@ export async function endCampaignSafely(
         `Transaction confirmed but campaign status is ${after.status}, expected Ended(${ENDED_STATUS})`,
       )
     } catch (e: unknown) {
-      // Same custom-error extraction shape as mapContractRevertToMessage in web3-service.ts —
-      // some RPC providers only surface a decoded revert reason under the nested
-      // error.error.message form, so that fallback must be checked here too, or a genuine
-      // idempotent "already ended" race gets misclassified as a real failure.
-      const reason =
-        (e as { reason?: string })?.reason ||
-        (e as { shortMessage?: string })?.shortMessage ||
-        (e as { error?: { message?: string } })?.error?.message ||
-        (e as Error)?.message ||
-        ''
-      if (reason.includes('Web3Campaigns__CampaignNotOpen')) {
+      // Decoded from the revert data wherever the RPC put it (src/lib/contract-errors.ts), so a
+      // genuine idempotent "already ended" race is never misclassified as a real failure.
+      const errorName = contractErrorName(e)
+      if (errorName === 'Web3Campaigns__CampaignNotOpen') {
         // Expected race: campaign was ended (or cancelled) by someone else between our
         // pre-check and our send. Idempotent success, not a failure.
         return { outcome: 'already-not-open' }
       }
-      if (reason.includes('Web3Campaigns__CampaignNotYetEnded')) {
+      if (errorName === 'Web3Campaigns__CampaignNotYetEnded') {
         // Shouldn't happen given the pre-check, but block.timestamp can be a few seconds
         // behind our local clock — surface as retry-later, not a hard failure.
         return { outcome: 'not-yet-due' }

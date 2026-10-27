@@ -1,0 +1,382 @@
+/* ---------------------------------------------------------------------------------------------
+   08-site phase 1: the Monolith app theme (landing-studio/08-site/app-design.md §1).
+
+   Loaded only by the (app) layout, so the marketing pages don't carry it. Every rule is scoped to
+   a page that renders `.app-theme` (the (app) layout's wrapper), so nothing leaks into a
+   marketing page reached by client-side navigation.
+
+   - Colours: the exact --ob-* / --pc-* tokens from globals.css, mapped to the semantic names
+     (--paper, --surface, --ink…) exactly like `.lp-theme`. Only two derived names:
+       --on-signal: text on a gold fill (the page colour in Obsidian, the surface in Porcelain);
+       --danger:    the ONE red, for errors and failed transactions only (--ob-danger / --pc-danger,
+                    AA-checked by scripts/contrast-check.mjs).
+   - shadcn's HSL variables (--background, --card, --primary, --destructive…) are remapped to the
+     same tokens per theme, so every existing shadcn component (Dialog, Select, Popover, Calendar,
+     Toast, Table) re-skins without being rewritten. The triplets are exact round-trips of the hex
+     tokens (checked in phase 1; keep them in sync if a token changes).
+   - The tokens sit on <html> (via :has), not only on the wrapper, because Radix portals dialogs,
+     popovers and toasts into <body>, outside the wrapper.
+   --------------------------------------------------------------------------------------------- */
+
+/* The one red (founder decision, 08-site phase 1): errors and failed transactions only, never an
+   action. AA on paper, surface and sunk in its theme (scripts/contrast-check.mjs reads these). */
+:root {
+    --ob-danger: #FF6B6B;
+    --pc-danger: #B42318;
+}
+
+html:has(.app-theme),
+.app-theme {
+    --paper: var(--ob-paper);
+    --surface: var(--ob-surface);
+    --sunk: var(--ob-sunk);
+    --ink: var(--ob-ink);
+    --ink-2: var(--ob-ink-2);
+    --ink-3: var(--ob-ink-3);
+    --rule: var(--ob-rule);
+    --rule-strong: var(--ob-rule-strong);
+    --signal: var(--ob-signal);
+    --on-signal: var(--ob-paper);
+    --danger: var(--ob-danger);
+    --on-danger: var(--ob-paper);
+    --display-weight: 300;
+
+    /* shadcn (HSL triplets of the tokens above) */
+    --background: 240 9.1% 2.2%;          /* paper */
+    --foreground: 42.9 22.6% 93.9%;       /* ink */
+    --card: 240 7% 8.4%;                  /* surface */
+    --card-foreground: 42.9 22.6% 93.9%;
+    --popover: 240 7% 8.4%;
+    --popover-foreground: 42.9 22.6% 93.9%;
+    --primary: 42.9 22.6% 93.9%;          /* ink pill */
+    --primary-foreground: 240 9.1% 2.2%;
+    --secondary: 240 7.7% 5.1%;           /* sunk */
+    --secondary-foreground: 42.9 22.6% 93.9%;
+    --muted: 240 7.7% 5.1%;
+    --muted-foreground: 40 3.3% 63.9%;    /* ink-2 */
+    --accent: 240 2.3% 16.9%;             /* rule: hover / highlighted item */
+    --accent-foreground: 42.9 22.6% 93.9%;
+    --destructive: 0 100% 71%;            /* danger */
+    --destructive-foreground: 240 9.1% 2.2%;
+    --border: 240 2.3% 16.9%;             /* rule */
+    --input: 36 2.4% 41%;                 /* rule-strong: control borders ≥ 3:1 */
+    --ring: 34.9 85.1% 65.9%;             /* signal: focus */
+    --radius: 0.625rem;                   /* 10 px */
+    --chart-1: 42.9 22.6% 93.9%;
+    --chart-2: 34.9 85.1% 65.9%;
+    --chart-3: 40 3.3% 63.9%;
+    --chart-4: 40 2.5% 52.9%;
+    --chart-5: 36 2.4% 41%;
+    color-scheme: dark;
+}
+
+html[data-theme="porcelain"]:has(.app-theme),
+html[data-theme="porcelain"] .app-theme {
+    --paper: var(--pc-paper);
+    --surface: var(--pc-surface);
+    --sunk: var(--pc-sunk);
+    --ink: var(--pc-ink);
+    --ink-2: var(--pc-ink-2);
+    --ink-3: var(--pc-ink-3);
+    --rule: var(--pc-rule);
+    --rule-strong: var(--pc-rule-strong);
+    --signal: var(--pc-signal);
+    --on-signal: var(--pc-surface);
+    --danger: var(--pc-danger);
+    --on-danger: var(--pc-surface);
+    --display-weight: 340;
+
+    --background: 42 31.3% 93.7%;
+    --foreground: 36 10.2% 9.6%;
+    --card: 45 33.3% 97.6%;
+    --card-foreground: 36 10.2% 9.6%;
+    --popover: 45 33.3% 97.6%;
+    --popover-foreground: 36 10.2% 9.6%;
+    --primary: 36 10.2% 9.6%;
+    --primary-foreground: 42 31.3% 93.7%;
+    --secondary: 41.2 25.8% 87.8%;
+    --secondary-foreground: 36 10.2% 9.6%;
+    --muted: 41.2 25.8% 87.8%;
+    --muted-foreground: 36.9 9.6% 26.5%;
+    --accent: 39 18.5% 78.8%;
+    --accent-foreground: 36 10.2% 9.6%;
+    --destructive: 4.2 76.5% 40%;
+    --destructive-foreground: 45 33.3% 97.6%;
+    --border: 39 18.5% 78.8%;
+    --input: 36.7 7.3% 48.6%;
+    --ring: 32.5 84.5% 30.4%;
+    --chart-1: 36 10.2% 9.6%;
+    --chart-2: 32.5 84.5% 30.4%;
+    --chart-3: 36.9 9.6% 26.5%;
+    --chart-4: 37.5 9.2% 34.1%;
+    --chart-5: 36.7 7.3% 48.6%;
+    color-scheme: light;
+}
+
+/* The canvas (overscroll, the gap before paint) and the UA controls follow the theme. */
+html:has(.app-theme),
+html:has(.app-theme) body {
+    background: var(--paper);
+    color: var(--ink);
+}
+
+/* Body text: the system stack, as on the landing (the app no longer loads Inter / Space Grotesk). */
+.app-theme {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* Focus: a 2 px gold ring everywhere in the app (shadcn's own ring utilities still win). */
+:where(html:has(.app-theme)) :focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 2px;
+}
+
+/* Theme swap: colours crossfade for one beat (the toggle adds .lp-theme-swap for ~450 ms). */
+@media (prefers-reduced-motion: no-preference) {
+    .lp-theme-swap .app-theme,
+    .lp-theme-swap .app-theme * {
+        transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, fill 0.4s ease, stroke 0.4s ease !important;
+    }
+}
+
+/* The skip link, on the tokens. */
+.app-theme .skip-link {
+    background: var(--ink);
+    color: var(--paper);
+    border-radius: 999px;
+}
+.app-theme .skip-link:focus {
+    outline-color: var(--signal);
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Type helpers (§1.2). Tailwind utilities cover the rest.
+   --------------------------------------------------------------------------------------------- */
+.dd-display {
+    font-family: var(--font-display, Georgia), Georgia, "Times New Roman", serif;
+    font-weight: var(--display-weight, 300);
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+}
+.dd-h1 {
+    font-size: clamp(2.5rem, 1.6rem + 3.2vw, 4rem);
+    line-height: 1.02;
+}
+.dd-h1-sm {
+    font-size: clamp(2.125rem, 1.5rem + 2.4vw, 3.25rem);
+    line-height: 1.04;
+}
+.dd-h2 {
+    font-size: clamp(1.625rem, 1.3rem + 1vw, 2rem);
+    line-height: 1.1;
+}
+.dd-lead {
+    font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem);
+    line-height: 1.55;
+    color: var(--ink-2);
+    max-width: 46ch;
+    text-wrap: pretty;
+}
+.dd-eyebrow {
+    font-family: var(--font-mono, ui-monospace), ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.75rem;
+    line-height: 1.3;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    font-weight: 400;
+}
+.dd-mono {
+    font-family: var(--font-mono, ui-monospace), ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-feature-settings: "tnum";
+}
+/* Text link: ink with a hairline underline that turns gold on hover. */
+.dd-link {
+    color: var(--ink);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rule-strong);
+    padding-bottom: 1px;
+    transition: border-color var(--dur-micro) linear;
+}
+@media (hover: hover) and (pointer: fine) {
+    .dd-link:hover {
+        border-bottom-color: var(--signal);
+    }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Header nav (shared look with the marketing header).
+   --------------------------------------------------------------------------------------------- */
+.dd-nav-link {
+    display: inline-flex;
+    align-items: center;
+    height: 2.75rem;
+    font-size: 0.875rem;
+    color: var(--ink-2);
+    text-decoration: none;
+    text-underline-offset: 6px;
+}
+.dd-nav-link[aria-current="page"] {
+    color: var(--ink);
+    text-decoration: underline;
+}
+@media (hover: hover) and (pointer: fine) {
+    .dd-nav-link:hover {
+        color: var(--ink);
+    }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Key-value list (§2.2 "The campaign" rail): hairline rows, mono values.
+   --------------------------------------------------------------------------------------------- */
+.dd-kv {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin: 0;
+}
+.dd-kv > div {
+    display: contents;
+}
+.dd-kv dt,
+.dd-kv dd {
+    margin: 0;
+    padding: 0.7rem 0;
+    border-top: 1px solid var(--rule);
+    font-size: 0.9375rem;
+}
+.dd-kv dt {
+    color: var(--ink-2);
+}
+.dd-kv dd {
+    padding-left: 1rem;
+    text-align: right;
+    font-family: var(--font-mono, ui-monospace), ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-feature-settings: "tnum";
+    font-size: 0.875rem;
+    color: var(--ink);
+    overflow-wrap: anywhere;
+}
+.dd-kv > div:first-child dt,
+.dd-kv > div:first-child dd {
+    border-top: 0;
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Wizard stepper (§1.10): four columns, each with a top hairline.
+   --------------------------------------------------------------------------------------------- */
+.dd-stepper {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(var(--steps, 4), minmax(0, 1fr));
+    gap: 1rem;
+}
+.dd-stepper > li {
+    border-top: 1px solid var(--rule-strong);
+    padding-top: 0.8rem;
+    min-width: 0;
+}
+.dd-stepper .dd-step-k {
+    font-family: var(--font-mono, ui-monospace), ui-monospace, monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+}
+.dd-stepper .dd-step-v {
+    display: block;
+    font-size: 0.9375rem;
+    color: var(--ink-2);
+    margin-top: 0.2rem;
+}
+.dd-stepper .is-done {
+    border-top-color: var(--ink-2);
+}
+.dd-stepper .is-now {
+    border-top: 2px solid var(--signal);
+    padding-top: calc(0.8rem - 1px);
+}
+.dd-stepper .is-now .dd-step-k {
+    color: var(--signal);
+}
+.dd-stepper .is-now .dd-step-v {
+    color: var(--ink);
+    font-weight: 600;
+}
+.dd-stepper a {
+    color: inherit;
+    text-decoration: none;
+    display: block;
+    min-height: 2.75rem;
+}
+@media (hover: hover) and (pointer: fine) {
+    .dd-stepper a:hover .dd-step-v {
+        color: var(--ink);
+        text-decoration: underline;
+        text-underline-offset: 4px;
+    }
+}
+@media (max-width: 639px) {
+    /* Phone: only the current step shows its name ("01 · 02 Tasks · 03 · 04"). */
+    .dd-stepper {
+        display: flex;
+        gap: 0.4rem;
+    }
+    .dd-stepper > li {
+        flex: 1 1 0;
+    }
+    .dd-stepper > li.is-now {
+        flex-grow: 2.2;
+    }
+    .dd-stepper .dd-step-k {
+        font-size: 0.6875rem;
+    }
+    .dd-stepper .dd-step-v {
+        display: none;
+    }
+    .dd-stepper > li:not(.is-now) .dd-step-name {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+    }
+}
+
+/* ---------------------------------------------------------------------------------------------
+   Skeletons (§1.12): a hairline block with a quiet pulse of the fill; none under reduced motion.
+   --------------------------------------------------------------------------------------------- */
+.dd-skel {
+    display: block;
+    background: var(--sunk);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+}
+@media (prefers-reduced-motion: no-preference) {
+    .dd-skel {
+        animation: dd-skel 1.6s ease-in-out infinite;
+    }
+}
+@keyframes dd-skel {
+    50% {
+        background: var(--surface);
+    }
+}
+
+/* Field error: the red border plus a 3 px inset bar (a non-colour cue too). */
+.dd-input-error {
+    border-color: var(--danger) !important;
+    box-shadow: inset 3px 0 0 var(--danger);
+}
+
+/* Done steps rendered as buttons (client wizards) look like the links. */
+.dd-stepper button {
+    color: inherit;
+    font: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+}

@@ -85,6 +85,9 @@ function merkleRoot(s: CampaignSettlement | undefined): {
   return { root: s.erc20MerkleRoot, publishedAt: s.erc20RootPublishedAt }
 }
 
+// The close guard lives in ./close-guard (no date-fns), re-exported for the status model's callers.
+export { settlementOwedOnClose } from './close-guard'
+
 const base = { inDisputeWindow: false, claimable: false, acceptingTasks: false }
 
 /**

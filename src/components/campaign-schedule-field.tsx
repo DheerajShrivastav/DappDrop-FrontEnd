@@ -3,9 +3,7 @@
 import { useEffect, useState } from 'react'
 import { addDays, startOfDay } from 'date-fns'
 import { CalendarIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { Calendar } from '@/components/ui/calendar'
-import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -26,6 +24,17 @@ import {
 } from '@/lib/campaign-schedule'
 
 const DAY_MS = 24 * 60 * 60 * 1000
+
+// 08-site phase 1: the Monolith re-skin (app-design §1.10). Behaviour unchanged: segmented
+// "Starts" and duration presets, 48 px date/time controls on --sunk, the shadcn Calendar with
+// 44 px day cells, and the live summary after mount.
+const LABEL = 'text-[0.9375rem] font-semibold text-ink'
+const SEGMENTS = 'inline-flex max-w-full flex-wrap gap-[2px] rounded-[1.5rem] border border-rule-strong p-[3px]'
+const SEGMENT =
+  'inline-flex h-[2.375rem] cursor-pointer items-center whitespace-nowrap rounded-full px-4 text-small text-ink-2 transition-colors [transition-duration:var(--dur-micro)] can-hover:hover:text-ink'
+const SEGMENT_ON = 'bg-ink text-paper can-hover:hover:text-paper'
+const CONTROL =
+  'flex h-12 items-center rounded-md border border-rule-strong bg-sunk px-[0.9rem] text-[0.9375rem] text-ink transition-colors [transition-duration:var(--dur-micro)] can-hover:hover:border-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal'
 
 /**
  * Schedule input for the create wizard. Owns no form state — the page holds ScheduleState and
@@ -72,41 +81,49 @@ export function CampaignScheduleField({
   return (
     <div className="space-y-5">
       <div className="space-y-2">
-        <Label>Starts</Label>
+        <p id="schedule-starts" className={LABEL}>Starts</p>
         <RadioGroup
           value={value.startMode}
           onValueChange={(v) => set({ startMode: v as ScheduleState['startMode'] })}
-          className="gap-3"
+          aria-labelledby="schedule-starts"
+          className={cn(SEGMENTS, 'grid-cols-none')}
         >
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 has-[:checked]:border-foreground/40">
-            <RadioGroupItem value="now" id="start-now" className="mt-0.5" />
-            <span className="space-y-0.5">
-              <span className="block text-sm font-medium">As soon as it&apos;s created</span>
-              <span className="block text-sm text-muted-foreground">
-                Starts about 5 minutes after you create it
-              </span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-3 rounded-md border p-3 has-[:checked]:border-foreground/40">
-            <RadioGroupItem value="scheduled" id="start-scheduled" className="mt-0.5" />
-            <span className="block text-sm font-medium">Schedule for later</span>
-          </label>
+          {(
+            [
+              ['now', 'start-now', <>As soon as it&apos;s created</>],
+              ['scheduled', 'start-scheduled', 'Schedule for later'],
+            ] as const
+          ).map(([mode, id, text]) => (
+            <label
+              key={mode}
+              htmlFor={id}
+              className={cn(
+                SEGMENT,
+                'has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-1 has-[:focus-visible]:outline-signal',
+                value.startMode === mode && SEGMENT_ON,
+              )}
+            >
+              <RadioGroupItem value={mode} id={id} className="sr-only" />
+              {text}
+            </label>
+          ))}
         </RadioGroup>
+        {value.startMode === 'now' && (
+          <p className="text-[0.8125rem] text-ink-2">Starts about 5 minutes after you create it.</p>
+        )}
 
         {value.startMode === 'scheduled' && (
           <div className="space-y-2">
             <div className="flex gap-2">
               <Popover open={startOpen} onOpenChange={setStartOpen}>
                 <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-10 min-w-0 flex-1 justify-start font-normal"
-                    aria-label="Start date"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate">{formatLocal(value.scheduledStart).split(',')[0]}</span>
-                  </Button>
+                  <button type="button" className={cn(CONTROL, 'min-w-0 flex-1 justify-start gap-2 text-left')}>
+                    <CalendarIcon className="h-4 w-4 shrink-0 text-ink-2" aria-hidden="true" />
+                    <span className="truncate">
+                      <span className="sr-only">Start date: </span>
+                      {formatLocal(value.scheduledStart).split(',')[0]}
+                    </span>
+                  </button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
@@ -128,7 +145,7 @@ export function CampaignScheduleField({
                 value={toTimeOption(value.scheduledStart)}
                 onValueChange={(v) => set({ scheduledStart: withTime(value.scheduledStart, v) })}
               >
-                <SelectTrigger className="h-10 w-[6.5rem] shrink-0" aria-label="Start time">
+                <SelectTrigger className={cn(CONTROL, 'w-[6.75rem] shrink-0 justify-between font-mono text-[0.875rem]')} aria-label="Start time">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -141,7 +158,7 @@ export function CampaignScheduleField({
               </Select>
             </div>
             {startWillMove && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-[0.8125rem] text-ink-2">
                 That time is less than 5 minutes away, so the campaign will start about 5 minutes
                 after you create it instead.
               </p>
@@ -151,24 +168,22 @@ export function CampaignScheduleField({
       </div>
 
       <div className="space-y-2">
-        <Label>Duration</Label>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Duration">
+        <p id="schedule-duration" className={LABEL}>Duration</p>
+        <div className={SEGMENTS} role="group" aria-labelledby="schedule-duration">
           {DURATION_PRESET_DAYS.map((d) => (
-            <Button
+            <button
               key={d}
               type="button"
-              size="sm"
-              variant={value.preset === d ? 'default' : 'outline'}
+              className={cn(SEGMENT, value.preset === d && SEGMENT_ON)}
               aria-pressed={value.preset === d}
               onClick={() => set({ preset: d })}
             >
               {d} {d === 1 ? 'day' : 'days'}
-            </Button>
+            </button>
           ))}
-          <Button
+          <button
             type="button"
-            size="sm"
-            variant={value.preset === 'custom' ? 'default' : 'outline'}
+            className={cn(SEGMENT, value.preset === 'custom' && SEGMENT_ON)}
             aria-pressed={value.preset === 'custom'}
             onClick={() =>
               // Seed the custom end from what the host was just looking at, so switching to
@@ -185,22 +200,20 @@ export function CampaignScheduleField({
             }
           >
             Custom
-          </Button>
+          </button>
         </div>
 
         {value.preset === 'custom' && (
           <div className="flex gap-2">
             <Popover open={endOpen} onOpenChange={setEndOpen}>
               <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 min-w-0 flex-1 justify-start font-normal"
-                  aria-label="End date"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{formatLocal(value.customEnd).split(',')[0]}</span>
-                </Button>
+                <button type="button" className={cn(CONTROL, 'min-w-0 flex-1 justify-start gap-2 text-left')}>
+                  <CalendarIcon className="h-4 w-4 shrink-0 text-ink-2" aria-hidden="true" />
+                  <span className="truncate">
+                      <span className="sr-only">End date: </span>
+                      {formatLocal(value.customEnd).split(',')[0]}
+                    </span>
+                </button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
@@ -225,7 +238,7 @@ export function CampaignScheduleField({
               value={toTimeOption(value.customEnd)}
               onValueChange={(v) => set({ customEnd: withTime(value.customEnd, v) })}
             >
-              <SelectTrigger className="h-10 w-[6.5rem] shrink-0" aria-label="End time">
+              <SelectTrigger className={cn(CONTROL, 'w-[6.75rem] shrink-0 justify-between font-mono text-[0.875rem]')} aria-label="End time">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -240,11 +253,11 @@ export function CampaignScheduleField({
         )}
       </div>
 
-      <div className={cn('min-h-[3.75rem] rounded-md border bg-muted/40 p-3 text-sm')} aria-live="polite">
+      <div className="min-h-[3.75rem] rounded-md border border-rule bg-sunk px-4 py-3 text-small" aria-live="polite">
         {mounted && (
           <>
-            <p className="font-medium">{summary.primary}</p>
-            <p className="mt-0.5 text-muted-foreground">{summary.utc}</p>
+            <p className="font-medium text-ink">{summary.primary}</p>
+            <p className="mt-0.5 font-mono text-[0.8125rem] text-ink-2">{summary.utc}</p>
           </>
         )}
       </div>

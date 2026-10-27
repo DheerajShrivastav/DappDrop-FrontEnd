@@ -1,14 +1,14 @@
 'use client'
 
-import { AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type TierFooter = { tone: 'muted' | 'warn'; text: string } | null
 
 /**
  * Under a tier editor: the live rule check (the same one the schema enforces, shown as the host
- * types rather than only on Next), the tiers in the order they'll be submitted, and a payout
- * total against the pool.
+ * types rather than only on Continue), the tiers in the order they'll be submitted, and a payout
+ * total against the pool. A broken rule is an error (red); a pool that may not cover every tier
+ * is a warning (gold `!`).
  */
 export function TierSummary({
   problem,
@@ -23,25 +23,33 @@ export function TierSummary({
 }) {
   const message = problem ?? schemaMessage
   return (
-    <div className="space-y-2">
-      {message && <p className="text-sm font-medium text-destructive">{message}</p>}
+    <div className="grid gap-2" aria-live="polite">
+      {message && (
+        <p className="flex items-baseline gap-1.5 text-[0.8125rem] leading-snug text-danger">
+          <span aria-hidden="true" className="font-mono font-semibold">
+            !
+          </span>
+          <span>{message}</span>
+        </p>
+      )}
       {rows.length > 0 && !problem && (
-        <div className="space-y-1 rounded-md bg-secondary/40 p-3 text-sm">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Payout preview</p>
-          {rows.map((r, i) => (
-            <div key={i} className="flex justify-between gap-4">
-              <span>{r.label}</span>
-              <span className="font-mono">{r.value}</span>
-            </div>
-          ))}
+        <div className="rounded-md border border-rule bg-sunk px-4 py-3">
+          <p className="dd-eyebrow mb-1">Payout preview</p>
+          <dl className="dd-kv">
+            {rows.map((r, i) => (
+              <div key={i}>
+                <dt>{r.label}</dt>
+                <dd>{r.value}</dd>
+              </div>
+            ))}
+          </dl>
           {footer && (
-            <p
-              className={cn(
-                'flex items-start gap-2 border-t pt-2 text-sm',
-                footer.tone === 'warn' ? 'font-medium text-destructive' : 'text-muted-foreground',
+            <p className={cn('mt-2 flex items-start gap-2 border-t border-rule pt-3 text-[0.8125rem] leading-snug', footer.tone === 'warn' ? 'text-ink' : 'text-ink-2')}>
+              {footer.tone === 'warn' && (
+                <span aria-hidden="true" className="font-mono font-semibold text-signal">
+                  !
+                </span>
               )}
-            >
-              {footer.tone === 'warn' && <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />}
               <span>{footer.text}</span>
             </p>
           )}
