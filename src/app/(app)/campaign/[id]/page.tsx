@@ -257,7 +257,12 @@ export default function CampaignDetailsPage() {
   // The payment dialog's last step: the server checked the payment and signed the completion.
   // Throws back into the dialog (which keeps the payment's hash for a re-check) on failure.
   const handlePaymentVerified = async (taskId: string, result: PaymentVerifyResult) => {
-    await recordAttestation(result)
+    try {
+      await recordAttestation(result)
+    } catch (e) {
+      // The self-submit's contract revert, decoded (the dialog shows this message as is).
+      throw new Error(mapContractRevertToMessage(e))
+    }
     setTaskErrors(({ [taskId]: _, ...rest }) => rest)
     setUserTasks((prev) => prev.map((t) => (t.taskId === taskId ? { ...t, completed: true } : t)))
     toast({ title: 'Task done', description: 'Payment checked. One step closer to your reward.' })

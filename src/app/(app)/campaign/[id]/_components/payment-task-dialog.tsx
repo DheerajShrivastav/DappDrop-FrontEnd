@@ -8,6 +8,7 @@ import { Input, InlineError } from '@/components/app/field'
 import { KeyValueList } from '@/components/app/kv-list'
 import { shortAddress } from '@/components/app/format'
 import { deploymentChainFor } from '@/lib/deployment-chain'
+import { contractErrorMessage } from '@/lib/contract-errors'
 import { pendingPaymentKey, TX_HASH, type PaymentRequest } from '@/lib/payment-request'
 import { sendTaskPayment, verifyTaskPayment, WrongNetworkError, type PaymentVerifyResult } from '@/lib/payment-task-client'
 
@@ -128,9 +129,10 @@ export function PaymentTaskDialog({
         setStep({ kind: 'wrong-network' })
         return
       }
-      const raw = e instanceof Error ? e.message : String(e)
-      const rejected = /user rejected|user denied|ACTION_REJECTED/i.test(raw)
-      setError(rejected ? 'You cancelled the payment in your wallet. Nothing was sent.' : sent ? `The payment was sent but hasn’t confirmed yet: ${raw}` : raw)
+      // The redeploy's decoder (src/lib/contract-errors.ts): a wallet rejection, gas, network or
+      // a token revert in plain words; our own pre-check messages pass through unchanged.
+      const message = contractErrorMessage(e, { gasSymbol: chain.gasSymbol })
+      setError(sent ? `The payment was sent but hasn’t confirmed yet: ${message}` : message)
       setStep({ kind: 'ready' })
     }
   }
