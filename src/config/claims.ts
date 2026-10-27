@@ -29,22 +29,22 @@ export const claims = {
   // ---------------------------------------------------------------------------------------
 
   /**
-   * VERSION() of the deployed Web3Campaigns. TODO(redeploy): set to the redeployed version.
+   * VERSION() of the deployed Web3Campaigns, read on-chain (0.7.0, deployed 2026-10-27).
    * null = not deployed/tagged yet; receipts then point at the verified source on the explorer,
    * never at undeployed code (D-X11).
    */
-  deployVersion: null as string | null,
-  /** Git tag in the contracts repo matching the deployed bytecode (e.g. "v0.7.0-sepolia"). TODO(redeploy). */
-  deployedTag: null as string | null,
+  deployVersion: '0.7.0' as string | null,
+  /** Git tag in the contracts repo matching the deployed bytecode (contracts dev @ 5aa3e13). */
+  deployedTag: 'v0.7.0-sepolia' as string | null,
   /**
-   * Automated tests at `deployedTag`, counted by script at that tag (S2-08). TODO(redeploy).
+   * Automated tests at `deployedTag`, counted by script at that tag (S2-08): `forge test` at v0.7.0-sepolia.
    * null = no number is shown. Never mix a number from one ref with a link to another (F59).
    */
-  testsAtDeployed: null as number | null,
+  testsAtDeployed: 297 as number | null,
   /** Stateful fuzz "invariant" suites in the contracts' test/ (fact sheet §4). */
   invariantSuites: 8,
-  /** ISO date the current contracts were deployed. TODO(redeploy). null = line hidden. */
-  contractsDeployedOn: null as string | null,
+  /** ISO date the current contracts were deployed. null = line hidden. */
+  contractsDeployedOn: '2026-10-27' as string | null,
   /** ISO date of the next planned contract update, or null for "pending". */
   nextContractUpdate: null as string | null,
 
@@ -58,12 +58,20 @@ export const claims = {
   tierModuleFixed: true,
   /** PR #23: tiered campaigns with zero participants can be cancelled for an immediate refund. */
   tieredCancelLive: true,
-  /** PR #25: SIGNER and SETTLER roles held by wallets other than the admin (check hasRole). */
-  rolesSplit: true,
+  /** PR #25: SIGNER and SETTLER roles held by wallets other than the admin (check hasRole).
+   * false: the Sepolia redeploy keeps ONE wallet for every role (founder decision 2026-10-27,
+   * to launch fast; the split comes later). Flip only once hasRole shows separate holders. */
+  rolesSplit: false,
   /** Host-close guard (OUT-C03): a host can't close a list campaign with participants and no list. */
   hostCloseGuarded: true,
   /** NFT-custody fix (OUT-C02): an NFT leaves escrow only through its own campaign. */
   nftCustodyFixed: true,
+  /**
+   * PR #26: Web3Campaigns itself refuses any fee module's skim above 10 % of what it received
+   * (FeeExceedsAmount), so no rotated-in module can take more. Unlocks the app's "the contract
+   * caps it at 10%" fee line (src/lib/protocol-fee.ts). Check: the deployed source has the cap.
+   */
+  feeCapEnforced: true,
   /** Commitment clause while the host-close gap is unfixed (moot once hostCloseGuarded). */
   hostCloseFixCommitted: true,
   /** Commitment clause while the NFT gap is unfixed (moot once nftCustodyFixed). */

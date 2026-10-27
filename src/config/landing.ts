@@ -55,8 +55,11 @@ export const network = {
   /** Global default tier (OnChainRewardModule) and NFT settlement modules, from the app config. */
   rewardModule: appConfig.addresses.onChainRewardModule,
   nftModule: appConfig.addresses.nftSettlementModule,
-  /** How many contracts make up the deployed suite (entrypoint + reward module + NFT module + lib). */
-  deployedContracts: 4,
+  /**
+   * How many contracts make up the deployed suite (entrypoint + reward module + NFT module + lib),
+   * plus the FeeModule when the deployment has one (FEE_BPS > 0 → addresses.feeModule set).
+   */
+  deployedContracts: appConfig.addresses.feeModule ? 5 : 4,
 } as const
 
 /** "Sepolia testnet" on a test network, the bare chain name otherwise. */

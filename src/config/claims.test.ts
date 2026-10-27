@@ -21,6 +21,7 @@ const deployedV060: Claims = {
   rolesSplit: false,
   hostCloseGuarded: false,
   nftCustodyFixed: false,
+  feeCapEnforced: false,
   hostCloseFixCommitted: false,
   nftFixCommitted: false,
 }
@@ -41,9 +42,14 @@ test('hostCloseGuarded and nftCustodyFixed do not decide the stage', () => {
   assert.equal(deriveLaunchStage({ ...deployedV060, hostCloseGuarded: true, nftCustodyFixed: true }), 1)
 })
 
-test('the shipped config is the post-redeploy state (Stage 2)', () => {
-  assert.equal(launchStage, 2)
-  assert.match(claimsVersion, /^s2-[0-9a-f]{8}$/)
+test('the shipped config is the one-wallet redeploy: every fix on, roles not split yet (Stage 1)', () => {
+  // Founder decision 2026-10-27: the Sepolia redeploy keeps one wallet for every role, so
+  // rolesSplit stays false and the stage (an analytics label) stays 1 until the split ships.
+  for (const k of STAGE_2_FLAGS.filter((f) => f !== 'rolesSplit')) assert.equal(claims[k], true, k)
+  assert.equal(claims.rolesSplit, false)
+  assert.equal(launchStage, 1)
+  assert.match(claimsVersion, /^s1-[0-9a-f]{8}$/)
+  assert.equal(deriveLaunchStage({ ...claims, rolesSplit: true }), 2)
 })
 
 test('claimsVersion is stable and changes when any flag flips', () => {

@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   getCampaignStatus,
+  settlementOwedOnClose,
   matchesStatusFilter,
   shortDate,
   ROOT_DISPUTE_WINDOW_MS,
@@ -164,4 +165,32 @@ test('the Open filter excludes ended-but-unrecorded campaigns', () => {
   assert.equal(matchesStatusFilter('closed_claimable', 'claimable'), true)
   assert.equal(matchesStatusFilter('cancelled', 'closed'), true)
   assert.equal(matchesStatusFilter('ended_unrecorded', 'all'), true)
+})
+
+test('settlementOwedOnClose mirrors the contract close guard (SettlementNotPublished)', () => {
+  const MOD = '0x' + '11'.repeat(20)
+  // ERC20 escrowed, no root, no tiers: owed.
+  assert.equal(settlementOwedOnClose({ mode: 'UNSET', erc20EscrowedNet: '1000', erc20MerkleRoot: null }), true)
+  // ...a published root commits MERKLE: not owed.
+  assert.equal(settlementOwedOnClose({ mode: 'MERKLE_ERC20', erc20EscrowedNet: '1000', erc20MerkleRoot: ROOT }), false)
+  // ...tiers commit the mode (pinned reward module): not owed.
+  assert.equal(settlementOwedOnClose({ mode: 'RANK_TIERED', erc20EscrowedNet: '1000', rewardModule: MOD }), false)
+  assert.equal(settlementOwedOnClose({ mode: 'UNSET', erc20EscrowedNet: '1000', rewardModule: MOD }), false)
+  // Nothing escrowed (an off-chain reward): closing is allowed.
+  assert.equal(settlementOwedOnClose({ mode: 'UNSET', erc20EscrowedNet: '0', erc20MerkleRoot: null }), false)
+  // NFTs deposited (module pinned), no root: owed; with a root: not.
+  assert.equal(settlementOwedOnClose({ mode: 'NFT', nftModule: MOD, nftMerkleRoot: null, erc20EscrowedNet: '0' }), true)
+  assert.equal(settlementOwedOnClose({ mode: 'NFT', nftModule: MOD, nftMerkleRoot: ZERO, erc20EscrowedNet: '0' }), true)
+  assert.equal(settlementOwedOnClose({ mode: 'NFT', nftModule: MOD, nftMerkleRoot: ROOT, erc20EscrowedNet: '0' }), false)
+  // Mixed: one published root isn't enough when the other path still owes one.
+  assert.equal(
+    settlementOwedOnClose({ mode: 'MERKLE_ERC20', erc20EscrowedNet: '5', erc20MerkleRoot: ROOT, nftModule: MOD, nftMerkleRoot: null }),
+    true,
+  )
+  // Unknown facts stay unknown (never "nothing owed").
+  assert.equal(settlementOwedOnClose(undefined), null)
+  assert.equal(settlementOwedOnClose({ mode: 'MERKLE_ERC20', erc20MerkleRoot: ZERO }), null)
+  assert.equal(settlementOwedOnClose({ mode: 'NFT', nftModule: MOD, erc20EscrowedNet: '0' }), null)
+  // ...but a known debt wins over an unknown elsewhere.
+  assert.equal(settlementOwedOnClose({ mode: 'NFT', nftModule: MOD, erc20EscrowedNet: '9', erc20MerkleRoot: null }), true)
 })

@@ -29,7 +29,31 @@ type Entry = { date: string; area: 'App' | 'Contracts' | 'Tasks' | 'AI'; title: 
 const human = claims.humanityNaming ? 'Humanity Protocol' : 'our verified-human provider'
 const humanSdk = claims.humanityNaming ? 'Humanity Protocol’s v2 OAuth SDK' : 'the provider’s v2 OAuth SDK'
 
+// DRAFT, the contracts redeploy (contracts PRs #23-#26). Hidden until claims.contractsDeployedOn
+// is set on redeploy day, and then dated by it. Each line is a fact about the redeployed contracts
+// (contracts docs/SECURITY_FINDINGS.md) and renders only with the claims flag that asserts it, so
+// it can't run ahead of the deployment. TRS should re-read the wording before it goes live.
+const redeployItems = [
+  claims.tasksEnforcedOnChain &&
+    'A task is recorded as done only with our verifier’s signature, or by the contract’s own balance check for holding tasks. A wallet can no longer mark a task done on the contract by itself.',
+  claims.tierModuleFixed && 'By-points rewards pay only wallets that finished every required task.',
+  claims.tieredCancelLive && 'Ranked and by-points campaigns that nobody joined can be cancelled for an immediate refund.',
+  claims.hostCloseGuarded &&
+    'A host can’t close a campaign while its escrowed tokens or NFTs have no published reward list.',
+  claims.nftCustodyFixed && 'An NFT held for one campaign can only leave through that campaign.',
+  claims.feeCapEnforced && 'The contract caps any platform fee at 10% of the funding it receives.',
+  claims.rolesSplit && 'The verifier and fallback-settler roles are held by wallets other than the admin’s.',
+  'The app explains every contract error in plain words.',
+].filter((x): x is string => typeof x === 'string')
+
 const ENTRIES: Entry[] = [
+  {
+    date: claims.contractsDeployedOn ?? '',
+    area: 'Contracts',
+    title: 'Contract update: task checks, closing and NFT custody',
+    items: redeployItems,
+    show: claims.contractsDeployedOn !== null,
+  },
   {
     date: '2026-05-05',
     area: 'Tasks',

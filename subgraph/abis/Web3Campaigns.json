@@ -5,10 +5,6 @@
     "stateMutability": "nonpayable"
   },
   {
-    "type": "fallback",
-    "stateMutability": "payable"
-  },
-  {
     "type": "receive",
     "stateMutability": "payable"
   },
@@ -2675,6 +2671,11 @@
   },
   {
     "type": "error",
+    "name": "Web3Campaigns__AccountFlagged",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "Web3Campaigns__AlreadyClaimedSettlement",
     "inputs": []
   },
@@ -2800,6 +2801,11 @@
   },
   {
     "type": "error",
+    "name": "Web3Campaigns__InvalidTextLength",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "Web3Campaigns__InvalidTierConfiguration",
     "inputs": []
   },
@@ -2871,6 +2877,11 @@
   },
   {
     "type": "error",
+    "name": "Web3Campaigns__NotInActivePeriod",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "Web3Campaigns__NotOnChainRewardModule",
     "inputs": []
   },
@@ -2887,6 +2898,11 @@
   {
     "type": "error",
     "name": "Web3Campaigns__ParticipantLimitReached",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__RateLimited",
     "inputs": []
   },
   {
@@ -2964,6 +2980,11 @@
   {
     "type": "error",
     "name": "Web3Campaigns__TaskNotVerifiableByHost",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "Web3Campaigns__TooManyTasks",
     "inputs": []
   },
   {

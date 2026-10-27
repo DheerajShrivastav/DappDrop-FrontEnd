@@ -1,6 +1,6 @@
 {
   "contractName": "OnChainRewardModule",
-  "source": "Dapp-Drop v0.6.0",
+  "source": "Dapp-Drop v0.6.0, contracts fix/nft-custody-host-close @ 2a2745a (PRs #23-#26)",
   "abi": [
     {
       "type": "constructor",

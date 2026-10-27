@@ -6,10 +6,11 @@ dataSources:
     name: Web3Campaigns
     network: sepolia
     source:
-      # v0.6.0 entrypoint (docs/deployments/sepolia.md). Holds all funds + campaign state.
-      address: "0xf0A2Fac02ffBA4A7762f2f0d611253B6C97bB1B3"
+      # v0.7.0 entrypoint (docs/deployments/sepolia.md), deployed 2026-10-27. Holds all funds +
+      # campaign state. The module templates follow RewardModulePinned/NFTModulePinned.
+      address: "0xC562505899faCee1F8f755F009cf6FbA3EA3E8Da"
       abi: Web3Campaigns
-      startBlock: 11314275
+      startBlock: 12006087
     mapping:
       kind: ethereum/events
       apiVersion: 0.0.7

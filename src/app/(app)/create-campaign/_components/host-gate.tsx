@@ -1,11 +1,14 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
 import { useAccount, useSwitchChain } from 'wagmi'
 import { Button, Chip, KeyValueList, PageContainer, PageHeader, Panel, Skeleton, Spinner, shortAddress } from '@/components/app'
-import { becomeHost } from '@/lib/web3-service'
+import { becomeHost, getProtocolFeeBps } from '@/lib/web3-service'
+import { describeContractError } from '@/lib/contract-errors'
+import { platformFeeLine } from '@/lib/protocol-fee'
+import appConfig from '@/app/config'
 import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
 import { claims } from '@/config/claims'
 import { network, networkLabel } from '@/config/landing'
@@ -16,20 +19,17 @@ export type GateState = { kind: 'idle' } | { kind: 'pending' } | { kind: 'failed
 /**
  * Plain-language reason for a failed host-role transaction. The service also raises a toast
  * with the mapped contract revert; this is the inline state so the gate is never a dead end.
+ * The revert is decoded by custom error (EnforcedPause since contracts PR #26, not the old
+ * "Contract is paused" string), via the shared helper.
  */
 export function hostRoleFailureReason(error: unknown, gasSymbol: string): string {
-  const e = error as { code?: unknown; message?: unknown; shortMessage?: unknown; info?: { error?: { code?: unknown } } }
-  const code = e?.code ?? e?.info?.error?.code
-  const text = `${String(e?.shortMessage ?? '')} ${String(e?.message ?? '')}`.toLowerCase()
-  if (code === 'ACTION_REJECTED' || code === 4001 || text.includes('user rejected') || text.includes('user denied')) {
-    return 'You cancelled in your wallet. Nothing was sent.'
-  }
-  if (code === 'INSUFFICIENT_FUNDS' || text.includes('insufficient funds')) {
+  const d = describeContractError(error, { gasSymbol })
+  if (d.kind === 'rejected') return 'You cancelled in your wallet. Nothing was sent.'
+  if (d.kind === 'gas') {
     return `This wallet doesn’t have enough ${gasSymbol} for gas. Get a little from a faucet, then try again.`
   }
-  if (text.includes('paused')) {
-    return 'DappDrop is paused for maintenance. Try again later.'
-  }
+  if (d.name === 'EnforcedPause') return 'DappDrop is paused for maintenance. Try again later.'
+  if (d.name) return d.message
   return 'The transaction didn’t go through. The notification has the details; you can try again.'
 }
 
@@ -64,6 +64,17 @@ export function HostGate({
   const { switchChain } = useSwitchChain()
   const { openConnectModal } = useConnectModal()
   const gas = DEPLOYMENT_CHAIN.gasSymbol
+  // The platform fee line (app-design §3.3). Starts from the address book (no fee module → 0,
+  // "None during beta"), then the chain's answer replaces it. Skipped in the dev fixture.
+  const [feeBps, setFeeBps] = useState<number | null | undefined>(appConfig.addresses.feeModule ? undefined : 0)
+  useEffect(() => {
+    if (preview) return
+    let cancelled = false
+    getProtocolFeeBps().then((bps) => !cancelled && setFeeBps(bps))
+    return () => {
+      cancelled = true
+    }
+  }, [preview])
 
   const state = preview?.state ?? liveState
   const connected = preview ? preview.connection !== 'none' : isConnected
@@ -224,9 +235,7 @@ export function HostGate({
           <KeyValueList
             items={[
               { label: 'Host role', value: 'Gas only' },
-              // TODO(redeploy): if a fee module is set at the redeploy, read it and show
-              // "{x}% · the contract caps it at 10%" here, in the wizard rail and on Review (app-design §3.3).
-              { label: 'Platform fee', value: 'None during beta' },
+              { label: 'Platform fee', value: platformFeeLine(feeBps, claims.feeCapEnforced) },
               { label: 'Your reward', value: 'In escrow' },
             ]}
           />

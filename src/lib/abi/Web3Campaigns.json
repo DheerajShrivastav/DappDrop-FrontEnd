@@ -1,15 +1,11 @@
 {
   "contractName": "Web3Campaigns",
-  "source": "Dapp-Drop v0.6.0",
+  "source": "Dapp-Drop v0.6.0, contracts fix/nft-custody-host-close @ 2a2745a (PRs #23-#26)",
   "abi": [
     {
       "type": "constructor",
       "inputs": [],
       "stateMutability": "nonpayable"
-    },
-    {
-      "type": "fallback",
-      "stateMutability": "payable"
     },
     {
       "type": "receive",
@@ -2678,6 +2674,11 @@
     },
     {
       "type": "error",
+      "name": "Web3Campaigns__AccountFlagged",
+      "inputs": []
+    },
+    {
+      "type": "error",
       "name": "Web3Campaigns__AlreadyClaimedSettlement",
       "inputs": []
     },
@@ -2803,6 +2804,11 @@
     },
     {
       "type": "error",
+      "name": "Web3Campaigns__InvalidTextLength",
+      "inputs": []
+    },
+    {
+      "type": "error",
       "name": "Web3Campaigns__InvalidTierConfiguration",
       "inputs": []
     },
@@ -2874,6 +2880,11 @@
     },
     {
       "type": "error",
+      "name": "Web3Campaigns__NotInActivePeriod",
+      "inputs": []
+    },
+    {
+      "type": "error",
       "name": "Web3Campaigns__NotOnChainRewardModule",
       "inputs": []
     },
@@ -2890,6 +2901,11 @@
     {
       "type": "error",
       "name": "Web3Campaigns__ParticipantLimitReached",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "Web3Campaigns__RateLimited",
       "inputs": []
     },
     {
@@ -2967,6 +2983,11 @@
     {
       "type": "error",
       "name": "Web3Campaigns__TaskNotVerifiableByHost",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "Web3Campaigns__TooManyTasks",
       "inputs": []
     },
     {

@@ -14,6 +14,8 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import type { Campaign } from '@/lib/types'
 import { cancelCampaignOnChain, closeCampaignOnChain, getCloseOptions, mapContractRevertToMessage } from '@/lib/web3-service'
+import { describeContractError } from '@/lib/contract-errors'
+import { CLOSE_GUARD_REASON } from './campaign-model'
 import { Button, Spinner, buttonClass } from '@/components/app/button'
 import { Chip } from '@/components/app/chip'
 import { Textarea } from '@/components/app/field'
@@ -207,10 +209,11 @@ export function ReportsList({ campaignId, data }: { campaignId: string; data: Ho
  * [Close campaign] and its dialog (step 06). The dialog reads the chain fresh each time it opens
  * (getCloseOptions): with nobody joined it offers "Cancel campaign instead" (an immediate refund).
  *
- * `blockedReason`: the host-close guard (OUT-C03) for a list campaign with participants and no
- * published list. TODO(redeploy): the redeployed contract reverts `SettlementNotPublished` here;
- * map it in mapContractRevertToMessage to "Can't close yet. Publish the reward list first." (the
- * revert mapping is frozen until then, so this button guard is the only UI hook today).
+ * `blockedReason`: the host-close guard (OUT-C03) for a campaign with participants that still
+ * owes a published list (hostPlan's closeBlocked). The contract itself refuses that close with
+ * `SettlementNotPublished` (contracts PR #26). The dialog re-reads the guard on-chain when it
+ * opens (getCloseOptions().settlementOwed) and disables Close with the reason; if a close is sent
+ * anyway, the revert reads "Can't close yet. Publish the reward list first."
  */
 export function CloseCampaignAction({
   campaign,
@@ -229,7 +232,7 @@ export function CloseCampaignAction({
   const [open, setOpen] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [isCancelling, setIsCancelling] = useState(false)
-  const [closeOptions, setCloseOptions] = useState<{ totalParticipants: number; canCancel: boolean } | null>(null)
+  const [closeOptions, setCloseOptions] = useState<{ totalParticipants: number; canCancel: boolean; settlementOwed: boolean | null } | null>(null)
   const [isLoadingCloseOptions, setIsLoadingCloseOptions] = useState(false)
   const isNFT = campaign.settlement?.mode === 'NFT' || campaign.reward.type === 'ERC721'
 
@@ -273,7 +276,12 @@ export function CloseCampaignAction({
       setOpen(false)
       onStatusChange?.()
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'The campaign wasn’t closed', description: mapContractRevertToMessage(e) })
+      const d = describeContractError(e)
+      toast({
+        variant: 'destructive',
+        title: d.name === 'Web3Campaigns__SettlementNotPublished' ? d.title : 'The campaign wasn’t closed',
+        description: d.message,
+      })
     } finally {
       setIsClosing(false)
     }
@@ -288,6 +296,8 @@ export function CloseCampaignAction({
   }
 
   const busy = isClosing || isCancelling
+  // The chain's answer, read as the dialog opened: closing would revert SettlementNotPublished.
+  const owed = closeOptions?.settlementOwed === true
   return (
     <AlertDialog open={open} onOpenChange={(o) => !busy && setOpen(o)}>
       <Button size="sm" variant={primary ? 'primary' : 'secondary'} onClick={() => setOpen(true)}>
@@ -308,7 +318,11 @@ export function CloseCampaignAction({
         )}
         {closeOptions?.totalParticipants === 0 && (
           <div className="grid gap-3 rounded-[10px] border border-rule bg-sunk p-4 text-small">
-            <p className="font-semibold text-ink">Nobody joined. Closing locks the reward for 30 days before you can take it back.</p>
+            <p className="font-semibold text-ink">
+              {owed
+                ? 'Nobody joined, and no reward list is published, so the contract won’t close this campaign.'
+                : 'Nobody joined. Closing locks the reward for 30 days before you can take it back.'}
+            </p>
             {closeOptions.canCancel && (
               <>
                 <p className="text-ink-2">
@@ -331,7 +345,13 @@ export function CloseCampaignAction({
           <AlertDialogCancel className={buttonClass({ variant: 'secondary' })} disabled={busy}>
             Not now
           </AlertDialogCancel>
-          <Button variant="danger" onClick={handleClose} loading={isClosing} disabled={isCancelling}>
+          <Button
+            variant="danger"
+            onClick={handleClose}
+            loading={isClosing}
+            disabled={isCancelling || owed}
+            disabledReason={owed ? CLOSE_GUARD_REASON : undefined}
+          >
             {isClosing ? 'Closing…' : 'Close campaign'}
           </Button>
         </AlertDialogFooter>

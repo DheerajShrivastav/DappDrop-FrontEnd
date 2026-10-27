@@ -55,7 +55,7 @@ import {
   createDraftCampaignWithTasks,
   configureAndFundERC20Reward,
   setCampaignMaxParticipantsOnChain,
-  getProtocolFeeEnabled,
+  getProtocolFeeBps,
   openCampaign,
   configureRankTiers,
   configureScoreTiers,
@@ -71,6 +71,8 @@ import {
 import { generateCampaign } from '@/ai/flows/generate-campaign-flow'
 import { parseCampaignGenerationError } from '@/ai/flows/generate-campaign.errors'
 import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
+import { claims } from '@/config/claims'
+import { formatFeeBps, platformFeeLine } from '@/lib/protocol-fee'
 import {
   CLIENT_GENERATION_GIVE_UP_MS,
   PLACEHOLDER_IMAGE_URL,
@@ -127,8 +129,8 @@ export type WizardFixture = {
   feeCapNote?: boolean
 }
 
-/** TODO(redeploy): true once the redeployed Web3Campaigns caps the protocol fee at 10%. */
-const FEE_CAP_SHIPPED = false
+/** The redeployed Web3Campaigns caps any protocol fee at 10% (contracts PR #26; claims.feeCapEnforced). */
+const FEE_CAP_SHIPPED = claims.feeCapEnforced
 
 const STEPS = [
   { name: 'Details', hint: 'Name, schedule, image', title: 'Tell people what it is', lead: 'What participants see first: the name, the pitch, when it runs and a cover image.' },
@@ -199,6 +201,9 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
     decimals?: number
   } | null>(null)
   const [feeEnabled, setFeeEnabled] = useState(false)
+  // The fee module's rate in bps (src/lib/protocol-fee.ts). Starts from the address book: with no
+  // fee module configured it's 0 ("None during beta") until the live read says otherwise.
+  const [feeBps, setFeeBps] = useState<number | null | undefined>(config.addresses.feeModule ? undefined : 0)
   const [isOpening, setIsOpening] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
@@ -853,7 +858,11 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
   // itemization on the review step is honest rather than hardcoded.
   useEffect(() => {
     if (wizardPhase === 'form') {
-      getProtocolFeeEnabled().then(setFeeEnabled)
+      getProtocolFeeBps().then((bps) => {
+        setFeeBps(bps)
+        // null = a module is set but unreadable: still a fee, so Review says it couldn't read it.
+        setFeeEnabled(bps !== 0)
+      })
     }
   }, [step, wizardPhase])
 
@@ -1166,9 +1175,13 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
   ]
   if (step >= 3 && rewardType !== 'None') soFar.push({ label: 'Payout', value: rewardType === 'ERC721' ? 'One NFT each' : payoutLabel })
   const gas = { label: 'Network gas', value: `Yours, in ${DEPLOYMENT_CHAIN.gasSymbol}` }
-  // TODO(redeploy): with a fee module set, show "{x}% · the contract caps it at 10%" (app-design §3.3).
-  const feeWords = (f: string) => (f === 'None' ? (feeEnabled ? 'None' : 'None during beta') : f)
-  const payNow: KeyValueItem[] = [{ label: 'Platform fee', value: feeEnabled ? 'Shown on Review' : 'None during beta' }, gas]
+  // app-design §3.3: "{x}% · the contract caps it at 10%" with a fee module set, else "None during beta".
+  const feeWords = (f: string) => {
+    if (f === 'None') return feeEnabled ? 'None' : 'None during beta'
+    // An amount ("25 EXAMPLE") gets its rate; "Calculating…", "Couldn’t read" and "—" stay as they are.
+    return typeof feeBps === 'number' && feeBps > 0 && /\d/.test(f) ? `${f} · ${formatFeeBps(feeBps)}` : f
+  }
+  const payNow: KeyValueItem[] = [{ label: 'Platform fee', value: platformFeeLine(feeBps, FEE_CAP_SHIPPED) }, gas]
   const payReview: KeyValueItem[] =
     rewardType === 'ERC20'
       ? [
@@ -1866,7 +1879,7 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
                         {/* FR-H5: itemise the funding transaction before the host signs it. Shown in
                             the rail on desktop and here below it. */}
                         <div className="grid gap-4 lg:hidden">
-                          <RailPanels {...rail} />
+                          <RailPanels {...rail} feeCapNote={feeCapNote} />
                         </div>
 
                         <section aria-labelledby="create-steps-h" className="grid gap-3">
