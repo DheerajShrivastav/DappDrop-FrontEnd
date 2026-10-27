@@ -1,0 +1,28 @@
+{
+  "ci": {
+    "collect": {
+      "url": ["http://localhost:3100/"],
+      "numberOfRuns": 5,
+      "startServerCommand": "npx next start -p 3100",
+      "startServerReadyPattern": "Ready",
+      "settings": {
+        "formFactor": "mobile",
+        "throttlingMethod": "simulate",
+        "onlyCategories": ["performance", "accessibility", "seo"]
+      }
+    },
+    "assert": {
+      "aggregationMethod": "median",
+      "assertions": {
+        "largest-contentful-paint": ["error", { "maxNumericValue": 2500 }],
+        "total-blocking-time": ["error", { "maxNumericValue": 150 }],
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.05 }],
+        "total-byte-weight": ["error", { "maxNumericValue": 500000 }],
+        "resource-summary:total:count": ["error", { "maxNumericValue": 30 }],
+        "dom-size": ["error", { "maxNumericValue": 1200 }],
+        "categories:accessibility": ["error", { "minScore": 1 }]
+      }
+    },
+    "upload": { "target": "temporary-public-storage" }
+  }
+}

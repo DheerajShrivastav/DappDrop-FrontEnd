@@ -17,15 +17,16 @@ export default function Header() {
 
     const links = [
         { href: '/campaigns', label: 'Campaigns', strong: true },
-        { href: '/about', label: 'About' },
-        { href: '/changelog', label: 'Changelog' },
+        // Marketing pages aren't prefetched from the app (keeps app navigation lean).
+        { href: '/about', label: 'About', prefetch: false },
+        { href: '/changelog', label: 'Changelog', prefetch: false },
         ...(role === 'host' ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
     ];
 
     return (
         <header className="sticky top-0 z-50 w-full border-b border-slate-200 bg-white/80 backdrop-blur-md shadow-soft">
             <div className="container flex h-16 items-center gap-2 px-4 md:px-8">
-                <Link href="/" className="flex min-w-0 items-center gap-2.5 md:mr-8">
+                <Link href="/" prefetch={false} className="flex min-w-0 items-center gap-2.5 md:mr-8">
                     <div className="bg-gradient-to-br from-slate-700 to-slate-900 p-2 rounded-xl shadow-elevated">
                         <Rocket className="h-5 w-5 text-white" />
                     </div>
@@ -40,6 +41,7 @@ export default function Header() {
                         <Link
                             key={l.href}
                             href={l.href}
+                            prefetch={l.prefetch}
                             className={`text-slate-600 hover:text-primary transition-colors${l.strong ? ' font-semibold' : ''}`}
                         >
                             {l.label}
@@ -75,7 +77,7 @@ export default function Header() {
                         <DropdownMenuContent align="end" className="w-48">
                             {links.map((l) => (
                                 <DropdownMenuItem key={l.href} asChild>
-                                    <Link href={l.href}>{l.label}</Link>
+                                    <Link href={l.href} prefetch={l.prefetch}>{l.label}</Link>
                                 </DropdownMenuItem>
                             ))}
                         </DropdownMenuContent>

@@ -54,3 +54,8 @@ subgraph/generated/
 
 # Scratch design-demo folder (unrelated to app code)
 .lavish/
+
+# Playwright / Lighthouse CI output (landing gates)
+/test-results/
+/playwright-report/
+/.lighthouseci/

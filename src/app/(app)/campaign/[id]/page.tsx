@@ -823,7 +823,7 @@ export default function CampaignDetailsPage() {
           </CardHeader>
           <CardFooter>
             <Button asChild>
-              <Link href="/">Return Home</Link>
+              <Link href="/" prefetch={false}>Return Home</Link>
             </Button>
           </CardFooter>
         </Card>

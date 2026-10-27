@@ -1,4 +1,6 @@
 // Server Component — no client hooks needed
+import { AppFonts } from '@/app/_fonts/app-fonts'
+import type { Metadata } from 'next'
 import type {ElementType} from 'react'
 import { format } from 'date-fns'
 import {
@@ -25,6 +27,8 @@ import {
   Sparkles,
   Layout,
 } from 'lucide-react'
+
+export const metadata: Metadata = { alternates: { canonical: '/changelog' } }
 
 const changelogData = [
   {
@@ -146,14 +150,14 @@ const changelogData = [
   {
     date: new Date('2025-11-29T12:00:00Z'),
     version: 'Payment Integration',
-    title: 'X402 Payment Protocol Integration',
+    title: 'On-chain Payment Tasks',
     description:
-      'Revolutionary payment task integration with X402 Payment Protocol, enabling campaigns to require on-chain payment verification for task completion with comprehensive status tracking and user-friendly UI.',
+      'A payment task type: campaigns can require an on-chain payment, verified on-chain for task completion, with status tracking in the UI.',
     changes: [
       {
         type: 'Feature',
         icon: CreditCard,
-        text: 'Integrated X402 Payment Protocol for secure on-chain payment verification and task completion.',
+        text: 'On-chain payment verification for payment tasks.',
       },
       {
         type: 'Feature',
@@ -439,6 +443,7 @@ export default function ChangelogPage() {
 
   return (
     <div className="bg-background text-foreground">
+      <AppFonts />
       <section className="bg-card border-b border-primary/20">
         <div className="container mx-auto px-4 py-20 text-center">
           <h1 className="text-4xl md:text-6xl font-bold tracking-tighter">

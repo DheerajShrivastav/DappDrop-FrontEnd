@@ -1,0 +1,68 @@
+/* Vault stage. Theme tokens (--bg, --bg-3, --ink, --line, --accent) come from the page's [data-theme]. */
+.stage {
+  position: fixed;
+  inset: 0;
+  height: 100lvh;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--bg, #050506);
+  transition: background-color 0.45s ease;
+}
+
+/* posters: the designed still for reduced motion, no WebGL, Save-Data, weak devices and no-JS */
+.posters { display: none; position: absolute; inset: 0; }
+:global(html.vault-fallback) .posters { display: block; }
+@media (prefers-reduced-motion: reduce) { .posters { display: block; } }
+.poster { position: absolute; inset: 0; }
+.poster img { width: 100%; height: 100%; object-fit: cover; }
+/* short phones (320 x 640, 375 x 667): the hero copy runs to ~60-64 % of the screen, so the poster's
+   vault shrinks towards its base to clear the CTA, as the live scene's phone framing does */
+@media (orientation: portrait) and (max-width: 760px) and (max-height: 700px) {
+  .poster img { transform: scale(0.82); transform-origin: 50% 97%; }
+}
+.porcelain { display: none; }
+:global(html[data-theme='porcelain']) .porcelain { display: block; }
+:global(html[data-theme='porcelain']) .obsidian { display: none; }
+
+/* placeholder: the poster drawn into a 2D canvas (not an LCP candidate) until the 3D's first frame */
+.placeholder { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; transition: opacity 0.5s ease; }
+.placeholder[data-ready] { opacity: 1; }
+:global(html.vault-live) .placeholder { opacity: 0; transition: opacity 1.2s ease; }
+
+.canvas { position: absolute; inset: 0; opacity: 0; transition: opacity 1.2s cubic-bezier(0.2, 0.7, 0.2, 1); }
+:global(html.vault-live) .canvas { opacity: 1; }
+:global(html.vault-fallback) .canvas, :global(html.vault-fallback) .placeholder { display: none; }
+
+/* scrim: copy contrast over any frame. Desktop text column = left 40 %; phone = top 52 %. */
+.scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--bg, #050506) 86%, transparent) 0%,
+    color-mix(in srgb, var(--bg, #050506) 50%, transparent) 32%, transparent 50%);
+}
+@media (max-width: 760px), (orientation: portrait) and (max-width: 900px) {
+  .scrim {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--bg, #050506) 92%, transparent) 0%,
+      color-mix(in srgb, var(--bg, #050506) 72%, transparent) 38%, transparent 56%);
+  }
+}
+
+/* in-scene labels: DOM pills positioned by the scene (aria-hidden duplicates of page copy) */
+.labels { position: absolute; inset: 0; overflow: hidden; }
+.label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 0;
+  font: 11.5px/1 var(--font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink, #f3f1ec);
+  background: color-mix(in srgb, var(--bg-3, #141417) 90%, transparent);
+  border: 1px solid var(--line, rgba(243, 241, 236, 0.16));
+  padding: 6px 9px;
+  border-radius: 999px;
+  will-change: transform, opacity;
+}
+.label b { font-weight: 400; color: var(--accent, #f2b45e); }
