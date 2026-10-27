@@ -17,6 +17,8 @@ import { CampaignView } from '../../campaign/[id]/_components/campaign-view'
 import { RewardPanel, reviewReason, type RewardViewState } from '../../campaign/[id]/_components/reward-panel'
 import { deadlineLine } from '../../campaign/[id]/_components/claim-section'
 import { PaymentTaskDialog } from '../../campaign/[id]/_components/payment-task-dialog'
+import { TaskVerificationForm } from '@/components/task-verification-form'
+import { CampaignAnalytics } from '@/components/campaign-analytics'
 import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
 import { paymentRequestFromTask } from '@/lib/payment-request'
 
@@ -35,7 +37,7 @@ const wallet = (i: number) => '0x' + (i + 10).toString(16).padStart(4, '0') + '0
 const TASKS: Campaign['tasks'] = [
   { id: 't1', type: 'JOIN_DISCORD', description: 'Join the Example Discord server' },
   { id: 't2', type: 'WALLET_CONNECT', description: 'Sign in with your wallet' },
-  { id: 't3', type: 'SOCIAL_FOLLOW', description: 'Follow @example on X' },
+  { id: 't3', type: 'SOCIAL_FOLLOW', description: 'Follow @example on X', metadata: { xHandle: 'example' } },
 ]
 const TASKS_5: Campaign['tasks'] = [
   ...TASKS,
@@ -58,6 +60,15 @@ const PAY_TASK: Campaign['tasks'][number] = {
     amountDisplay: '0.001 ETH',
   },
 }
+
+// #45: proof-by-post. The host's required text; the participant's code comes from the example API.
+const POST_TASK: Campaign['tasks'][number] = {
+  id: 't7',
+  type: 'SOCIAL_POST',
+  description: 'Tell people why you’re joining Example week',
+  metadata: { xRequiredText: '#ExampleWeek' },
+}
+const TASKS_X: Campaign['tasks'] = [...TASKS, POST_TASK]
 
 function campaign(over: Partial<Campaign> & { settlement?: Campaign['settlement'] }): Campaign {
   return {
@@ -91,7 +102,18 @@ const done = (ids: string[], extra: Partial<Record<string, Partial<UserTask>>> =
 // ---------------------------------------------------------------------------------------------
 // The example API (only for campaign #9000)
 // ---------------------------------------------------------------------------------------------
-type Api = { list?: 'proposed' | 'published'; reports?: boolean; nft?: boolean }
+type Api = {
+  list?: 'proposed' | 'published'
+  reports?: boolean
+  nft?: boolean
+  /** #44: the accounts linked to the (pretend) signed-in wallet, by username; null = not linked. */
+  linked?: { discord?: string | null; telegram?: string | null }
+  /** #45: the wallet's saved X handle (null = none), and whether its post code loads. */
+  xHandle?: string | null
+  postCode?: boolean
+  /** #45: participants' self-entered X handles, for the host's analytics table. */
+  participantXHandles?: Record<string, string>
+}
 let API: Api = {}
 
 const entries = Array.from({ length: 10 }, (_, i) => ({ wallet: i === 0 ? ME : wallet(i), amount: `250${WEI}`, tasksCompleted: 3 }))
@@ -113,7 +135,23 @@ function allocation(status: 'PROPOSED' | 'PUBLISHED') {
 }
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
-function answer(path: string): Response | null {
+function answer(path: string, init?: RequestInit): Response | null {
+  // #44 / #45 participant routes (no campaign id in the path). Writes are answered as the real
+  // routes would for this example wallet, and change nothing.
+  if (path === '/api/auth/linked-accounts') {
+    if (init?.method === 'DELETE') return json({ ok: true })
+    const u = (name: string | null | undefined) => (name ? { username: name } : null)
+    return json({ discord: u(API.linked?.discord), telegram: u(API.linked?.telegram) })
+  }
+  if (path === '/api/profile/x-handle') {
+    if (init?.method === 'PUT') {
+      const body = JSON.parse(String(init.body ?? '{}')) as { xHandle?: string }
+      API.xHandle = body.xHandle ?? null
+      return json({ xHandle: API.xHandle })
+    }
+    return json({ xHandle: API.xHandle ?? null })
+  }
+  if (path === '/api/tasks/post-code') return API.postCode === false ? json({ error: 'Sign in first' }, 401) : json({ code: 'DD-EXAMPL' })
   if (!path.startsWith(`/api/campaigns/${ID}/`)) return null
   const rest = path.slice(`/api/campaigns/${ID}/`.length)
   if (rest.startsWith('allocations/latest'))
@@ -140,6 +178,7 @@ function answer(path: string): Response | null {
           ]
         : [],
     })
+  if (rest.startsWith('participant-x-handles')) return json({ handles: API.participantXHandles ?? {} })
   if (rest.startsWith('analytics'))
     return json({ funnel: { joined: 38, tasksStarted: 36, qualified: 31, claimed: API.list === 'published' ? 4 : 0 }, taskStats: [], humanityGated: false, humanityExcluded: 0, claimSplit: { sponsored: 0, self: 0 }, claimsOverTime: [] })
   return json({ error: 'Example API: not mocked' }, 404)
@@ -152,8 +191,8 @@ function installExampleApi() {
   const real = window.fetch.bind(window)
   window.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    const path = url.startsWith('http') ? new URL(url).pathname : url
-    return answer(path) ?? real(input, init)
+    const path = new URL(url, window.location.origin).pathname
+    return answer(path, init) ?? real(input, init)
   }
 }
 
@@ -172,6 +211,10 @@ type Fixture = {
   claim?: (c: Campaign) => ReactNode
   /** Open the payment dialog for the campaign's ONCHAIN_TX task (its [Pay] button reopens it). */
   payDialog?: boolean
+  /** Open the task dialog (TaskVerificationForm) for this task id; [Start] reopens it. */
+  verifyTask?: string
+  /** Host: render "More numbers" (the analytics table with participants' X handles), opened. */
+  numbers?: boolean
 }
 
 const AMOUNT = { value: '250', unit: 'EXAMPLE' }
@@ -224,6 +267,71 @@ const FIXTURES: Record<string, Fixture> = {
     joined: true,
     userTasks: done(['t1', 't2', 't3']),
     payDialog: true,
+  },
+  // #44: Discord / Telegram accounts are linked on the server; the check unlocks once linked.
+  'p-discord-connect': {
+    label: 'Participant · Discord task · account not linked',
+    campaign: campaign({ ...OPEN, settlement: merkle() }),
+    connected: true,
+    joined: true,
+    userTasks: done(['t2']),
+    api: { linked: {} },
+    verifyTask: 't1',
+  },
+  'p-discord-linked': {
+    label: 'Participant · Discord task · account linked',
+    campaign: campaign({ ...OPEN, settlement: merkle() }),
+    connected: true,
+    joined: true,
+    userTasks: done(['t2']),
+    api: { linked: { discord: 'example_tester' } },
+    verifyTask: 't1',
+  },
+  'p-telegram-linked': {
+    label: 'Participant · Telegram task · account linked',
+    campaign: campaign({ ...OPEN, tasks: TASKS_5, settlement: merkle() }),
+    connected: true,
+    joined: true,
+    userTasks: done(['t1', 't2']),
+    api: { linked: { telegram: 'example_tester' } },
+    verifyTask: 't5',
+  },
+  'p-telegram-unset': {
+    label: 'Participant · Telegram task · sign-in not configured',
+    campaign: campaign({ ...OPEN, tasks: TASKS_5, settlement: merkle() }),
+    connected: true,
+    joined: true,
+    userTasks: done(['t1', 't2']),
+    api: { linked: {} },
+    verifyTask: 't5',
+  },
+  // #45: proof-by-post for SOCIAL_POST, and the self-reported X dialog with the handle field.
+  'p-post': {
+    label: 'Participant · Post on X · handle saved',
+    campaign: campaign({ ...OPEN, tasks: TASKS_X, settlement: merkle() }),
+    connected: true,
+    joined: true,
+    userTasks: done(['t1', 't2', 't3']),
+    api: { xHandle: 'example_tester', postCode: true },
+    verifyTask: 't7',
+  },
+  'p-post-no-handle': {
+    label: 'Participant · Post on X · no handle saved yet',
+    campaign: campaign({ ...OPEN, tasks: TASKS_X, settlement: merkle() }),
+    connected: true,
+    joined: true,
+    userTasks: done(['t1', 't2', 't3']),
+    api: { xHandle: null, postCode: true },
+    verifyTask: 't7',
+  },
+  'p-follow': {
+    label: 'Participant · Follow on X (self-reported)',
+    campaign: campaign({ ...OPEN, settlement: merkle() }),
+    connected: true,
+    joined: true,
+    userTasks: done(['t1', 't2']),
+    api: { xHandle: null },
+    verifyTask: 't3',
   },
   'p-full': { label: 'Participant · open · campaign full', campaign: campaign({ ...OPEN, participants: 500, settlement: merkle() }), connected: true },
   'p-record-end': { label: 'Participant · end time passed, not recorded', campaign: campaign({ status: 'Open', settlement: merkle() }), connected: true, joined: true, userTasks: done(['t1', 't2', 't3']) },
@@ -317,6 +425,14 @@ const FIXTURES: Record<string, Fixture> = {
     host: true,
     api: { list: 'proposed' },
   },
+  'h-numbers': {
+    label: 'Host · More numbers (participants’ X handles)',
+    campaign: campaign({ ...OPEN, participants: 3, settlement: merkle() }),
+    connected: true,
+    host: true,
+    api: { participantXHandles: { [ME.toLowerCase()]: 'example_tester', [wallet(1).toLowerCase()]: 'another_tester' } },
+    numbers: true,
+  },
   'h-review': { label: 'Host · 24 h review with a report', campaign: campaign({ participants: 38, settlement: REVIEW }), connected: true, host: true, api: { list: 'published', reports: true } },
   'h-close': { label: 'Host · claims open, close next', campaign: campaign({ participants: 38, settlement: CLAIMS }), connected: true, host: true, api: { list: 'published' } },
   'h-closed': { label: 'Host · closed, 30 days', campaign: campaign({ status: 'Closed', participants: 38, settlement: CLOSED }), connected: true, host: true, api: { list: 'published' } },
@@ -326,20 +442,28 @@ const FIXTURES: Record<string, Fixture> = {
 export function CampaignFixtures() {
   const [key, setKey] = useState<string | null>(null)
   const [payOpen, setPayOpen] = useState(false)
+  const [verifyId, setVerifyId] = useState<string | null>(null)
   useEffect(() => {
     installExampleApi()
     const k = new URLSearchParams(window.location.search).get('state') ?? 'p-claimable'
     const f = FIXTURES[k] ?? FIXTURES['p-claimable']
-    API = f.api ?? {}
+    API = { ...(f.api ?? {}) }
     setKey(FIXTURES[k] ? k : 'p-claimable')
     setPayOpen(!!f.payDialog)
+    setVerifyId(f.verifyTask ?? null)
   }, [])
+  useEffect(() => {
+    // "More numbers" is a closed <details>; open it so the analytics table is on screen (and gated).
+    if (key && FIXTURES[key].numbers) document.querySelectorAll<HTMLDetailsElement>('.cp-details').forEach((d) => (d.open = true))
+  }, [key])
 
   if (!key) return <h1 className="sr-only">Campaign fixtures</h1>
   const f = FIXTURES[key]
   const userTasks = f.userTasks ? f.userTasks.filter((u) => f.campaign.tasks.some((t) => t.id === u.taskId)) : f.campaign.tasks.map((t) => ({ taskId: t.id, completed: false }))
   const payIndex = f.campaign.tasks.findIndex((t) => t.type === 'ONCHAIN_TX')
   const payRequest = payIndex === -1 ? null : paymentRequestFromTask(f.campaign.tasks[payIndex], DEPLOYMENT_CHAIN.id)
+  const verifyTask = verifyId ? f.campaign.tasks.find((t) => t.id === verifyId) ?? null : null
+  const participants = f.numbers ? [ME, wallet(1), wallet(2)].map((address, i) => ({ address, tasksCompleted: 3 - i, claimed: false })) : []
 
   return (
     <>
@@ -371,7 +495,7 @@ export function CampaignFixtures() {
         taskErrors={f.taskErrors ?? {}}
         isJoined={!!f.joined}
         onConnect={() => {}}
-        onStartTask={(_, type) => type === 'ONCHAIN_TX' && setPayOpen(true)}
+        onStartTask={(taskId, type) => (type === 'ONCHAIN_TX' ? setPayOpen(true) : setVerifyId(taskId))}
         onRecordEnd={() => {}}
         isRecordingEnd={false}
         onCopyLink={() => {}}
@@ -380,7 +504,21 @@ export function CampaignFixtures() {
         onStatusChange={() => {}}
         extraChips={<ExampleChip />}
         claimOverride={f.claim?.(f.campaign)}
+        moreNumbers={
+          f.numbers ? <CampaignAnalytics campaign={f.campaign} participants={participants} participantAddresses={participants.map((p) => p.address)} isLoading={false} /> : undefined
+        }
       />
+      {verifyTask && (
+        <TaskVerificationForm
+          isOpen={!!verifyId}
+          onOpenChange={(open) => !open && setVerifyId(null)}
+          taskId={verifyTask.id}
+          taskType={verifyTask.type}
+          campaignId={ID}
+          task={verifyTask}
+          onVerify={async () => {}}
+        />
+      )}
       {payRequest && (
         <PaymentTaskDialog
           open={payOpen}
