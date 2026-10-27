@@ -60,8 +60,10 @@ export const claims = {
   tierModuleFixed: true,
   /** PR #23: tiered campaigns with zero participants can be cancelled for an immediate refund. */
   tieredCancelLive: true,
-  /** PR #25: SIGNER and SETTLER roles held by wallets other than the admin (check hasRole). */
-  rolesSplit: true,
+  /** PR #25: SIGNER and SETTLER roles held by wallets other than the admin (check hasRole).
+   * false: the Sepolia redeploy keeps ONE wallet for every role (founder decision 2026-10-27,
+   * to launch fast; the split comes later). Flip only once hasRole shows separate holders. */
+  rolesSplit: false,
   /** Host-close guard (OUT-C03): a host can't close a list campaign with participants and no list. */
   hostCloseGuarded: true,
   /** NFT-custody fix (OUT-C02): an NFT leaves escrow only through its own campaign. */

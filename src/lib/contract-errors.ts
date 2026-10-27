@@ -248,8 +248,8 @@ const MESSAGES: Record<string, Entry> = {
   },
   Web3Campaigns__AccountFlagged: {
     title: 'This wallet can’t take part right now',
-    // No anonymous "contact us" (landing.ts founderContact defaults to null → GitHub).
-    message: 'If you think that’s a mistake, open an issue on DappDrop’s GitHub.',
+    // The founder's address for this case (founder decision 2026-10-27).
+    message: 'If you think that’s a mistake, email dheerajshrivastav98@gmail.com.',
   },
   Web3Campaigns__NotInActivePeriod: {
     title: 'This campaign isn’t running',
