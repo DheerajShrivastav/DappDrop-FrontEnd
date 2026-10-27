@@ -1,8 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { CheckCircle2, Loader2, MessageSquare, Send } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button, Spinner } from '@/components/app/button'
+import { InlineError } from '@/components/app/field'
 import config from '@/app/config'
 
 type Platform = 'discord' | 'telegram'
@@ -13,6 +13,9 @@ type Linked = { username: string | null } | null
  * connect or disconnect it. The link lives on the server (Discord OAuth / Telegram Login Widget,
  * both proven by the platform); verify-task checks membership ONLY for that linked account, so
  * nothing typed here could ever stand in for someone else's.
+ *
+ * Monolith design (launch/v0.7.0): a hairline panel; the state in words ("Checking…",
+ * "Discord connected as …", "Connect your Discord account"); the one red only for errors.
  */
 export function LinkedAccountPanel({
   platform,
@@ -124,44 +127,41 @@ export function LinkedAccountPanel({
     }
   }
 
-  const Icon = platform === 'discord' ? MessageSquare : Send
   return (
-    <div className="w-full space-y-3 rounded-lg border p-4">
+    <div className="grid gap-3 rounded-[10px] border border-rule bg-sunk p-4" data-linked-account={loading ? 'loading' : linked ? 'linked' : 'unlinked'}>
       {loading ? (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Checking your {name} connection…
+        <p className="inline-flex items-center gap-2 text-small text-ink-2" role="status">
+          <Spinner /> Checking your {name} connection…
         </p>
       ) : linked ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="flex min-w-0 items-center gap-2 text-sm">
-            <CheckCircle2 className="h-4 w-4 shrink-0" />
-            <span className="truncate">
-              {name} connected{linked.username ? <> as <strong>{linked.username}</strong></> : null}
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <p className="min-w-0 text-small text-ink [overflow-wrap:anywhere]">
+            <span aria-hidden="true" className="mr-1.5 font-mono text-signal">
+              ✓
             </span>
+            {name} connected{linked.username ? <> as <strong className="font-semibold">{linked.username}</strong></> : null}
           </p>
-          <Button type="button" variant="ghost" size="sm" onClick={disconnect} disabled={busy}>
+          <Button variant="ghost" size="sm" onClick={disconnect} loading={busy}>
             Disconnect
           </Button>
         </div>
       ) : (
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Connect your {name} account. We check membership for this account only, and it can be
-            linked to one wallet at a time.
+        <div className="grid gap-3">
+          <p className="text-small text-ink-2">
+            Connect your {name} account. We check membership for this account only, and it can be linked to one wallet at a time.
           </p>
           {platform === 'discord' ? (
-            <Button type="button" onClick={connectDiscord} disabled={busy} className="w-full">
-              {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icon className="mr-2 h-4 w-4" />}
-              Connect Discord
+            <Button onClick={connectDiscord} loading={busy} block>
+              {busy ? 'Waiting for Discord…' : 'Connect Discord'}
             </Button>
           ) : config.telegramBotUsername ? (
-            <div ref={widgetRef} className="flex min-h-10 justify-center" />
+            <div ref={widgetRef} className="flex min-h-11 justify-center" />
           ) : (
-            <p className="text-sm text-destructive">Telegram sign-in isn&apos;t configured on this site.</p>
+            <InlineError>Telegram sign-in isn’t set up on this site yet, so Telegram tasks can’t be checked.</InlineError>
           )}
         </div>
       )}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <InlineError>{error}</InlineError>}
     </div>
   )
 }

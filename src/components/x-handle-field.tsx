@@ -1,29 +1,26 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { useEffect, useId, useState } from 'react'
+import { Button } from '@/components/app/button'
+import { InlineError, Input } from '@/components/app/field'
 import { normalizeXHandle } from '@/lib/x-task-fields'
 
 /**
- * The participant's X handle — saved once per wallet and prefilled everywhere after. It is NOT
+ * The participant's X handle, saved once per wallet and prefilled everywhere after. It is NOT
  * verified on its own (hosts see it labelled as such); proof-by-post is what checks it, by
  * comparing it to the real author of the post.
+ *
+ * Monolith design (launch/v0.7.0): the app field (label, help, 48 px control) with [Save handle]
+ * beside it, and "✓ Saved" in words once the saved handle matches what's typed.
  */
-export function XHandleField({
-  required,
-  onSavedChange,
-}: {
-  required?: boolean
-  onSavedChange?: (handle: string | null) => void
-}) {
+export function XHandleField({ required, onSavedChange }: { required?: boolean; onSavedChange?: (handle: string | null) => void }) {
   const [saved, setSaved] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const auto = useId()
+  const id = `xh${auto.replace(/:/g, '')}`
 
   useEffect(() => {
     let cancelled = false
@@ -71,29 +68,50 @@ export function XHandleField({
     }
   }
 
+  const helpId = `${id}-help`
+  const errorId = `${id}-error`
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor="x-handle">
-        Your X handle{' '}
-        <span className="font-normal text-muted-foreground">
-          {required ? '(must match your post)' : '(optional · not verified · shown to the host)'}
-        </span>
-      </Label>
-      <div className="flex gap-2">
+    <div className="grid content-start gap-[0.45rem]" data-x-handle={loading ? 'loading' : saved && !dirty ? 'saved' : 'unsaved'}>
+      <label htmlFor={id} className="text-[0.9375rem] font-semibold text-ink">
+        Your X handle
+        {!required && <span className="ml-1.5 text-[0.8125rem] font-normal text-ink-3">(optional)</span>}
+      </label>
+      <p id={helpId} className="-mt-0.5 text-[0.8125rem] leading-snug text-ink-2">
+        {required ? 'It must match the author of your post.' : 'Not verified. The host sees it next to your wallet.'}
+      </p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Input
-          id="x-handle"
+          id={id}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && dirty && draft.trim()) {
+              e.preventDefault()
+              save()
+            }
+          }}
           placeholder="@you"
           autoComplete="off"
+          spellCheck={false}
           disabled={loading}
-          className="min-w-0"
+          aria-describedby={error ? `${helpId} ${errorId}` : helpId}
+          aria-invalid={error ? true : undefined}
+          className="min-w-0 flex-1 basis-40"
         />
-        <Button type="button" variant="outline" onClick={save} disabled={loading || saving || !dirty || !draft.trim()}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : saved && !dirty ? 'Saved' : 'Save'}
-        </Button>
+        {saved && !dirty ? (
+          <span className="font-mono text-[0.8125rem] text-ink-2" role="status">
+            <span aria-hidden="true" className="mr-1 text-signal">
+              ✓
+            </span>
+            Saved
+          </span>
+        ) : (
+          <Button variant="secondary" size="sm" onClick={save} loading={saving} disabled={loading || !draft.trim()} disabledReason={loading ? undefined : 'Type your handle first.'}>
+            {saving ? 'Saving…' : 'Save handle'}
+          </Button>
+        )}
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && <InlineError id={errorId}>{error}</InlineError>}
     </div>
   )
 }
