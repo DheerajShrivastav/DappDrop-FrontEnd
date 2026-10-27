@@ -17,7 +17,7 @@ const details: Partial<CampaignFormValues> = {
 }
 const tasks: CampaignFormValues['tasks'] = [
   { type: 'JOIN_DISCORD', description: 'Join the Example Discord server', verificationData: '1024849645714206720', discordInviteLink: 'https://discord.gg/example', isOptional: false },
-  { type: 'SOCIAL_FOLLOW', description: 'Follow @example on X', isOptional: true },
+  { type: 'SOCIAL_FOLLOW', description: 'Follow @example on X', xHandle: '@example', isOptional: true },
   {
     type: 'ONCHAIN_TX',
     description: 'Send 0.001 Sepolia ETH to the Example project wallet',
@@ -27,6 +27,13 @@ const tasks: CampaignFormValues['tasks'] = [
     amount: '0',
     isOptional: false,
   },
+]
+// The X task fields (#45): a follow (handle), a like (post link, wrong here) and a post (the
+// text the post must include, missing here), so Continue shows both X field errors.
+const xTasks: CampaignFormValues['tasks'] = [
+  { type: 'SOCIAL_FOLLOW', description: 'Follow @example on X', xHandle: '@example', isOptional: true },
+  { type: 'SOCIAL_LIKE', description: 'Like our launch post', xPostUrl: 'https://x.com/example', isOptional: true },
+  { type: 'SOCIAL_POST', description: 'Tell people why you’re testing Example', xRequiredText: '', isOptional: false },
 ]
 const erc20 = (extra: Record<string, unknown> = {}) =>
   ({ type: 'ERC20', tokenAddress: '0x', amount: '2500', name: '', settlementMode: 'MERKLE', rankTiers: [], scoreTiers: [], taskPoints: [], ...extra }) as CampaignFormValues['reward']
@@ -55,6 +62,7 @@ const STATES: Record<string, { wallet: WizardWallet; fixture: WizardFixture; not
   'details-errors': { wallet: host, fixture: { step: 1, aiOpen: false, values: { title: 'Ex' }, continueOnMount: true }, note: 'Step 1, Continue with errors (summary + inline)' },
   'details-filled': { wallet: host, fixture: { step: 1, aiOpen: false, values: { ...details, tasks } }, note: 'Step 1, filled' },
   tasks: { wallet: host, fixture: { step: 2, values: { ...details, tasks }, collapseFirst: 2, continueOnMount: true, feeCapNote: true }, note: 'Step 2 (the mockup): two collapsed tasks, a payment task with an error; fee-cap note previewed' },
+  'tasks-x': { wallet: host, fixture: { step: 2, values: { ...details, tasks: xTasks }, continueOnMount: true }, note: 'Step 2, X tasks: handle, post link (error) and required text (error)' },
   rewards: { wallet: host, fixture: { step: 3, values: full(erc20()) }, note: 'Step 3, equal split' },
   'rewards-ranked': {
     wallet: host,

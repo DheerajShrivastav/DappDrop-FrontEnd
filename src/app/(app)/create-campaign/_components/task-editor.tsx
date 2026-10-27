@@ -1,7 +1,7 @@
 'use client'
 
 import { Controller, useFormContext, useWatch } from 'react-hook-form'
-import { Button, Field, Input, LockedField, VerificationChip, controlClass } from '@/components/app'
+import { Button, CharCount, Field, Input, LockedField, VerificationChip, controlClass } from '@/components/app'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import config from '@/app/config'
 import { DEPLOYMENT_CHAIN } from '@/lib/deployment-chain'
@@ -9,6 +9,7 @@ import { HUMANITY_PRESETS } from '@/lib/humanity-presets'
 import { isSelfReportedTask, SELF_REPORTED_TASK_NOTE, TASK_VERIFICATION_METHOD } from '@/lib/task-types'
 import type { TaskType } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { X_REQUIRED_TEXT_MAX } from '@/lib/x-task-fields'
 import { TASK_TYPE_OPTIONS, fieldId, taskTypeLabel, type CampaignFormValues } from './campaign-form'
 import { CheckRow, Notice, SetupChecklist } from './wizard-ui'
 
@@ -139,6 +140,48 @@ export function TaskEditor({
           </Field>
         )}
       />
+
+      {/* X task fields (#45), saved to the task's metadata. The participant's X button uses
+          them (re-validated there), and SOCIAL_POST's server check reads the required text. */}
+      {type === 'SOCIAL_FOLLOW' && (
+        <Controller
+          control={control}
+          name={`tasks.${index}.xHandle`}
+          render={({ field, fieldState }) => (
+            <Field id={fieldId(`tasks.${index}.xHandle`)} label="X handle to follow" help="The account participants follow. A profile link works too." error={fieldState.error?.message}>
+              {(p) => <Input {...p} placeholder="@yourproject" autoComplete="off" spellCheck={false} {...field} value={field.value ?? ''} />}
+            </Field>
+          )}
+        />
+      )}
+      {(type === 'SOCIAL_LIKE' || type === 'RETWEET') && (
+        <Controller
+          control={control}
+          name={`tasks.${index}.xPostUrl`}
+          render={({ field, fieldState }) => (
+            <Field id={fieldId(`tasks.${index}.xPostUrl`)} label="Post link" help={`The post participants ${type === 'RETWEET' ? 'repost' : 'like'}.`} error={fieldState.error?.message}>
+              {(p) => <Input {...p} placeholder="https://x.com/yourproject/status/1234567890" autoComplete="off" spellCheck={false} {...field} value={field.value ?? ''} />}
+            </Field>
+          )}
+        />
+      )}
+      {type === 'SOCIAL_POST' && (
+        <Controller
+          control={control}
+          name={`tasks.${index}.xRequiredText`}
+          render={({ field, fieldState }) => (
+            <Field
+              id={fieldId(`tasks.${index}.xRequiredText`)}
+              label="The post must include"
+              help="Text, a #hashtag or an @mention. Participants post it with a personal code, and we check the post is theirs."
+              error={fieldState.error?.message}
+              count={<CharCount value={field.value ?? ''} max={X_REQUIRED_TEXT_MAX} />}
+            >
+              {(p) => <Input {...p} placeholder="#YourProject or @yourproject" autoComplete="off" maxLength={X_REQUIRED_TEXT_MAX} {...field} value={field.value ?? ''} />}
+            </Field>
+          )}
+        />
+      )}
 
       {type === 'JOIN_DISCORD' && (
         <>

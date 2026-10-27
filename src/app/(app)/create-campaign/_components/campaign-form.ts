@@ -4,6 +4,7 @@ import { campaignDatesSchema } from '@/lib/campaign-timing'
 import { isPositiveDecimalString, nftRowsFromStrings, nftRowsProblem, rankTierProblem, scoreTierProblem } from '@/lib/reward-plan'
 import type { TaskType } from '@/lib/types'
 import { claims } from '@/config/claims'
+import { normalizeRequiredText, normalizeXHandle, parseXPostUrl, X_REQUIRED_TEXT_MAX } from '@/lib/x-task-fields'
 
 /**
  * The wizard's form model: the zod schema, its value type and the task-type list. Moved out of
@@ -30,6 +31,8 @@ export const taskSchema = z
   .object({
     type: z.enum([
       'SOCIAL_FOLLOW',
+      'SOCIAL_LIKE',
+      'SOCIAL_POST',
       'JOIN_DISCORD',
       'JOIN_TELEGRAM',
       'RETWEET',
@@ -42,6 +45,10 @@ export const taskSchema = z
     verificationData: z.string().optional(),
     // Optional = participants can skip it and still qualify for the reward (on-chain isOptional).
     isOptional: z.boolean().optional(),
+    // X task fields → CampaignTaskMetadata.metadata (see src/lib/x-task-fields.ts).
+    xHandle: z.string().optional(), // SOCIAL_FOLLOW
+    xPostUrl: z.string().optional(), // SOCIAL_LIKE / RETWEET
+    xRequiredText: z.string().optional(), // SOCIAL_POST
     discordInviteLink: z.string().optional(),
     telegramInviteLink: z.string().optional(),
     // Humanity Protocol presets for HUMANITY_VERIFICATION tasks (multi-select)
@@ -93,6 +100,20 @@ export const taskSchema = z
           })
         }
       }
+    }
+
+    if (data.type === 'SOCIAL_FOLLOW' && !normalizeXHandle(data.xHandle)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Enter the X handle to follow, e.g. @yourproject.', path: ['xHandle'] })
+    }
+    if ((data.type === 'SOCIAL_LIKE' || data.type === 'RETWEET') && !parseXPostUrl(data.xPostUrl)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Paste the post link, e.g. https://x.com/yourproject/status/123…', path: ['xPostUrl'] })
+    }
+    if (data.type === 'SOCIAL_POST' && !normalizeRequiredText(data.xRequiredText)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Enter the text, #hashtag or @mention the post must include (up to ${X_REQUIRED_TEXT_MAX} characters).`,
+        path: ['xRequiredText'],
+      })
     }
 
     if (data.type === 'JOIN_DISCORD') {
@@ -272,6 +293,12 @@ export type CampaignFormValues = z.infer<typeof campaignSchema>
 export const TASK_TYPE_OPTIONS: { value: TaskType; label: string; checkLine?: string }[] = [
   { value: 'SOCIAL_FOLLOW', label: 'Follow an account on X' },
   { value: 'RETWEET', label: 'Repost a post on X' },
+  { value: 'SOCIAL_LIKE', label: 'Like a post on X' },
+  {
+    value: 'SOCIAL_POST',
+    label: 'Write a post on X',
+    checkLine: 'We read the public post and check it has the participant’s code and your text, and that their saved X handle wrote it.',
+  },
   { value: 'JOIN_DISCORD', label: 'Join a Discord server', checkLine: 'Our bot checks that the participant is a member of your server.' },
   { value: 'JOIN_TELEGRAM', label: 'Join a Telegram group or channel', checkLine: 'Our bot checks that the participant is in your group or channel.' },
   { value: 'ONCHAIN_TX', label: 'On-chain payment (beta)', checkLine: 'We check the payment on-chain, and that it came from the participant’s own wallet.' },

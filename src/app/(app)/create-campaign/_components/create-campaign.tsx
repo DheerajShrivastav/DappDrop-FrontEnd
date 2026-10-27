@@ -50,6 +50,8 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { getSession, signAuthMessage } from '@/lib/wallet-auth'
 import { isSelfReportedTask, TASK_VERIFICATION_METHOD } from '@/lib/task-types'
+import { normalizeRequiredText, normalizeXHandle, parseXPostUrl } from '@/lib/x-task-fields'
+import { parseXTarget } from '@/lib/x-intents'
 import type { TaskType } from '@/lib/types'
 import {
   createDraftCampaignWithTasks,
@@ -769,6 +771,26 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
                 },
               }),
             })
+          } else if (
+            task.type === 'SOCIAL_FOLLOW' ||
+            task.type === 'SOCIAL_LIKE' ||
+            task.type === 'RETWEET' ||
+            task.type === 'SOCIAL_POST'
+          ) {
+            // X task fields (#45). Normalised here; re-validated wherever they're used (intent
+            // links, proof-by-post).
+            const post = parseXPostUrl(task.xPostUrl)
+            const metadata =
+              task.type === 'SOCIAL_FOLLOW'
+                ? { xHandle: normalizeXHandle(task.xHandle) }
+                : task.type === 'SOCIAL_POST'
+                  ? { xRequiredText: normalizeRequiredText(task.xRequiredText) }
+                  : { xPostId: post?.id ?? null, xPostUrl: post?.url ?? null }
+            await postTaskMetadata(i, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ campaignId: Number(campaignId), taskIndex: i, taskType: task.type, metadata }),
+            })
           } else if (task.type === 'ONCHAIN_TX' && task.paymentRequired) {
             await postTaskMetadata(i, {
               method: 'POST',
@@ -1022,7 +1044,17 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
         shortDescription: result.shortDescription,
         description: result.description,
         // AI tasks get the same default as hand-added ones: self-reported → optional.
-        tasks: result.tasks.map((t) => ({ ...t, isOptional: isSelfReportedTask(t.type) })),
+        tasks: result.tasks.map((t) => {
+          // Prefill X fields from the AI's wording when it names a handle / post (#45; the host
+          // can edit them).
+          const target = parseXTarget(t.description)
+          return {
+            ...t,
+            isOptional: isSelfReportedTask(t.type),
+            xHandle: target.handle ? `@${target.handle}` : undefined,
+            xPostUrl: target.handle && target.tweetId ? `https://x.com/${target.handle}/status/${target.tweetId}` : undefined,
+          }
+        }),
       })
       toast({
         title: 'Draft ready',
