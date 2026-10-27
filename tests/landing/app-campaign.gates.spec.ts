@@ -112,6 +112,13 @@ const STATES = [
   'p-open-visitor',
   'p-open-tasks',
   'p-pay',
+  'p-discord-connect',
+  'p-discord-linked',
+  'p-telegram-linked',
+  'p-telegram-unset',
+  'p-post',
+  'p-post-no-handle',
+  'p-follow',
   'p-full',
   'p-record-end',
   'p-waiting',
@@ -132,11 +139,12 @@ const STATES = [
   'h-record-end',
   'h-publish',
   'h-review',
+  'h-numbers',
   'h-close',
   'h-closed',
   'h-swept',
 ]
-const ALL_WIDTHS = new Set(['p-open-tasks', 'p-pay', 'p-claimable', 'p-claim-fallback', 'h-publish', 'h-review'])
+const ALL_WIDTHS = new Set(['p-open-tasks', 'p-pay', 'p-discord-connect', 'p-post', 'p-claimable', 'p-claim-fallback', 'h-publish', 'h-review'])
 
 test.describe('campaign page fixtures (dev server)', () => {
   test.skip(!DEV, 'set GATES_DEV_URL to a dev server to gate the wallet-only states')
@@ -235,5 +243,77 @@ test.describe('campaign page fixtures (dev server)', () => {
     await expect(page.getByRole('button', { name: /^Start/ })).toHaveCount(1)
     await openCampaign(page, `${DEV}/_dev/campaign?state=p-full`)
     await expect(page.locator('main')).toContainText('This campaign is full (500 of 500).')
+  })
+
+  // #44: Discord / Telegram accounts are linked on the server, never typed in.
+  test('linked accounts: the check stays disabled, with its reason, until an account is linked; no ID field', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-discord-connect`)
+    const dialog = page.getByRole('dialog', { name: 'Join the Discord server' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.locator('[data-linked-account="unlinked"]')).toBeVisible()
+    await expect(dialog.getByRole('button', { name: 'Connect Discord' })).toBeEnabled()
+    const check = dialog.getByRole('button', { name: 'Check my membership' })
+    await expect(check).toBeDisabled()
+    await expect(check).toHaveAccessibleDescription('Connect your Discord account first.')
+    // Nothing identifying can be typed: no text inputs at all.
+    await expect(dialog.locator('input')).toHaveCount(0)
+
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-discord-linked`)
+    const linked = page.getByRole('dialog', { name: 'Join the Discord server' })
+    await expect(linked.locator('[data-linked-account="linked"]')).toContainText('Discord connected as example_tester')
+    await expect(linked.getByRole('button', { name: 'Disconnect' })).toBeVisible()
+    await expect(linked.getByRole('button', { name: 'Check my membership' })).toBeEnabled()
+
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-telegram-linked`)
+    await expect(page.getByRole('dialog', { name: 'Join the Telegram group' }).locator('[data-linked-account="linked"]')).toContainText('Telegram connected as example_tester')
+  })
+
+  // #45: SOCIAL_POST is a real check (proof-by-post).
+  test('proof-by-post: the code and required text, the compose link, and "Check my post" only with a handle and a valid link', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-post`)
+    const dialog = page.getByRole('dialog', { name: 'Write a post on X' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText('Post checked by our app')
+    await expect(dialog).not.toContainText('Self-reported')
+    await expect(dialog.locator('.dd-kv')).toContainText('#ExampleWeek')
+    await expect(dialog.locator('.dd-kv')).toContainText('DD-EXAMPL')
+    await expect(dialog.getByRole('link', { name: /Write the post on X/ })).toHaveAttribute('href', `https://x.com/intent/post?text=${encodeURIComponent('#ExampleWeek DD-EXAMPL')}`)
+    await expect(dialog.locator('[data-x-handle="saved"]')).toBeVisible()
+    const check = dialog.getByRole('button', { name: 'Check my post' })
+    await expect(check).toBeDisabled()
+    await expect(check).toHaveAccessibleDescription('Paste the link to your post.')
+    const link = dialog.getByLabel('Link to your post')
+    await link.fill('https://example.com/not-x')
+    await expect(check).toBeDisabled()
+    await link.fill('https://x.com/example_tester/status/1234567890')
+    await expect(check).toBeEnabled()
+
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-post-no-handle`)
+    const fresh = page.getByRole('dialog', { name: 'Write a post on X' })
+    const check2 = fresh.getByRole('button', { name: 'Check my post' })
+    await expect(check2).toHaveAccessibleDescription('Save your X handle first.')
+    await fresh.getByLabel('Your X handle').fill('@example_tester')
+    await fresh.getByRole('button', { name: 'Save handle' }).click()
+    await expect(fresh.locator('[data-x-handle="saved"]')).toContainText('Saved')
+    await expect(check2).toHaveAccessibleDescription('Paste the link to your post.')
+  })
+
+  test('self-reported X task: labelled, the host’s handle in the intent link, and "I’ve done it" only after opening X', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-follow`)
+    const dialog = page.getByRole('dialog', { name: 'Follow on X' })
+    await expect(dialog).toContainText('Self-reported')
+    await expect(dialog.getByRole('link', { name: /Follow @example on X/ })).toHaveAttribute('href', 'https://x.com/intent/follow?screen_name=example')
+    const done = dialog.getByRole('button', { name: 'I’ve done it' })
+    await expect(done).toBeDisabled()
+    await expect(done).toHaveAccessibleDescription('Open the task on X first.')
+    await expect(dialog.getByLabel('Your X handle')).toBeVisible()
+  })
+
+  test('host: More numbers lists participants’ X handles, labelled unverified', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=h-numbers`)
+    const table = page.locator('details.cp-details table')
+    await expect(table).toContainText('X handle')
+    await expect(table).toContainText('(unverified)')
+    await expect(table.getByRole('link', { name: '@example_tester' })).toHaveAttribute('href', 'https://x.com/example_tester')
   })
 })

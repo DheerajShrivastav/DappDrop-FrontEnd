@@ -88,3 +88,50 @@ test.describe('/create-campaign (08-site phase 2)', () => {
     expect(await res.text()).not.toContain('Create-campaign fixture')
   })
 })
+
+// ---------------------------------------------------------------------------------------------
+// Dev fixture (only with GATES_DEV_URL): #45's X task fields in the redesigned wizard.
+// ---------------------------------------------------------------------------------------------
+const DEV = process.env.GATES_DEV_URL
+
+test.describe('/create-campaign fixtures (dev server)', () => {
+  test.skip(!DEV, 'set GATES_DEV_URL to a dev server to gate the wallet-only wizard states')
+  test.describe.configure({ timeout: 180_000 })
+
+  for (const t of THEMES) {
+    for (const [width, height] of [
+      [375, 812],
+      [1440, 900],
+    ]) {
+      test(`tasks-x · ${t} · ${width} px: full-page axe 0, no horizontal scroll`, async ({ page }) => {
+        await remember(page, t)
+        await page.setViewportSize({ width, height })
+        await page.goto(`${DEV}/_dev/create-campaign?state=tasks-x`, { waitUntil: 'load', timeout: 120_000 })
+        await page.locator('[data-task-editor="2"]').waitFor({ timeout: 60_000 })
+        await page.evaluate(() => document.fonts.ready)
+        expect(await axe(page)).toEqual([])
+        const { sw, cw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }))
+        expect(sw).toBe(cw)
+      })
+    }
+  }
+
+  test('tasks-x: the follow handle, like post link and post text fields, with their errors on Continue', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(`${DEV}/_dev/create-campaign?state=tasks-x`, { waitUntil: 'load', timeout: 120_000 })
+    await page.locator('[data-task-editor="2"]').waitFor({ timeout: 60_000 })
+    await expect(page.locator('[data-task-editor="0"]').getByLabel('X handle to follow')).toHaveValue('@example')
+    const like = page.locator('[data-task-editor="1"]').getByLabel('Post link')
+    await expect(like).toHaveAttribute('aria-invalid', 'true')
+    await expect(page.locator('[data-task-editor="1"]')).toContainText('Paste the post link')
+    const post = page.locator('[data-task-editor="2"]').getByLabel('The post must include')
+    await expect(post).toHaveAttribute('aria-invalid', 'true')
+    await expect(page.locator('[data-task-editor="2"]')).toContainText('Post checked by our app')
+    // The fixed values clear the errors.
+    await like.fill('https://x.com/example/status/1234567890')
+    await post.fill('#ExampleWeek')
+    await page.getByRole('button', { name: /Continue/ }).first().click()
+    // Valid X fields: Continue moves on to the rewards step.
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('What do they get?')
+  })
+})
