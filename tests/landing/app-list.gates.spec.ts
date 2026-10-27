@@ -8,6 +8,7 @@
  * in production that route must 404.
  */
 import { test, expect, type Page } from '@playwright/test'
+import { deployedCampaignCount } from './deployment'
 
 const AXE = require.resolve('axe-core/axe.min.js')
 const THEMES = ['obsidian', 'porcelain'] as const
@@ -92,6 +93,25 @@ test.describe('app list + dashboard (08-site phase 2, Builder B)', () => {
     await expect(page.locator('main')).toContainText('Sepolia testnet')
     const text = await page.locator('main').innerText()
     expect(text).not.toMatch(/Reward TBD|600 × 400|Reward for /)
+  })
+
+  // The v0.7.0 redeploy launched with no campaigns (ids restart at 1, and its entrypoint hides
+  // nothing in src/config/hidden-campaigns.ts): the honest empty state, never invented cards.
+  test('/campaigns matches the deployment: "No live campaigns yet" while it has none, else campaign cards', async ({ page }) => {
+    const count = await deployedCampaignCount()
+    await openApp(page, '/campaigns')
+    await campaignsSettled(page)
+    const list = page.locator('section[aria-label="Campaign list"]')
+    if (count === 0) {
+      await expect(list.getByRole('heading', { name: 'No live campaigns yet.' })).toBeVisible()
+      await expect(list.getByRole('link', { name: 'Start a campaign' })).toHaveAttribute('href', '/create-campaign')
+      await expect(list.getByRole('link', { name: 'how it works' })).toHaveAttribute('href', '/how-it-works')
+      await expect(list.locator('a[href^="/campaign/"]')).toHaveCount(0)
+      // Nothing hidden either: the toggle only exists when there are hidden test runs.
+      await expect(page.getByRole('button', { name: 'Show them' })).toHaveCount(0)
+    } else {
+      await expect(list.locator('a[href^="/campaign/"]').first()).toBeVisible()
+    }
   })
 
   test('/campaigns: the filters are named controls and work from the keyboard', async ({ page }) => {

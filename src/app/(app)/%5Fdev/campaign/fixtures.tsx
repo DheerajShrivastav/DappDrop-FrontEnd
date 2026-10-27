@@ -335,6 +335,7 @@ const FIXTURES: Record<string, Fixture> = {
   },
   'p-full': { label: 'Participant · open · campaign full', campaign: campaign({ ...OPEN, participants: 500, settlement: merkle() }), connected: true },
   'p-record-end': { label: 'Participant · end time passed, not recorded', campaign: campaign({ status: 'Open', settlement: merkle() }), connected: true, joined: true, userTasks: done(['t1', 't2', 't3']) },
+  'p-record-end-visitor': { label: 'Participant · end time passed, not recorded · not connected', campaign: campaign({ status: 'Open', settlement: merkle() }) },
   'p-waiting': { label: 'Participant · ended, list next', campaign: campaign({ settlement: FINALIZING }), connected: true, joined: true, userTasks: done(['t1', 't2', 't3']) },
   'p-review': {
     label: 'Participant · list public, 24 h review',

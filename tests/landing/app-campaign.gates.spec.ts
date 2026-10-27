@@ -2,8 +2,12 @@
  * 08-site phase 2 (Builder A): gates for the campaign page, /campaign/[id].
  *
  * Production build (npm run build && GATES_PORT=3201 npm run test:gates):
- * - real campaigns from the deployment (RPC fallback): FULL-page axe 0 (not just the shell) in
- *   both themes at 320/375/768/1440, no horizontal scroll, one h1, the ribbon, the rail;
+ * - /campaign/1 on the gated deployment, read live (RPC fallback): FULL-page axe 0 in both themes
+ *   at 320/375/768/1440 and no horizontal scroll, then what the chain says it must be. The v0.7.0
+ *   redeploy (2026-10-27) launched with getCampaignCount() = 0, so until its first campaign
+ *   exists this is the in-page not-found state; after that it's a real campaign (one h1, the
+ *   ribbon, the rail). (Before the redeploy these gates read v0.6.0's #4 and #6; their
+ *   state-specific checks moved to the p-claim-visitor / p-record-end-visitor fixtures below.)
  * - the not-found state; the dev fixture route is a 404.
  *
  * Wallet-only states (connected, host, claimable…) render only on the dev fixture route
@@ -11,6 +15,7 @@
  *   GATES_DEV_URL=http://localhost:3200 npx playwright test app-campaign
  */
 import { test, expect, type Page } from '@playwright/test'
+import { deployedCampaignCount } from './deployment'
 
 const AXE = require.resolve('axe-core/axe.min.js')
 const THEMES = ['obsidian', 'porcelain'] as const
@@ -20,9 +25,8 @@ const WIDTHS: [number, number][] = [
   [768, 1024],
   [1440, 900],
 ]
-// Real campaigns on the Sepolia deployment: #4 (NFT, list overdue: the claim panel's connect
-// state) and #6 (end time passed, not recorded: the ribbon's "not recorded yet").
-const REAL = ['/campaign/4', '/campaign/6'] as const
+// The gated deployment's first campaign id (ids restart at 1 on every redeploy).
+const FIRST = '/campaign/1'
 
 async function remember(page: Page, theme: string) {
   await page.addInitScript((t) => {
@@ -56,7 +60,7 @@ const overflow = (page: Page) => page.evaluate(() => document.documentElement.sc
 test.describe('campaign page (08-site phase 2)', () => {
   test.describe.configure({ timeout: 180_000 })
 
-  for (const path of REAL) {
+  for (const path of [FIRST]) {
     for (const t of THEMES) {
       for (const [width, height] of WIDTHS) {
         test(`${path} · ${t} · ${width} px: full-page axe 0, no horizontal scroll`, async ({ page }) => {
@@ -70,26 +74,33 @@ test.describe('campaign page (08-site phase 2)', () => {
     }
   }
 
-  test('/campaign/4: one h1 (the name), the ribbon with one current stop, the claim panel asks to connect, the rail', async ({ page }) => {
-    await openCampaign(page, '/campaign/4')
+  test('/campaign/1 is what the chain says: not found while the deployment has no campaigns, else a real campaign page', async ({ page }) => {
+    const count = await deployedCampaignCount()
+    await openCampaign(page, FIRST)
     await expect(page.locator('h1')).toHaveCount(1)
-    await expect(page).toHaveTitle(/^.+ · DappDrop$/)
-    const name = (await page.locator('h1').innerText()).trim()
-    await expect(page).toHaveTitle(`${name} · DappDrop`)
-    await expect(page.locator('.cp-ribbon [aria-current="step"]')).toHaveCount(1)
-    await expect(page.locator('[data-reward-state="connect"]')).toContainText('Connect your wallet to see if you have a reward.')
-    await expect(page.getByRole('complementary', { name: 'Campaign facts' })).toContainText('Sepolia testnet')
-    // The old page's invented and contradictory bits are gone.
-    await expect(page.locator('main')).not.toContainText(/Reward for|TBD|Campaign Info/)
+    if (count === 0) {
+      // v0.7.0 at launch: nothing to show, and the page says so instead of inventing a campaign.
+      await expect(page.getByText('We couldn’t find campaign #1.')).toBeVisible({ timeout: 60_000 })
+      await expect(page.getByText('It doesn’t exist on Sepolia testnet, or the network didn’t answer.')).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible()
+      await expect(page.getByRole('link', { name: 'Browse campaigns' })).toHaveAttribute('href', '/campaigns')
+      await expect(page.locator('.cp-ribbon')).toHaveCount(0)
+      await expect(page.getByRole('complementary', { name: 'Campaign facts' })).toHaveCount(0)
+    } else {
+      const name = (await page.locator('h1').innerText()).trim()
+      await expect(page).toHaveTitle(`${name} · DappDrop`)
+      await expect(page.locator('.cp-ribbon [aria-current="step"]')).toHaveCount(1)
+      await expect(page.getByRole('complementary', { name: 'Campaign facts' })).toContainText('Sepolia testnet')
+      await expect(page.locator('main')).not.toContainText(/Reward for|TBD|Campaign Info/)
+      // Not connected: nobody is offered a task action without a wallet.
+      await expect(page.getByRole('button', { name: /^Start/ })).toHaveCount(0)
+    }
   })
 
-  test('/campaign/6: the end is not recorded yet; tasks are closed and say when', async ({ page }) => {
-    await openCampaign(page, '/campaign/6')
-    await expect(page.locator('.cp-ribbon [aria-current="step"]')).toContainText('not recorded yet')
-    await expect(page.locator('main')).toContainText('Tasks closed when the campaign ended on')
-    // Not connected: nobody is offered a task action or "Record the end" without a wallet.
-    await expect(page.getByRole('button', { name: /^Start/ })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Record the end' })).toHaveCount(0)
+  test('the campaign one past the deployment’s count is not found', async ({ page }) => {
+    const next = (await deployedCampaignCount()) + 1
+    await page.goto(`/campaign/${next}`, { waitUntil: 'load' })
+    await expect(page.getByText(`We couldn’t find campaign #${next}.`)).toBeVisible({ timeout: 60_000 })
   })
 
   test('an unknown campaign renders the in-page not-found state with a way back', async ({ page }) => {
@@ -121,6 +132,7 @@ const STATES = [
   'p-follow',
   'p-full',
   'p-record-end',
+  'p-record-end-visitor',
   'p-waiting',
   'p-review',
   'p-claimable',
@@ -201,6 +213,25 @@ test.describe('campaign page fixtures (dev server)', () => {
     await expect(close).toBeDisabled()
     await expect(close).toHaveAccessibleDescription(/Publish the reward list first/)
     await expect(page.getByRole('button', { name: 'Publish the list' })).toBeEnabled()
+  })
+
+  // Moved from the v0.6.0 deployment's /campaign/4 (claims stage, not connected).
+  test('claims open, not connected: one h1 (the name), one current ribbon stop, the claim panel asks to connect, the rail', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-claim-visitor`)
+    await expect(page.locator('h1')).toHaveCount(1)
+    await expect(page.locator('.cp-ribbon [aria-current="step"]')).toHaveCount(1)
+    await expect(page.locator('[data-reward-state="connect"]')).toContainText('Connect your wallet to see if you have a reward.')
+    await expect(page.getByRole('complementary', { name: 'Campaign facts' })).toContainText('Sepolia testnet')
+    await expect(page.locator('main')).not.toContainText(/Reward for|TBD|Campaign Info/)
+  })
+
+  // Moved from the v0.6.0 deployment's /campaign/6 (end time passed, not recorded, not connected).
+  test('end not recorded, not connected: the ribbon says so, tasks are closed and say when, no actions without a wallet', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-record-end-visitor`)
+    await expect(page.locator('.cp-ribbon [aria-current="step"]')).toContainText('not recorded yet')
+    await expect(page.locator('main')).toContainText('Tasks closed when the campaign ended on')
+    await expect(page.getByRole('button', { name: /^Start/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Record the end' })).toHaveCount(0)
   })
 
   test('host: an open campaign has no End button; any wallet past the end time can record it', async ({ page }) => {
