@@ -76,7 +76,7 @@ export function CampaignAnalytics({
   if (participants.length === 0 && campaign.participants > 0) {
     return (
       <Card>
-        <CardHeader className="flex flex-row items-start sm:items-center justify-between space-y-0 gap-4 pb-4">
+        <CardHeader className="flex flex-row flex-wrap items-start sm:items-center justify-between space-y-0 gap-4 pb-4">
           <div className="space-y-1">
             <CardTitle>Campaign Participants</CardTitle>
             <CardDescription>
@@ -124,7 +124,7 @@ export function CampaignAnalytics({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start sm:items-center justify-between space-y-0 pb-4 gap-4">
+      <CardHeader className="flex flex-row flex-wrap items-start sm:items-center justify-between space-y-0 pb-4 gap-4">
         <div className="space-y-1">
           <CardTitle>Participant Analytics</CardTitle>
           <CardDescription>
@@ -132,12 +132,14 @@ export function CampaignAnalytics({
             rates, and reward distribution status.
           </CardDescription>
           {selfReportedCount > 0 && (
-            <p className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
+            // A <div>, not a <p>: SelfReportedBadge renders a <div> (invalid inside <p>; React's
+            // hydration error).
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground">
               <SelfReportedBadge />
               {selfReportedCount} of {campaign.tasks.length} task
               {campaign.tasks.length === 1 ? ' is' : 's are'} confirmed by participants themselves, so
               completion counts include unverified tasks.
-            </p>
+            </div>
           )}
         </div>
         <Button asChild variant="outline">

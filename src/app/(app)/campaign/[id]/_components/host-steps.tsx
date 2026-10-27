@@ -256,7 +256,9 @@ export function HostSteps({
           <summary>
             <span className="dd-link text-small">More numbers</span>
           </summary>
-          <div className="mt-4 grid gap-6">{moreNumbers}</div>
+          {/* minmax(0,1fr): the analytics table scrolls inside its own wrapper instead of widening
+              the page on a phone (#45 added a column to it). */}
+          <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-6">{moreNumbers}</div>
         </details>
       )}
 
