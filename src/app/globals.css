@@ -196,7 +196,8 @@
    --------------------------------------------------------------------------------------------- */
 @layer base {
     :root {
-        /* Light-only by design; also declared as <meta name="color-scheme"> (root viewport). */
+        /* The unthemed base. Every page renders a themed wrapper (.lp-theme / .app-theme), whose
+           :has() rules below set the color-scheme for the remembered theme. */
         color-scheme: light;
     }
 

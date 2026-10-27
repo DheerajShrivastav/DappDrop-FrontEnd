@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { siteOrigin } from '@/config/site';
 import { networkLabel } from '@/config/landing';
-import { THEME_SCRIPT } from '@/components/landing/theme';
+import { THEME_COLOR, THEME_SCRIPT } from '@/components/landing/theme';
 
 // The root layout is deliberately thin: it renders on every route, including the landing page,
 // which has a hard JS and font budget. App-only pieces live where they're used:
@@ -25,11 +25,12 @@ export const metadata: Metadata = {
     // the Newsreader wordmark.
 };
 
-// The fallback for routes outside both route groups (the root not-found). The Monolith pages
-// override it in src/app/(landing)/layout.tsx and src/app/(app)/layout.tsx.
+// The fallback for routes outside both route groups (the root not-found, which is Monolith-themed
+// too). The same values as src/app/(landing)/layout.tsx and src/app/(app)/layout.tsx: Obsidian
+// is the default; the CSS color-scheme follows a remembered Porcelain (globals.css).
 export const viewport: Viewport = {
-    colorScheme: 'light',
-    themeColor: '#F6F4EF',
+    colorScheme: 'dark',
+    themeColor: THEME_COLOR.obsidian,
 };
 
 export default function RootLayout({
@@ -42,7 +43,8 @@ export default function RootLayout({
             <head>
                 {/* 07-wow: sets <html data-theme> before first paint (no flash of the wrong theme).
                     Obsidian by default for everyone; Porcelain only when the visitor chose it.
-                    The themed tokens apply only inside the (landing) pages' .lp-theme wrapper. */}
+                    The themed tokens apply inside the .lp-theme (marketing, root 404) and
+                    .app-theme (app) wrappers. */}
                 <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
             </head>
             <body className="font-body antialiased min-h-screen flex flex-col bg-background" suppressHydrationWarning>
