@@ -8,6 +8,7 @@
  * landing-studio/07-wow/build-contract.md.
  */
 import { test, expect, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 
 // Playwright compiles specs to CommonJS, so require.resolve is available.
 const AXE = require.resolve('axe-core/axe.min.js')
@@ -510,7 +511,14 @@ test.describe('statement footer (founder brief 2026-10-14)', () => {
       const f = page.locator('footer[data-footer]')
       expect(await f.locator('nav h2').allTextContents()).toEqual(['Product', 'Trust', 'Developers', 'Company'])
       const trust = (await f.locator('ul[aria-label="Status"] > li').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim())
-      expect(trust).toEqual([expect.stringMatching(/^Public beta/), expect.stringMatching(/^Contracts verified on \S+/), 'Public code'])
+      // The deploy date shows once claims.contractsDeployedOn is set (the v0.7.0 redeploy set it).
+      const deployedOn = /contractsDeployedOn:\s*'(\d{4}-\d{2}-\d{2})'/.exec(readFileSync('src/config/claims.ts', 'utf8'))?.[1]
+      expect(trust).toEqual([
+        expect.stringMatching(/^Public beta/),
+        expect.stringMatching(/^Contracts verified on \S+/),
+        'Public code',
+        ...(deployedOn ? [`Contracts deployed ${deployedOn}`] : []),
+      ])
       // Founder decision 2026-10-15: no audit wording in the footer; one brand moment (no small wordmark).
       expect(await f.innerText()).not.toMatch(/audit/i)
       expect(await f.locator('a[aria-label="DappDrop home"]').count()).toBe(0)
