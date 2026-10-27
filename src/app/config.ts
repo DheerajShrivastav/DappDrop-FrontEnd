@@ -35,32 +35,26 @@ export type ChainAddressBook = {
 }
 
 // Versioned address book, keyed by chainId. Source of truth:
-// Dapp-Drop-Smart-Contract/docs/deployments/sepolia.md (v0.6.0, 2026-07-20).
+// Dapp-Drop-Smart-Contract/docs/deployments/sepolia.md (v0.7.0, 2026-10-27; contracts dev @ 5aa3e13).
 //
-// TODO(redeploy): the contracts redeploy (PRs #23-#26) deploys EVERY contract fresh and together
-// (never the new Web3Campaigns with an old module). On redeploy day, replace all five values below
-// with the new deployment's, from the deploy run's broadcast log / docs/deployments/sepolia.md,
-// and update the source line above. Until then they are today's v0.6.0 deployment, so the app
-// keeps working. The NEXT_PUBLIC_* env overrides below win over these, so a preview can point at
-// the new deployment before this file changes. Also update, in the same change:
-//   - subgraph/subgraph.yaml (entrypoint address + startBlock), then deploy a new subgraph;
-//   - src/config/claims.ts deployVersion / deployedTag / testsAtDeployed / contractsDeployedOn.
-// src/config/hidden-campaigns.ts needs nothing: it's keyed by entrypoint, so a new entrypoint
-// hides nothing until ids are added for it.
+// The v0.7.0 redeploy (contracts PRs #23-#26) deployed EVERY contract fresh and together; never
+// pair this Web3Campaigns with an older module. The NEXT_PUBLIC_* env overrides below win over these
+// values, so an override left pointing at v0.6.0 would keep the app on the old contracts. With a
+// new deployment also update subgraph/subgraph.yaml and src/config/claims.ts (deploy facts).
+// src/config/hidden-campaigns.ts is keyed by entrypoint, so a new entrypoint hides nothing.
 const ADDRESS_BOOK: Record<number, ChainAddressBook> = {
   // Sepolia (dev/beta)
   11155111: {
-    // TODO(redeploy): the new Web3Campaigns.
-    entrypoint: '0xf0A2Fac02ffBA4A7762f2f0d611253B6C97bB1B3',
-    // TODO(redeploy): the new (fixed, PR #23) OnChainRewardModule.
-    onChainRewardModule: '0x167475bcB8BE2346A8DFAbdAC017e388B56F35B4',
-    // TODO(redeploy): the new NFTSettlementModule.
-    nftSettlementModule: '0xf85Fe37e9dA3Ae5529a39fc47eb6780934f69747',
-    // TODO(redeploy): the new FeeModule's address only if the deploy set FEE_BPS > 0; otherwise
-    // keep null (FEE_BPS unset = no FeeModule, fees disabled; PRD Q2 default: gross = net).
+    // v0.7.0 Web3Campaigns (contracts PRs #23-#26).
+    entrypoint: '0xC562505899faCee1F8f755F009cf6FbA3EA3E8Da',
+    // v0.7.0 OnChainRewardModule (fixed, PR #23).
+    onChainRewardModule: '0xDF0A0dd1459401EB75dBD2B64b9713B59626D19B',
+    // v0.7.0 NFTSettlementModule.
+    nftSettlementModule: '0xeb1229154D92234641000991345Ed725B112dB09',
+    // No FeeModule: the v0.7.0 deploy ran with FEE_BPS unset (free; founder decision 2026-10-27).
     feeModule: null,
-    // TODO(redeploy): the block the new Web3Campaigns was deployed in (also the subgraph's startBlock).
-    deployBlock: 11314275,
+    // The block the v0.7.0 Web3Campaigns was deployed in (also the subgraph's startBlock).
+    deployBlock: 12006087,
   },
   // Future L2 (PRD §6.1 open decision) — add its entry here + env overrides; no code change.
 }

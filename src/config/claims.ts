@@ -29,24 +29,22 @@ export const claims = {
   // ---------------------------------------------------------------------------------------
 
   /**
-   * VERSION() of the deployed Web3Campaigns. TODO(redeploy): set to the redeployed version, read
-   * on-chain. Note: contracts fix/nft-custody-host-close @ 2a2745a still has VERSION "0.6.0", the
-   * same string as today's deployment, unless the contracts repo bumps it before deploying.
+   * VERSION() of the deployed Web3Campaigns, read on-chain (0.7.0, deployed 2026-10-27).
    * null = not deployed/tagged yet; receipts then point at the verified source on the explorer,
    * never at undeployed code (D-X11).
    */
-  deployVersion: null as string | null,
-  /** Git tag in the contracts repo matching the deployed bytecode (e.g. "v0.7.0-sepolia"). TODO(redeploy). */
-  deployedTag: null as string | null,
+  deployVersion: '0.7.0' as string | null,
+  /** Git tag in the contracts repo matching the deployed bytecode (contracts dev @ 5aa3e13). */
+  deployedTag: 'v0.7.0-sepolia' as string | null,
   /**
-   * Automated tests at `deployedTag`, counted by script at that tag (S2-08). TODO(redeploy).
+   * Automated tests at `deployedTag`, counted by script at that tag (S2-08): `forge test` at v0.7.0-sepolia.
    * null = no number is shown. Never mix a number from one ref with a link to another (F59).
    */
-  testsAtDeployed: null as number | null,
+  testsAtDeployed: 297 as number | null,
   /** Stateful fuzz "invariant" suites in the contracts' test/ (fact sheet §4). */
   invariantSuites: 8,
-  /** ISO date the current contracts were deployed. TODO(redeploy). null = line hidden. */
-  contractsDeployedOn: null as string | null,
+  /** ISO date the current contracts were deployed. null = line hidden. */
+  contractsDeployedOn: '2026-10-27' as string | null,
   /** ISO date of the next planned contract update, or null for "pending". */
   nextContractUpdate: null as string | null,
 
