@@ -38,6 +38,11 @@ model User {
   telegramId       String?   @unique
   telegramUsername String?
   telegramLinkedAt DateTime?
+  // The participant's X handle as THEY entered it — unverified (shown to hosts labelled as such,
+  // for spot-checking self-reported tasks). Proof-by-post is what actually checks it: the post's
+  // real author must equal this handle.
+  xHandle          String?
+  xHandleUpdatedAt DateTime?
 
   // Humanity Protocol verification.
   // humanityVerified is the DURABLE status (docs/HUMANITY_GATING.md: "one OAuth, once per
