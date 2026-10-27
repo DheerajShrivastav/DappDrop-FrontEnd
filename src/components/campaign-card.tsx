@@ -19,7 +19,8 @@ import { useWallet } from '@/context/wallet-provider'
 import { useToast } from '@/hooks/use-toast'
 import { Button } from './ui/button'
 import { openCampaign, endCampaign, isPaused } from '@/lib/web3-service'
-import { getLifecycleState, settlementModeLabel } from '@/lib/campaign-lifecycle'
+import { getLifecycleState, settlementModeLabel, rewardDisplayLabel } from '@/lib/campaign-lifecycle'
+import { displayImageUrl } from '@/lib/campaign-image'
 import { getStatusStyle } from '@/lib/status-styles'
 import { hasEndTimePassed, EXPIRED_OPEN_WARNING } from '@/lib/campaign-timing'
 import {
@@ -106,6 +107,7 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
     const maxParticipants = campaign.settlement?.maxParticipants ?? 0
     const settlementLabel = settlementModeLabel(campaign.settlement?.mode)
     const statusStyle = getStatusStyle(lifecycle.state)
+    const imageUrl = displayImageUrl(campaign.imageUrl)
 
     return (
         <>
@@ -115,20 +117,43 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
                     className="flex flex-col flex-grow relative"
                 >
                     <CardHeader className="p-0">
-                        <div className="relative h-52 w-full overflow-hidden">
-                            <Image
-                                src={campaign.imageUrl || '/images/campaign-placeholder.jpg'}
-                                alt={campaign.title}
-                                fill
-                                className="object-cover transition-transform duration-500 group-hover:scale-105"
-                                data-ai-hint={campaign['data-ai-hint']}
-                                unoptimized={campaign.imageUrl?.startsWith('http')}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
+                        {/* No image means no image: never a stock placeholder. Without one,
+                            the chips sit in a plain row above the title. */}
+                        <div className={cn(
+                            "relative w-full overflow-hidden",
+                            imageUrl ? "h-52" : "flex flex-wrap items-center justify-between gap-2 px-6 pt-6"
+                        )}>
+                            {imageUrl && (
+                                <>
+                                    <Image
+                                        src={imageUrl}
+                                        alt={campaign.title}
+                                        fill
+                                        className="object-cover transition-transform duration-500 group-hover:scale-105"
+                                        unoptimized={imageUrl.startsWith('http')}
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-60" />
+                                </>
+                            )}
 
+                            {settlementLabel && (
+                                <Badge
+                                    variant="secondary"
+                                    className={cn(
+                                        "px-2.5 py-1 text-xs font-medium",
+                                        imageUrl
+                                            ? "absolute top-4 left-4 backdrop-blur-md border border-white/20 bg-black/40 text-white"
+                                            : "border border-border"
+                                    )}
+                                >
+                                    <Award className="h-3 w-3 mr-1.5" />
+                                    {settlementLabel}
+                                </Badge>
+                            )}
                             <Badge
                                 className={cn(
-                                    "absolute top-4 right-4 px-3 py-1 text-xs font-semibold backdrop-blur-md border shadow-soft",
+                                    "px-3 py-1 text-xs font-semibold border shadow-soft",
+                                    imageUrl ? "absolute top-4 right-4 backdrop-blur-md" : "ml-auto",
                                     statusStyle.badge
                                 )}
                             >
@@ -138,27 +163,24 @@ export function CampaignCard({ campaign, onUpdate }: CampaignCardProps) {
                                 </span>}
                                 {lifecycle.label}
                             </Badge>
-                            <Badge
-                                variant="secondary"
-                                className="absolute top-4 left-4 px-2.5 py-1 text-xs font-medium backdrop-blur-md border border-white/20 bg-black/40 text-white"
-                            >
-                                <Award className="h-3 w-3 mr-1.5" />
-                                {settlementLabel}
-                            </Badge>
                         </div>
                     </CardHeader>
                     <div className="p-6 flex flex-col flex-grow">
                         <CardTitle className="text-xl mb-3 font-bold tracking-tight group-hover:text-primary transition-colors line-clamp-1">
                             {campaign.title}
                         </CardTitle>
-                        <CardDescription className="line-clamp-2 text-sm mb-6">
-                            {campaign.description}
-                        </CardDescription>
+                        {campaign.description ? (
+                            <CardDescription className="line-clamp-2 text-sm mb-6 break-words">
+                                {campaign.description}
+                            </CardDescription>
+                        ) : (
+                            <div className="mb-6" />
+                        )}
 
                         <div className="mt-auto space-y-3">
                             <div className="flex items-center text-sm text-muted-foreground bg-secondary/30 p-2 rounded-md">
                                 <Gift className="h-4 w-4 mr-3 text-primary shrink-0" />
-                                <span className="truncate font-medium">{campaign.reward.name}</span>
+                                <span className="truncate font-medium">{rewardDisplayLabel(campaign)}</span>
                             </div>
                             <div className="flex items-center text-sm text-muted-foreground bg-secondary/30 p-2 rounded-md">
                                 <Calendar className="h-4 w-4 mr-3 text-primary shrink-0" />

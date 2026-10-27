@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 
 import type { Campaign } from '@/lib/types'
+import { rewardDisplayLabel } from '@/lib/campaign-lifecycle'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -73,20 +74,18 @@ export function CampaignSidebar({
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Expired-but-not-closed warning */}
-          {isTimeExpiredNotClosed && (
+          {/* Host-only nudge; everyone else reads the state from the lifecycle banner. */}
+          {isTimeExpiredNotClosed && isHostOfCampaign && (
             <div className="flex items-start gap-2 p-3 rounded-lg border border-status-pending-border bg-status-pending-bg">
               <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-status-pending-fg" />
               <p className="text-xs text-status-pending-fg leading-relaxed">
-                End time has passed but this campaign is not yet closed on-chain.
-                {isHostOfCampaign
-                  ? ' Please end the campaign below so participants can claim rewards.'
-                  : ' Avoid interacting until the creator closes it.'}
+                The end time has passed. Record the end below so results can follow.
               </p>
             </div>
           )}
 
           {/* About This Campaign */}
-          {campaign.description && !campaign.description.startsWith('A campaign hosted by') && (
+          {campaign.description && (
             <div className="p-3 bg-secondary/50 rounded-lg border border-border">
               <div className="flex items-center gap-2 mb-2">
                 <Info className="h-4 w-4 text-muted-foreground" />
@@ -122,7 +121,7 @@ export function CampaignSidebar({
             <Gift className="h-5 w-5 text-foreground/70" />
             <div>
               <p className="text-sm font-medium text-muted-foreground">Reward</p>
-              <p className="font-semibold">{campaign.reward.name}</p>
+              <p className="font-semibold">{rewardDisplayLabel(campaign)}</p>
             </div>
           </div>
 

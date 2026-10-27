@@ -1,5 +1,6 @@
 
 'use client';
+import { getCampaignStatus } from '@/lib/campaign-status';
 
 import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@/context/wallet-provider';
@@ -85,7 +86,8 @@ export default function DashboardPage() {
 
   // Calculate statistics
   const totalCampaigns = hostCampaigns.length;
-  const activeCampaigns = hostCampaigns.filter(c => c.status === 'Open').length;
+  // Time-aware: an on-chain Open campaign past its end time is not active.
+  const activeCampaigns = hostCampaigns.filter(c => getCampaignStatus(c).state === 'open').length;
   const totalParticipants = hostCampaigns.reduce((acc, curr) => acc + curr.participants, 0);
 
   const container = {
