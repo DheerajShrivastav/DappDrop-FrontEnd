@@ -48,8 +48,16 @@ async function openCampaign(page: Page, url: string) {
 
 async function axe(page: Page) {
   // Let the task / payment dialog's open animation (a fade + zoom) finish first: mid-fade, axe
-  // measures blended colours and reports contrast the settled dialog doesn't have.
-  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished.catch(() => undefined))))
+  // measures blended colours and reports contrast the settled dialog doesn't have. Finite
+  // animations only: a spinner (Checking…, a gas-free claim in progress) never finishes.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => Number.isFinite(a.effect?.getComputedTiming().endTime ?? Infinity))
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  )
   await page.addScriptTag({ path: AXE })
   return page.evaluate(async () => {
     // @ts-expect-error axe is injected above
