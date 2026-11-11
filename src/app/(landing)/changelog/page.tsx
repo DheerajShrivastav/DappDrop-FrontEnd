@@ -46,7 +46,23 @@ const redeployItems = [
   'The app explains every contract error in plain words.',
 ].filter((x): x is string => typeof x === 'string')
 
+// #44 / #45, on master (auto-deployed) on 2026-10-27. Each line renders only with the claims flag
+// that asserts it. Follows, likes and reposts on X are still self-reported, and the entry says so.
+const taskItems = [
+  claims.accountLinkingLive &&
+    'Participants connect their Discord account through Discord’s own sign-in, and their Telegram account through Telegram’s login widget. Membership is checked for the linked account only, and an account links to one wallet at a time.',
+  claims.xPostCheckLive && 'A new task, “Write a post on X”: the participant posts a personal code with the host’s text, and our app reads the public post to check both.',
+  claims.xPostCheckLive && 'Following, liking and reposting on X are still self-reported, and labelled that way.',
+].filter((x): x is string => typeof x === 'string')
+
 const ENTRIES: Entry[] = [
+  {
+    date: '2026-10-27',
+    area: 'Tasks',
+    title: 'Linked accounts and checked posts on X',
+    items: taskItems,
+    show: taskItems.length > 0,
+  },
   {
     date: claims.contractsDeployedOn ?? '',
     area: 'Contracts',

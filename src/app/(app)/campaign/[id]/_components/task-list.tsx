@@ -6,6 +6,7 @@ import { shortDate, shortDateTime } from '@/lib/campaign-status'
 import { TASK_VERIFICATION_METHOD } from '@/lib/task-types'
 import { DEPLOYMENT_CHAIN, deploymentChainFor } from '@/lib/deployment-chain'
 import { paymentRequestFromTask } from '@/lib/payment-request'
+import { taskJoinLink } from '@/lib/invite-links'
 import { Button, Spinner } from '@/components/app/button'
 import { Chip, VerificationChip } from '@/components/app/chip'
 import { Panel } from '@/components/app/panel'
@@ -22,6 +23,10 @@ import { plural } from '@/components/app/format'
  *   host role can take part in someone else's campaign);
  * - "Campaign full" from the campaign's real cap (`settlement.maxParticipants`, 0 = no cap), not
  *   a hard-coded 1,000, and only for wallets that haven't joined yet (a joined wallet keeps going).
+ * - Discord / Telegram tasks carry the host's invite as "Join the server ↗" / "Join the group ↗"
+ *   (new tab), only while the task can still be done, and only when the link is a real Discord /
+ *   Telegram invite (taskJoinLink, src/lib/invite-links.ts). Joining needs no wallet, so visitors
+ *   see it too.
  */
 export function TaskList({
   campaign,
@@ -91,6 +96,7 @@ export function TaskList({
             const method = TASK_VERIFICATION_METHOD[task.type]
             const err = taskErrors[task.id]
             const payment = paymentRequestFromTask(task, DEPLOYMENT_CHAIN.id)
+            const join = !u?.completed && accepting && !full ? taskJoinLink(task) : null
             return (
               <li key={task.id} className="cp-row" data-task-state={u?.completed ? 'done' : u?.isCompleting ? 'checking' : err ? 'failed' : 'todo'}>
                 <span className="cp-n" aria-hidden="true">
@@ -105,6 +111,13 @@ export function TaskList({
                     <span className="font-mono text-[0.8125rem] text-ink-2">
                       Pay {payment.amountDisplay} on {deploymentChainFor(payment.chainId).name}
                     </span>
+                  )}
+                  {join && (
+                    <a href={join.href} target="_blank" rel="noopener noreferrer" className="dd-link inline-flex min-h-6 items-center text-small" data-join-link={join.platform.toLowerCase()}>
+                      {join.label}
+                      <span aria-hidden="true">&nbsp;↗</span>
+                      <span className="sr-only"> on {join.platform} (opens in a new tab)</span>
+                    </a>
                   )}
                 </span>
                 <span className="cp-state">

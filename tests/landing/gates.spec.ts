@@ -162,6 +162,19 @@ test.describe('homepage copy and contract markup (07-wow)', () => {
     expect(words).toBeLessThanOrEqual(WORDS_MAX)
   })
 
+  test('tasks say how they are checked: Post on X is checked (#45), follows on X stay self-reported', async ({ page }) => {
+    await open(page)
+    expect(await page.locator('[aria-labelledby="chips-checked"] li').allInnerTexts()).toEqual(['Join Discord', 'Join Telegram', 'Post on X', 'Verified human', 'Connect wallet'])
+    expect(await page.locator('[aria-labelledby="chips-self"] li').allInnerTexts()).toEqual(['Follow on X'])
+    await open(page, '/how-it-works')
+    const tasks = page.locator('#tasks')
+    await expect(tasks).not.toContainText(/in review/i)
+    await expect(tasks).toContainText('Participants connect Discord through Discord’s own sign-in')
+    await expect(tasks).toContainText('Participants connect Telegram through Telegram’s login widget')
+    await expect(tasks.locator('li', { hasText: /^\s*Post on X/ })).toContainText('Live')
+    await expect(tasks.locator('li', { hasText: 'Follow, like or repost on X' })).toContainText('Live · self-reported')
+  })
+
   test('the vault stage renders once inside <main>, before the sections, and is aria-hidden', async ({ page }) => {
     await open(page)
     const r = await page.evaluate(() => {
@@ -745,4 +758,69 @@ test.describe('app shell (08-site phase 1)', () => {
       expect(html).not.toMatch(/rainbowkit|WagmiProvider|app-theme/i)
     }
   })
+})
+
+/**
+ * Post-launch polish: the root 404 (src/app/not-found.tsx) in Monolith. Next renders it into
+ * every route's payload, so it stays a server component with no client islands; the theme comes
+ * from the no-flash head script alone.
+ */
+const MISSING = '/this-page-does-not-exist'
+
+test.describe('root 404 (Monolith)', () => {
+  test('a 404 status, the Monolith page, ways back, and no audit wording or wallet code', async ({ page }) => {
+    const res = await page.goto(MISSING, { waitUntil: 'networkidle' })
+    expect(res?.status()).toBe(404)
+    await expect(page.locator('[data-not-found].lp-theme')).toHaveCount(1)
+    await expect(page.locator('h1')).toHaveText('This page doesn’t exist.')
+    await expect(page.locator('main').getByRole('link', { name: 'Back to the home page' })).toHaveAttribute('href', '/')
+    await expect(page.locator('main').getByRole('link', { name: 'Browse campaigns' })).toHaveAttribute('href', '/campaigns')
+    await expect(page.locator('header').getByRole('link', { name: 'DappDrop home' })).toHaveAttribute('href', '/')
+    const footer = page.locator('footer')
+    expect(await footer.locator('nav h2').allTextContents()).toEqual(['Product', 'Trust', 'Developers', 'Company'])
+    await expect(footer).toContainText('never ask for your seed phrase or private key.')
+    // Founder decision: "Not audited yet" lives on /security only.
+    expect(await page.evaluate(() => document.body.innerText)).not.toMatch(/audit/i)
+    const html = await page.content()
+    expect(html).not.toMatch(/rainbowkit|WagmiProvider|app-theme/i)
+  })
+
+  test('every page carries the 404 in its payload: no "Not audited" on the marketing pages’ HTML', async ({ request }) => {
+    for (const path of ['/', '/how-it-works', '/about', '/changelog']) {
+      expect(await (await request.get(path)).text(), path).not.toContain('Not audited')
+    }
+  })
+
+  test('Obsidian by default and a remembered Porcelain, both before first paint', async ({ browser }) => {
+    const ctx = await browser.newContext({ colorScheme: 'light', viewport: { width: 1440, height: 900 } })
+    const page = await ctx.newPage()
+    await recordFirst(page)
+    await page.goto(MISSING, { waitUntil: 'networkidle' })
+    expect(await first(page)).toEqual({ theme: 'obsidian', bg: 'rgb(5, 5, 6)' })
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('dark')
+    await remember(page, 'porcelain')
+    await page.goto(MISSING, { waitUntil: 'networkidle' })
+    expect(await first(page)).toEqual({ theme: 'porcelain', bg: 'rgb(244, 241, 234)' })
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light')
+    await ctx.close()
+  })
+
+  for (const t of THEMES) {
+    for (const [width, height] of [
+      [320, 640],
+      [375, 812],
+      [768, 1024],
+      [1440, 900],
+    ]) {
+      test(`${MISSING} · ${t}: axe 0 and no horizontal overflow at ${width} px`, async ({ page }) => {
+        await remember(page, t)
+        await page.setViewportSize({ width, height })
+        await open(page, MISSING)
+        expect(await theme(page)).toBe(t)
+        expect(await axe(page)).toEqual([])
+        const { sw, cw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }))
+        expect(sw).toBe(cw)
+      })
+    }
+  }
 })

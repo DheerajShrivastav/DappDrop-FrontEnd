@@ -47,6 +47,17 @@ async function openCampaign(page: Page, url: string) {
 }
 
 async function axe(page: Page) {
+  // Let the task / payment dialog's open animation (a fade + zoom) finish first: mid-fade, axe
+  // measures blended colours and reports contrast the settled dialog doesn't have. Finite
+  // animations only: a spinner (Checking…, a gas-free claim in progress) never finishes.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => Number.isFinite(a.effect?.getComputedTiming().endTime ?? Infinity))
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  )
   await page.addScriptTag({ path: AXE })
   return page.evaluate(async () => {
     // @ts-expect-error axe is injected above
@@ -127,6 +138,7 @@ const STATES = [
   'p-discord-linked',
   'p-telegram-linked',
   'p-telegram-unset',
+  'p-join-invalid',
   'p-post',
   'p-post-no-handle',
   'p-follow',
@@ -297,6 +309,44 @@ test.describe('campaign page fixtures (dev server)', () => {
 
     await openCampaign(page, `${DEV}/_dev/campaign?state=p-telegram-linked`)
     await expect(page.getByRole('dialog', { name: 'Join the Telegram group' }).locator('[data-linked-account="linked"]')).toContainText('Telegram connected as example_tester')
+  })
+
+  // Post-launch polish: the host's Discord / Telegram invite reaches participants, and only a
+  // real invite ever renders as a join link (src/lib/invite-links.ts).
+  test('join links: the task row and the dialog open the host’s invite in a new tab; visitors see it; never a non-invite URL', async ({ page }) => {
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-open-visitor`)
+    const row = page.locator('.cp-row a[data-join-link="discord"]')
+    await expect(row).toHaveCount(1)
+    await expect(row).toHaveAttribute('href', 'https://discord.gg/example')
+    await expect(row).toHaveAttribute('target', '_blank')
+    await expect(row).toHaveAttribute('rel', /noopener/)
+    await expect(row).toHaveAccessibleName('Join the server on Discord (opens in a new tab)')
+
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-discord-connect`)
+    const dialog = page.getByRole('dialog', { name: 'Join the Discord server' })
+    const join = dialog.getByRole('link', { name: 'Join the server on Discord (opens in a new tab)' })
+    await expect(join).toHaveAttribute('href', 'https://discord.gg/example')
+    await expect(join).toHaveAttribute('target', '_blank')
+    await expect(dialog.locator('input')).toHaveCount(0)
+
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-telegram-linked`)
+    const tg = page.getByRole('dialog', { name: 'Join the Telegram group' }).getByRole('link', { name: 'Join the group on Telegram (opens in a new tab)' })
+    await expect(tg).toHaveAttribute('href', 'https://t.me/+ExampleInvite1')
+
+    // A done task has no join link; an open one keeps it.
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-open-tasks`)
+    await expect(page.locator('.cp-row a[data-join-link="discord"]')).toHaveCount(0)
+    await expect(page.locator('.cp-row a[data-join-link="telegram"]')).toHaveAttribute('href', 'https://t.me/+ExampleInvite1')
+
+    // Tasks closed: no join links.
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-record-end`)
+    await expect(page.locator('a[data-join-link]')).toHaveCount(0)
+
+    // A look-alike host and a script URL never become links; the dialog says there's no valid link.
+    await openCampaign(page, `${DEV}/_dev/campaign?state=p-join-invalid`)
+    await expect(page.locator('a[data-join-link]')).toHaveCount(0)
+    expect(await page.locator('a[href*="evil"], a[href^="javascript:"]').count()).toBe(0)
+    await expect(page.getByRole('dialog', { name: 'Join the Discord server' }).locator('[data-join-link="missing"]')).toContainText('The host didn’t add a valid invite link.')
   })
 
   // #45: SOCIAL_POST is a real check (proof-by-post).

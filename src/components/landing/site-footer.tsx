@@ -22,7 +22,7 @@ import { pillButton } from './ui'
  *   <main>).
  * - Link micro-interactions are CSS only (globals.css, .ft-link).
  *
- * The app keeps its own footer (src/components/footer.tsx).
+ * The app and the root 404 use the compact variant (./compact-footer.tsx).
  */
 const linkCls = 'ft-link inline-flex min-h-10 items-center text-small text-ink-2 can-hover:hover:text-ink focus-visible:text-ink'
 

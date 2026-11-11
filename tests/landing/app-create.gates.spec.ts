@@ -98,21 +98,25 @@ test.describe('/create-campaign fixtures (dev server)', () => {
   test.skip(!DEV, 'set GATES_DEV_URL to a dev server to gate the wallet-only wizard states')
   test.describe.configure({ timeout: 180_000 })
 
-  for (const t of THEMES) {
-    for (const [width, height] of [
-      [375, 812],
-      [1440, 900],
-    ]) {
-      test(`tasks-x · ${t} · ${width} px: full-page axe 0, no horizontal scroll`, async ({ page }) => {
-        await remember(page, t)
-        await page.setViewportSize({ width, height })
-        await page.goto(`${DEV}/_dev/create-campaign?state=tasks-x`, { waitUntil: 'load', timeout: 120_000 })
-        await page.locator('[data-task-editor="2"]').waitFor({ timeout: 60_000 })
-        await page.evaluate(() => document.fonts.ready)
-        expect(await axe(page)).toEqual([])
-        const { sw, cw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }))
-        expect(sw).toBe(cw)
-      })
+  // The last task editor's index per state (the editors load on step 2, after the route).
+  const LAST_EDITOR: Record<string, number> = { 'tasks-x': 2, 'tasks-community': 1, 'tasks-community-unset': 1 }
+  for (const [state, last] of Object.entries(LAST_EDITOR)) {
+    for (const t of THEMES) {
+      for (const [width, height] of [
+        [375, 812],
+        [1440, 900],
+      ]) {
+        test(`${state} · ${t} · ${width} px: full-page axe 0, no horizontal scroll`, async ({ page }) => {
+          await remember(page, t)
+          await page.setViewportSize({ width, height })
+          await page.goto(`${DEV}/_dev/create-campaign?state=${state}`, { waitUntil: 'load', timeout: 120_000 })
+          await page.locator(`[data-task-editor="${last}"]`).waitFor({ timeout: 60_000 })
+          await page.evaluate(() => document.fonts.ready)
+          expect(await axe(page)).toEqual([])
+          const { sw, cw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }))
+          expect(sw).toBe(cw)
+        })
+      }
     }
   }
 
@@ -133,5 +137,44 @@ test.describe('/create-campaign fixtures (dev server)', () => {
     await page.getByRole('button', { name: /Continue/ }).first().click()
     // Valid X fields: Continue moves on to the rewards step.
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('What do they get?')
+  })
+
+  // Post-launch polish: hosts see how to add the DappDrop bots, and why; invite links are checked.
+  test('tasks-community: the bot invite and the Telegram bot username, with why; valid invite links pass', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(`${DEV}/_dev/create-campaign?state=tasks-community`, { waitUntil: 'load', timeout: 120_000 })
+    await page.locator('[data-task-editor="1"]').waitFor({ timeout: 60_000 })
+    const discord = page.locator('[data-task-editor="0"]')
+    await expect(discord).toContainText('Our bot checks membership')
+    const add = discord.getByRole('link', { name: 'Add the DappDrop bot to your server (opens in a new tab)' })
+    await expect(add).toHaveAttribute('href', 'https://discord.com/oauth2/authorize?client_id=100000000000000001&permissions=1024&scope=bot')
+    await expect(add).toHaveAttribute('target', '_blank')
+    await expect(discord).not.toContainText('Discord checks won’t work yet')
+    await expect(discord.getByLabel('Discord invite link')).not.toHaveAttribute('aria-invalid', 'true')
+    const telegram = page.locator('[data-task-editor="1"]')
+    await expect(telegram).toContainText('Our bot checks membership')
+    await expect(telegram).toContainText('Add @ExampleDappDropBot to your channel or group.')
+    await expect(telegram.getByRole('link', { name: 'Open @ExampleDappDropBot (opens in a new tab)' })).toHaveAttribute('href', 'https://t.me/ExampleDappDropBot')
+    // A bare Discord code and a t.me/+ link are valid: Continue moves on to the rewards step.
+    await page.getByRole('button', { name: /Continue/ }).first().click()
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('What do they get?')
+  })
+
+  test('tasks-community-unset: says the bots aren’t set up, and refuses links that aren’t invites', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto(`${DEV}/_dev/create-campaign?state=tasks-community-unset`, { waitUntil: 'load', timeout: 120_000 })
+    await page.locator('[data-task-editor="1"]').waitFor({ timeout: 60_000 })
+    const discord = page.locator('[data-task-editor="0"]')
+    await expect(discord).toContainText('Discord checks won’t work yet')
+    await expect(discord).toContainText('The Discord bot invite link isn’t configured.')
+    await expect(discord.getByRole('link', { name: /Add the DappDrop bot/ })).toHaveCount(0)
+    await expect(discord.getByLabel('Discord invite link')).toHaveAttribute('aria-invalid', 'true')
+    await expect(discord).toContainText('Use a Discord invite link, like https://discord.gg/yourcode.')
+    const telegram = page.locator('[data-task-editor="1"]')
+    await expect(telegram).toContainText('Telegram checks won’t work yet')
+    await expect(telegram.getByRole('link', { name: /Open @/ })).toHaveCount(0)
+    await expect(telegram.getByLabel('Telegram invite link')).toHaveAttribute('aria-invalid', 'true')
+    await expect(telegram).toContainText('Use a Telegram link, like https://t.me/yourgroup')
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText('What should people do?')
   })
 })

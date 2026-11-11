@@ -12,25 +12,31 @@ import { StatusChip, type ChipKind } from './status-chip'
  *   itself can mark a task complete." with a receipt (S2-02); otherwise the F29 disclosure.
  * - tierModuleFixed (with tasksEnforcedOnChain) → the tiered Humanity wording (V13, S2-03).
  * - humanityNaming → "Humanity Protocol sign-in" (C12); paymentTaskChainLocked → the payment row.
+ * - accountLinkingLive (#44) → how Discord / Telegram accounts are linked, instead of "in review".
+ * - xPostCheckLive (#45) → "Post on X" is Live and checked by our app, instead of "In review".
+ *   Follows, likes and reposts stay self-reported (that's what the app does).
  */
-type Row = { task: string; how: React.ReactNode; chips: [ChipKind, string][] }
+type Row = { task: string; how: React.ReactNode; chip: [ChipKind, string]; note?: string }
 
 export function TaskMatrix() {
   const s2 = claims.tasksEnforcedOnChain
   const tiered = claims.tasksEnforcedOnChain && claims.tierModuleFixed
   const human = claims.humanityNaming ? 'Humanity Protocol sign-in' : 'A verified-human check'
+  const linked = claims.accountLinkingLive
 
   const rows: Row[] = [
-    { task: 'Hold a token or NFT', how: 'Checked by the contract itself.', chips: [['planned', 'In the contracts; not yet in the wizard']] },
+    { task: 'Hold a token or NFT', how: 'Checked by the contract itself.', chip: ['planned', 'In the contracts; not yet in the wizard'] },
     {
       task: 'Join a Discord server',
       how: s2 ? 'Membership checked by our bot.' : 'Our bot checks membership in the app.',
-      chips: [['checked', 'Live'], ['review', 'Linking Discord to a wallet: in review']],
+      chip: ['checked', 'Live'],
+      note: linked ? 'Participants connect Discord through Discord’s own sign-in, and the bot checks that account' : 'Linking Discord to a wallet: in review',
     },
     {
       task: 'Join a Telegram group',
       how: s2 ? 'Membership checked by our bot.' : 'Our bot checks membership in the app.',
-      chips: [['checked', 'Live'], ['review', 'Linked accounts: in review']],
+      chip: ['checked', 'Live'],
+      note: linked ? 'Participants connect Telegram through Telegram’s login widget, and the bot checks that account' : 'Linked accounts: in review',
     },
     {
       task: 'Verified human',
@@ -40,19 +46,25 @@ export function TaskMatrix() {
           {tiered && ' For tiered campaigns, it’s a required task the contract enforces.'}
         </>
       ),
-      chips: [['checked', 'Live']],
+      chip: ['checked', 'Live'],
     },
-    { task: 'Connect a wallet', how: 'Proven by a wallet sign-in signature.', chips: [['checked', 'Live']] },
+    { task: 'Connect a wallet', how: 'Proven by a wallet sign-in signature.', chip: ['checked', 'Live'] },
     ...(claims.paymentTaskChainLocked
       ? [
           {
             task: 'Make a payment',
             how: 'A set amount to a set address, verified on-chain as coming from the participant’s own wallet.',
-            chips: [['checked', 'Live']] as [ChipKind, string][],
+            chip: ['checked', 'Live'] as [ChipKind, string],
           },
         ]
       : []),
-    { task: 'Post on X', how: 'The participant posts a unique code; we check the post.', chips: [['review', 'In review']] },
+    claims.xPostCheckLive
+      ? {
+          task: 'Post on X',
+          how: 'The participant posts a personal code with the host’s text; our app reads the public post and checks both.',
+          chip: ['checked', 'Live'],
+        }
+      : { task: 'Post on X', how: 'The participant posts a unique code; we check the post.', chip: ['review', 'In review'] },
     {
       task: 'Follow, like or repost on X',
       how: (
@@ -60,7 +72,7 @@ export function TaskMatrix() {
           <strong className="font-semibold text-ink">Self-reported.</strong> We label it that way in the app.
         </>
       ),
-      chips: [['self', 'Live · self-reported']],
+      chip: ['self', 'Live · self-reported'],
     },
   ]
 
@@ -83,13 +95,13 @@ export function TaskMatrix() {
               summary={
                 <span className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   <span className="text-small font-semibold md:text-body">{r.task}</span>
-                  <StatusChip kind={r.chips[0][0]}>{r.chips[0][1]}</StatusChip>
+                  <StatusChip kind={r.chip[0]}>{r.chip[1]}</StatusChip>
                 </span>
               }
             >
               <p className="max-w-[48rem] pb-3 text-small text-ink-2">
                 {r.how}
-                {r.chips[1] && <span> {r.chips[1][1]}.</span>}
+                {r.note && <span> {r.note}.</span>}
               </p>
             </PhoneDetails>
           </li>

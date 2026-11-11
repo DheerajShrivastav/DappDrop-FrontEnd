@@ -12,6 +12,7 @@ import type { Task, TaskType } from '@/lib/types'
 import { TASK_VERIFICATION_METHOD } from '@/lib/task-types'
 import { xIntentFor, xTargetForTask } from '@/lib/x-intents'
 import { parseXPostUrl } from '@/lib/x-task-fields'
+import { taskJoinLink } from '@/lib/invite-links'
 
 interface TaskVerificationFormProps {
   isOpen: boolean
@@ -33,9 +34,11 @@ type PostCode = { state: 'loading' } | { state: 'ready'; code: string } | { stat
 /**
  * The task dialog behind a task row's [Start] (app-design §1.8, §1.13), in the Monolith design.
  * Behaviour is #44's and #45's, unchanged:
- * - Discord / Telegram: the participant links the account on the server (OAuth / Login Widget);
- *   the membership check runs only for that linked account, and nothing identifying is sent from
- *   here. The check button unlocks only once an account is linked.
+ * - Discord / Telegram: the host's invite first ("Join the server ↗" / "Join the group ↗", a new
+ *   tab, only for a real Discord / Telegram invite: src/lib/invite-links.ts), then the participant
+ *   links the account on the server (OAuth / Login Widget); the membership check runs only for
+ *   that linked account, and nothing identifying is sent from here. The check button unlocks
+ *   only once an account is linked.
  * - SOCIAL_POST (proof-by-post): a per-wallet code, the host's required text, the participant's
  *   saved X handle and the post link; the server reads the public post and checks all three.
  * - Follow / like / repost: self-reported, said so, with a short "open X first" friction gate.
@@ -146,6 +149,7 @@ export function TaskVerificationForm({ isOpen, onOpenChange, taskId, taskType, c
       case 'JOIN_TELEGRAM': {
         const isDiscord = taskType === 'JOIN_DISCORD'
         const name = isDiscord ? 'Discord' : 'Telegram'
+        const join = taskJoinLink(task ? { ...task, type: taskType } : null)
         return (
           <>
             <DialogHeader>
@@ -157,6 +161,16 @@ export function TaskVerificationForm({ isOpen, onOpenChange, taskId, taskType, c
               </DialogDescription>
             </DialogHeader>
             {taskLine}
+            {join ? (
+              <a href={join.href} target="_blank" rel="noopener noreferrer" className={buttonClass({ variant: 'secondary', block: true })} data-join-link={join.platform.toLowerCase()}>
+                {join.label} <span aria-hidden="true">↗</span>
+                <span className="sr-only"> on {join.platform} (opens in a new tab)</span>
+              </a>
+            ) : (
+              <p className="text-small text-ink-2" data-join-link="missing">
+                The host didn’t add a valid invite link. Ask the host where to join, then come back to check your membership.
+              </p>
+            )}
             <LinkedAccountPanel key={taskType} platform={isDiscord ? 'discord' : 'telegram'} onLinkedChange={setAccountLinked} />
             <DialogFooter>
               {notNow}

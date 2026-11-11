@@ -35,6 +35,18 @@ const xTasks: CampaignFormValues['tasks'] = [
   { type: 'SOCIAL_LIKE', description: 'Like our launch post', xPostUrl: 'https://x.com/example', isOptional: true },
   { type: 'SOCIAL_POST', description: 'Tell people why you’re testing Example', xRequiredText: '', isOptional: false },
 ]
+// Discord + Telegram tasks: the bot setup hosts see, and the invite-link checks. `communityBad`
+// has links participants must never get as a join link (another host, a message link).
+const communityTasks: CampaignFormValues['tasks'] = [
+  { type: 'JOIN_DISCORD', description: 'Join the Example Discord server', verificationData: '1024849645714206720', discordInviteLink: 'example', isOptional: false },
+  { type: 'JOIN_TELEGRAM', description: 'Join the Example Telegram group', verificationData: '@example_group', telegramInviteLink: 'https://t.me/+ExampleInvite1', isOptional: false },
+]
+const communityBad: CampaignFormValues['tasks'] = [
+  { ...communityTasks[0], discordInviteLink: 'https://discord.gg.evil.example/example' },
+  { ...communityTasks[1], telegramInviteLink: 'https://t.me/example_group/42' },
+]
+// Example stand-ins for NEXT_PUBLIC_DISCORD_BOT_INVITE_URL / NEXT_PUBLIC_TELEGRAM_BOT_USERNAME.
+const exampleBots = { discordBotInviteUrl: 'https://discord.com/oauth2/authorize?client_id=100000000000000001&permissions=1024&scope=bot', telegramBotUsername: 'ExampleDappDropBot' }
 const erc20 = (extra: Record<string, unknown> = {}) =>
   ({ type: 'ERC20', tokenAddress: '0x', amount: '2500', name: '', settlementMode: 'MERKLE', rankTiers: [], scoreTiers: [], taskPoints: [], ...extra }) as CampaignFormValues['reward']
 const full = (reward: CampaignFormValues['reward'], t = tasks.map((x) => (x.type === 'ONCHAIN_TX' ? { ...x, amount: '0.001', amountDisplay: '0.001 ETH' } : x))) => ({ ...details, tasks: t, reward })
@@ -63,6 +75,16 @@ const STATES: Record<string, { wallet: WizardWallet; fixture: WizardFixture; not
   'details-filled': { wallet: host, fixture: { step: 1, aiOpen: false, values: { ...details, tasks } }, note: 'Step 1, filled' },
   tasks: { wallet: host, fixture: { step: 2, values: { ...details, tasks }, collapseFirst: 2, continueOnMount: true, feeCapNote: true }, note: 'Step 2 (the mockup): two collapsed tasks, a payment task with an error; fee-cap note previewed' },
   'tasks-x': { wallet: host, fixture: { step: 2, values: { ...details, tasks: xTasks }, continueOnMount: true }, note: 'Step 2, X tasks: handle, post link (error) and required text (error)' },
+  'tasks-community': {
+    wallet: host,
+    fixture: { step: 2, values: { ...details, tasks: communityTasks }, bots: exampleBots },
+    note: 'Step 2, Discord + Telegram: add-the-bot setup with the bot config set; valid invite links',
+  },
+  'tasks-community-unset': {
+    wallet: host,
+    fixture: { step: 2, values: { ...details, tasks: communityBad }, continueOnMount: true, bots: {} },
+    note: 'Step 2, Discord + Telegram: bot config not set; invite links that aren’t invites (errors)',
+  },
   rewards: { wallet: host, fixture: { step: 3, values: full(erc20()) }, note: 'Step 3, equal split' },
   'rewards-ranked': {
     wallet: host,

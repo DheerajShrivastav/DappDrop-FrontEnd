@@ -34,15 +34,23 @@ const ZERO = '0x' + '00'.repeat(32)
 const WEI = '000000000000000000'
 const wallet = (i: number) => '0x' + (i + 10).toString(16).padStart(4, '0') + '0'.repeat(32) + 'c0de'
 
+// The hosts' invite links (example values): participants get them as "Join the server ↗" /
+// "Join the group ↗" (src/lib/invite-links.ts).
 const TASKS: Campaign['tasks'] = [
-  { id: 't1', type: 'JOIN_DISCORD', description: 'Join the Example Discord server' },
+  { id: 't1', type: 'JOIN_DISCORD', description: 'Join the Example Discord server', discordInviteLink: 'https://discord.gg/example' },
   { id: 't2', type: 'WALLET_CONNECT', description: 'Sign in with your wallet' },
   { id: 't3', type: 'SOCIAL_FOLLOW', description: 'Follow @example on X', metadata: { xHandle: 'example' } },
 ]
 const TASKS_5: Campaign['tasks'] = [
   ...TASKS,
   { id: 't4', type: 'HUMANITY_VERIFICATION', description: 'Confirm you’re a real person' },
-  { id: 't5', type: 'JOIN_TELEGRAM', description: 'Join the Example Telegram group', isOptional: true },
+  { id: 't5', type: 'JOIN_TELEGRAM', description: 'Join the Example Telegram group', isOptional: true, telegramInviteLink: 'https://t.me/+ExampleInvite1' },
+]
+// Links that must never render as a join link: a look-alike host and a script URL.
+const TASKS_BAD_INVITES: Campaign['tasks'] = [
+  { ...TASKS_5[0], discordInviteLink: 'https://discord.gg.evil.example/example' },
+  TASKS_5[1],
+  { ...TASKS_5[4], telegramInviteLink: 'javascript:alert(1)' },
 ]
 
 const PAY_TASK: Campaign['tasks'][number] = {
@@ -295,6 +303,15 @@ const FIXTURES: Record<string, Fixture> = {
     userTasks: done(['t1', 't2']),
     api: { linked: { telegram: 'example_tester' } },
     verifyTask: 't5',
+  },
+  'p-join-invalid': {
+    label: 'Participant · Discord / Telegram tasks · invite links not valid',
+    campaign: campaign({ ...OPEN, tasks: TASKS_BAD_INVITES, settlement: merkle() }),
+    connected: true,
+    joined: true,
+    userTasks: done(['t2']),
+    api: { linked: {} },
+    verifyTask: 't1',
   },
   'p-telegram-unset': {
     label: 'Participant · Telegram task · sign-in not configured',

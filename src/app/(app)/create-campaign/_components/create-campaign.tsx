@@ -52,6 +52,7 @@ import { useToast } from '@/hooks/use-toast'
 import { getSession, signAuthMessage } from '@/lib/wallet-auth'
 import { isSelfReportedTask, TASK_VERIFICATION_METHOD } from '@/lib/task-types'
 import { normalizeRequiredText, normalizeXHandle, parseXPostUrl } from '@/lib/x-task-fields'
+import { normalizeDiscordInvite, normalizeTelegramInvite } from '@/lib/invite-links'
 import { parseXTarget } from '@/lib/x-intents'
 import type { TaskType } from '@/lib/types'
 import {
@@ -94,6 +95,7 @@ import { AiDraftPanel, type GenerationError } from './ai-draft'
 import { GoLiveChecklist } from './go-live'
 import { HostGate, type HostGatePreview } from './host-gate'
 import { TaskSummaryRow } from './task-summary-row'
+import type { BotConfig } from './task-editor'
 import { RailPanels, WizardRail, WizardRailDisclosure } from './wizard-rail'
 import { CheckRow, CopyableAddress, Notice, ReviewSection } from './wizard-ui'
 
@@ -138,6 +140,8 @@ export type WizardFixture = {
   gate?: HostGatePreview
   /** Preview the redeploy-coupled fee-cap note (app-design §3.3). */
   feeCapNote?: boolean
+  /** Stand-ins for the bot config (NEXT_PUBLIC_DISCORD_BOT_INVITE_URL / _TELEGRAM_BOT_USERNAME). */
+  bots?: BotConfig
 }
 
 /** The redeployed Web3Campaigns caps any protocol fee at 10% (contracts PR #26; claims.feeCapEnforced). */
@@ -747,7 +751,8 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
                 campaignId: Number(campaignId),
                 taskIndex: i,
                 taskType: task.type,
-                discordInviteLink: task.discordInviteLink,
+                // Canonical https link (validated on Continue; the API checks it again).
+                discordInviteLink: normalizeDiscordInvite(task.discordInviteLink) ?? task.discordInviteLink,
                 discordServerId: task.verificationData,
               }),
             })
@@ -760,7 +765,7 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
                 taskIndex: i,
                 taskType: task.type,
                 telegramChatId: task.verificationData,
-                telegramInviteLink: task.telegramInviteLink,
+                telegramInviteLink: normalizeTelegramInvite(task.telegramInviteLink) ?? task.telegramInviteLink,
               }),
             })
           } else if (task.type === 'HUMANITY_VERIFICATION') {
@@ -1444,6 +1449,7 @@ export function CreateCampaign({ wallet, fixture }: { wallet: WizardWallet; fixt
                               <TaskEditor
                                 key={f.id}
                                 index={i}
+                                bots={fixture?.bots}
                                 canRemove={fields.length > 1}
                                 onRemove={() => remove(i)}
                                 onDone={

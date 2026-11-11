@@ -177,7 +177,8 @@ function ChipGroup({ id, label, dashed = false, chips }: { id: string; label: st
 
 /** Tasks and payouts, shown as real-text chips (copy §2.5). Static grid, no motion. */
 export function HomeModes() {
-  const checked = [...(claims.tasksEnforcedOnChain ? ['Join Discord', 'Join Telegram'] : []), 'Verified human', 'Connect wallet']
+  // xPostCheckLive (#45): "Post on X" is checked by our app; follows on X stay self-reported.
+  const checked = [...(claims.tasksEnforcedOnChain ? ['Join Discord', 'Join Telegram'] : []), ...(claims.xPostCheckLive ? ['Post on X'] : []), 'Verified human', 'Connect wallet']
   const payouts = ['Equal split', 'By rank', ...(claims.tierModuleFixed ? ['By points'] : []), ...(claims.nftCustodyFixed ? ['NFTs'] : [])]
   return (
     <section id="modes" data-beat="after" data-section="modes" aria-labelledby="modes-title" className="mh-after-first">

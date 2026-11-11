@@ -83,6 +83,23 @@ export const claims = {
 
   /** OUT-A03: the campaign page shows its escrowed balance with an explorer link. Not shipped. */
   escrowBalanceOnCampaignPage: false,
+  /**
+   * #44 (on master and in production since 2026-10-27): participants link their Discord account
+   * through Discord's OAuth sign-in and their Telegram account through the Telegram Login Widget.
+   * verify-task checks membership for the linked account only (no typed IDs), and an account is
+   * linked to one wallet at a time. Turns the landing's "in review" notes into the live wording.
+   * Production config read 2026-10-28 (read-only): DISCORD_CLIENT_ID is set (/api/auth/discord
+   * answers "sign in first", not "not configured") and the bot username is in the live bundle. A
+   * full OAuth / widget round trip with real accounts is still unconfirmed.
+   */
+  accountLinkingLive: true,
+  /**
+   * #45 (same deploy): "Write a post on X" (SOCIAL_POST) is checked by the app: the participant
+   * posts a per-wallet code with the host's text, and the server reads the public post (X oEmbed)
+   * and checks the code, the text and the author. X follows, likes and reposts stay self-reported
+   * (TASK_VERIFICATION_METHOD in src/lib/task-types.ts). A real post check is unconfirmed.
+   */
+  xPostCheckLive: true,
   /** OUT-A01: payment tasks locked to the deployment chain. Not shipped → payment row hidden. */
   paymentTaskChainLocked: false,
   /** C7 / OUT-O07: relayer (sponsored claim gas) confirmed running in production. Unconfirmed. */
