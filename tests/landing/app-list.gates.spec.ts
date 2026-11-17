@@ -43,7 +43,10 @@ async function axe(page: Page) {
   await page.addScriptTag({ path: AXE })
   return page.evaluate(async () => {
     // @ts-expect-error axe is injected above
-    const r = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } })
+    // The dev server's own overlay (<nextjs-portal>, its "N Issues" badge) never ships and isn't
+    // page DOM: with the CI WalletConnect placeholder, Reown logs "Origin … not found on Allowlist"
+    // and the badge appears mid-test. Excluded so a dev-tooling a11y bug can't fail a fixture.
+    const r = await window.axe.run({ include: [document], exclude: [['nextjs-portal']] }, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } })
     return r.violations.map((v: { id: string; nodes: { target: string[] }[] }) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)
   })
 }
