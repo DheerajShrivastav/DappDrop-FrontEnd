@@ -1132,3 +1132,104 @@ html[data-theme="porcelain"] .lp-theme main > section.lp-ink:last-of-type {
         transform: none;
     }
 }
+
+/* The subpage hero stage (PosterHero): the vault still behind the copy, running under the
+   transparent header like the home page's stage; the bottom fades into the page. */
+.lp-stage {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    margin-top: -4rem;
+    padding-top: 4rem;
+    min-height: clamp(34rem, 84svh, 52rem);
+    overflow: clip;
+}
+.lp-stage-art {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 10rem), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 10rem), transparent);
+}
+.lp-stage-settle,
+.lp-stage-poster {
+    position: absolute;
+    inset: 0;
+}
+.lp-stage-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 72% 50%;
+}
+.lp-stage-poster--porcelain,
+html[data-theme="porcelain"] .lp-stage-poster--obsidian {
+    display: none;
+}
+html[data-theme="porcelain"] .lp-stage-poster--porcelain {
+    display: block;
+}
+.lp-stage-copy {
+    position: relative;
+    padding-block: 3rem 6rem;
+}
+/* The stage H1: the home page's display face, one step down from its hero (two lines for the
+   subpage titles, where the home size broke "Quest campaigns, settled on-chain." into four). */
+.lp-stage-h1 {
+    max-width: 13em;
+    font-size: clamp(2.75rem, 5.4vw, 5.25rem);
+    line-height: 1;
+}
+@media (max-width: 767.98px) {
+    /* Phone (the home page's phone hero): copy on top, the vault in the bottom half. */
+    .lp-stage {
+        align-items: flex-start;
+        min-height: min(calc(100svh - 4rem), 48rem);
+    }
+    .lp-stage-copy {
+        padding-block: 1.75rem 0;
+    }
+    .lp-stage-h1 {
+        font-size: clamp(2.375rem, 10.5vw, 3rem);
+        line-height: 1.02;
+    }
+    .lp-stage-poster img {
+        object-position: 50% 100%;
+    }
+}
+@media (prefers-reduced-motion: no-preference) {
+    /* Once, on load: the still comes into focus. */
+    .lp-stage-settle {
+        animation: lp-stage-in 1.6s var(--ease-out) 0.1s both;
+    }
+    /* While the hero scrolls away: the vault drifts down and dims (parallax, CSS only). The page
+       scroll drives it over the hero's height (a view() timeline would start mid-range: the hero
+       is shorter than the viewport, so it's already "exiting" at the top of the page). */
+    @supports (animation-timeline: scroll()) {
+        .lp-stage-art {
+            animation: lp-stage-drift linear both;
+            animation-timeline: scroll(root);
+            animation-range: 0 85svh;
+        }
+    }
+}
+@keyframes lp-stage-in {
+    from {
+        opacity: 0;
+        transform: scale(1.05);
+        filter: blur(10px);
+    }
+    to {
+        opacity: 1;
+        transform: none;
+        filter: none;
+    }
+}
+@keyframes lp-stage-drift {
+    to {
+        transform: translateY(16%);
+        opacity: 0.2;
+    }
+}

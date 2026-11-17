@@ -3,6 +3,7 @@ import { explorerCodeUrl, network, officialDomain, repos, securityBuyerSummary, 
 import { CanCantCard } from './can-cant-card'
 import { IntentPrefetch } from './intent-prefetch'
 import { MoneyDiagram } from './money-diagram'
+import { PosterHero } from './poster-hero'
 import { START_HREF } from './nav'
 import { Receipt } from './receipt'
 import { SecurityLog } from './security-log'
@@ -41,17 +42,14 @@ function Out({ href, children, dest, name }: { href: string; children: React.Rea
   )
 }
 
+/** The hero: the home page's composition, with the vault still beside the copy (PosterHero). */
 export function SecurityHero() {
   return (
-    <section aria-labelledby="hero-title" data-section="hero" className="lp-container pb-6 pt-12 md:pb-10 md:pt-20">
-      <p className="mh-eyebrow text-ink-3">Security</p>
-      <h1 id="hero-title" className="mh-display mt-4 max-w-[16ch] text-display-xl text-ink">
-        Check our work.
-      </h1>
-      <p className="mt-5 max-w-[40rem] text-lead text-ink-2">
-        Not audited by a third party yet. Here&apos;s what we do instead, and what we can and can&apos;t do with your tokens.
-      </p>
-    </section>
+    <PosterHero
+      eyebrow="Security"
+      title="Check our work."
+      lead={<>Not audited by a third party yet. Here&apos;s what we do instead, and what we can and can&apos;t do with your tokens.</>}
+    />
   )
 }
 

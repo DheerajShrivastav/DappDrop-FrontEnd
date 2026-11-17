@@ -4,6 +4,7 @@ import { copyrightHolder, network, networkLabel, repos } from '@/config/landing'
 import { IntentPrefetch } from '@/components/landing/intent-prefetch'
 import { START_HREF } from '@/components/landing/nav'
 import { PageJsonLd } from '@/components/landing/page-json-ld'
+import { PosterHero } from '@/components/landing/poster-hero'
 import { pillButton } from '@/components/landing/ui'
 
 // 08-site: /about in the Monolith design. Short and honest (fact sheet §1-§4; TRS rows cited in
@@ -45,16 +46,11 @@ export default function AboutPage() {
   }.`
   return (
     <>
-      <section aria-labelledby="hero-title" data-section="hero" className="lp-container pb-14 pt-12 md:pb-20 md:pt-20">
-        <p className="mh-eyebrow text-ink-3">About</p>
-        <h1 id="hero-title" className="mh-display mt-4 max-w-[16ch] text-[clamp(2.5rem,1.6rem+3.6vw,4.75rem)] leading-[1.02] text-ink">
-          Quest campaigns, settled on-chain.
-        </h1>
-        <p className="mt-6 max-w-[38rem] text-lead text-ink-2">
-          DappDrop runs quest campaigns for Web3 projects. The host funds the reward into an on-chain escrow contract before the
-          campaign opens, and the wallets that earn it claim it from there.
-        </p>
-      </section>
+      <PosterHero
+        eyebrow="About"
+        title="Quest campaigns, settled on-chain."
+        lead="DappDrop runs quest campaigns for Web3 projects. The host funds the reward into an on-chain escrow contract before the campaign opens, and the wallets that earn it claim it from there."
+      />
 
       <Block id="what" eyebrow="What it is" title="Pick the tasks. Pick the payout.">
         <p>
