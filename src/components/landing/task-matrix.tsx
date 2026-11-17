@@ -125,7 +125,7 @@ export function TaskMatrix() {
           </p>
         </div>
         <div className="hidden rounded-lg border border-rule bg-surface p-5 md:block">
-          <h3 className="text-small font-semibold md:text-body">Will bots farm my budget?</h3>
+          <h3 className="mh-display text-[1.375rem] leading-tight text-ink">Will bots farm my budget?</h3>
           <p className="mt-1.5 text-small text-ink-2">
             No tool stops every bot. For reward-list campaigns, turn on “Humanity-verified wallets only” and unverified wallets are
             left off the reward list.

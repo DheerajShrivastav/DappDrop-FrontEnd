@@ -111,7 +111,7 @@ export function CanCantCard() {
           width (founder decision 3), with the page's <h2>. Still a <details>, so it can fold away. */}
       <details className="lp-details group" open data-detail="can_cant">
         <summary className="flex min-h-11 items-center justify-between gap-4 px-5 py-4 sm:px-7">
-          <h2 id="can-cant-title" tabIndex={-1} className="font-display text-title font-normal outline-none md:text-[2rem] md:leading-tight">
+          <h2 id="can-cant-title" tabIndex={-1} className="mh-display text-title outline-none md:text-[2rem] md:leading-tight">
             What DappDrop can and can&apos;t do with your tokens
           </h2>
           <span aria-hidden="true" className="lp-chevron shrink-0 text-ink-3">

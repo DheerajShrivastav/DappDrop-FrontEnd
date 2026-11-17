@@ -162,7 +162,7 @@ export default function ChangelogPage() {
   return (
     <>
       <section aria-labelledby="hero-title" data-section="hero" className="lp-container pb-12 pt-12 md:pb-16 md:pt-20">
-        <p className="font-mono text-eyebrow font-medium uppercase text-ink-3">Changelog</p>
+        <p className="mh-eyebrow text-ink-3">Changelog</p>
         <h1 id="hero-title" className="mh-display mt-4 text-[clamp(2.5rem,1.6rem+3.6vw,4.75rem)] leading-[1.02] text-ink">
           What’s shipped.
         </h1>
@@ -176,17 +176,21 @@ export default function ChangelogPage() {
 
       <section aria-label="Releases" data-section="releases" className="lp-container pb-20 md:pb-28">
         <ol className="border-b border-rule">
-          {entries.map((e) => (
+          {entries.map((e, i) => (
             <li key={e.date + e.title} className="grid gap-3 border-t border-rule py-8 md:grid-cols-12 md:gap-8 md:py-10">
-              <p className="font-mono text-[0.8125rem] uppercase tracking-[0.06em] text-ink-3 md:col-span-3">
-                <time dateTime={e.date}>{long(e.date)}</time>
-                <span aria-hidden="true" className="mx-2">
-                  ·
+              {/* A ledger mark per release; gold only on the newest ("now"), never decorative. */}
+              <p className="flex items-baseline gap-3 font-mono text-[0.8125rem] uppercase tracking-[0.06em] text-ink-3 md:col-span-3">
+                <span aria-hidden="true" className={`inline-block h-2 w-2 shrink-0 -translate-y-px rounded-full border ${i === 0 ? 'border-signal bg-signal' : 'border-rule-strong'}`} />
+                <span>
+                  <time dateTime={e.date}>{long(e.date)}</time>
+                  <span aria-hidden="true" className="mx-2">
+                    ·
+                  </span>
+                  <span className="text-ink-2">{e.area}</span>
                 </span>
-                <span className="text-signal">{e.area}</span>
               </p>
               <article className="md:col-span-8 md:col-start-5">
-                <h2 className="mh-display text-[clamp(1.5rem,1.25rem+0.9vw,2rem)] leading-[1.12] text-ink">{e.title}</h2>
+                <h2 className="mh-display mh-reveal-h text-[clamp(1.5rem,1.25rem+0.9vw,2rem)] leading-[1.12] text-ink">{e.title}</h2>
                 <ul className="mt-3 space-y-1.5 text-body text-ink-2">
                   {e.items.map((t) => (
                     <li key={t} className="flex gap-3">

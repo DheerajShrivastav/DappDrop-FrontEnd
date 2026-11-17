@@ -366,9 +366,17 @@ test.describe('motion', () => {
     const ctx = await browser.newContext({ reducedMotion: 'no-preference', viewport: { width: 1440, height: 900 } })
     const page = await ctx.newPage()
     await open(page, '/how-it-works')
-    // The footer wordmark's scroll-driven fill is a permanent (scroll-linked) animation; not counted.
+    // Scroll-driven animations are permanent (scroll-linked), not timed: the footer wordmark's fill
+    // and, since the refine pass, the section headings' scroll reveal. Only time-based animations
+    // (the document timeline) count.
     const timed = () =>
-      page.evaluate(() => document.getAnimations().filter((x) => !((x.effect as KeyframeEffect | null)?.target as Element | null)?.closest('footer')).length)
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter((x) => x.timeline instanceof DocumentTimeline)
+            .filter((x) => !((x.effect as KeyframeEffect | null)?.target as Element | null)?.closest('footer')).length,
+      )
     await page.waitForTimeout(1300)
     expect(await timed()).toBeGreaterThan(0)
     await page.waitForTimeout(5500)

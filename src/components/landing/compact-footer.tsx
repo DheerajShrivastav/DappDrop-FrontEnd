@@ -76,18 +76,24 @@ export function CompactFooter({
             <p className={`${displayClass} max-w-[13em] text-[1.75rem] leading-[1.1] text-ink`}>
               {claims.hostCloseGuarded ? 'Don’t promise rewards. Lock them in.' : 'Quest campaigns, settled on-chain.'}
             </p>
-            <p className="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-small text-ink-2">
-              <span aria-hidden="true" className="inline-block h-1.5 w-1.5 rounded-full bg-signal" />
-              <span>{network.testnet ? `Public beta · ${networkLabel}` : 'Public beta'}</span>
-              {source && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <Ext href={source} name={`the verified contract source on ${network.explorerName}`} className="ft-link inline-flex min-h-10 items-center text-ink can-hover:hover:text-ink">
-                    Contracts verified on {explorerShort}
-                  </Ext>
-                </>
-              )}
-            </p>
+            {/* The status row as the statement footer does it (.ft-trust, globals.css): each item
+                carries its "·" before it and the one that would start a wrapped line is clipped,
+                so a wrapped row never ends on a dangling dot. */}
+            <div className="ft-trust mt-5">
+              <ul className="items-center text-small text-ink-2" aria-label="Status">
+                <li>
+                  <span aria-hidden="true" className="mr-2 inline-block h-1.5 w-1.5 -translate-y-px rounded-full bg-signal align-middle" />
+                  {network.testnet ? `Public beta · ${networkLabel}` : 'Public beta'}
+                </li>
+                {source && (
+                  <li>
+                    <Ext href={source} name={`the verified contract source on ${network.explorerName}`} className="ft-link inline-flex min-h-10 items-center text-ink can-hover:hover:text-ink">
+                      Contracts verified on {explorerShort}
+                    </Ext>
+                  </li>
+                )}
+              </ul>
+            </div>
           </div>
 
           <div>

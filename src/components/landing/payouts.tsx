@@ -26,7 +26,7 @@ export function Payouts() {
     >
       <div className="mt-8 grid items-center gap-6 lg:mt-10 lg:grid-cols-12 lg:gap-12">
         <div className="lg:col-span-6">
-          <h3 className="text-title font-semibold">Where your tokens sit</h3>
+          <h3 className="mh-display text-[1.625rem] leading-tight text-ink md:text-[1.875rem]">Where your tokens sit</h3>
           <p className="mt-3 text-small text-ink-2 md:text-body">
             Your reward never sits in a DappDrop wallet. In an emergency, our admin key can pause the contract; while it&apos;s
             paused, nobody can move the rewards, including us. Timers keep running during a pause.{' '}

@@ -57,7 +57,7 @@ export function StartPanel() {
   return (
     <section id="start" aria-labelledby="start-title" data-section="start" className="lp-ink scroll-mt-20">
       <div className="lp-container section-y">
-        <h2 id="start-title" tabIndex={-1} className="font-display text-display-l font-normal text-paper outline-none">
+        <h2 id="start-title" tabIndex={-1} className="mh-display mh-reveal-h text-display-l text-paper outline-none">
           Here&apos;s what you&apos;ll need.
         </h2>
         <p className="mt-3 text-lead text-paper-2">Four steps from here to a funded test campaign.</p>
@@ -92,7 +92,7 @@ export function StartPanel() {
                 href="/create-campaign"
                 cta="continue_to_app"
                 loc="start"
-                className="inline-flex h-12 w-full items-center justify-center rounded-sm border border-transparent bg-paper px-5 text-body font-semibold leading-none text-ink active:translate-y-px sm:w-auto"
+                className="inline-flex h-12 w-full items-center justify-center rounded-full border border-transparent bg-paper px-6 text-body font-medium leading-none text-ink transition-colors [transition-duration:var(--dur-micro)] can-hover:hover:bg-paper-2 active:translate-y-px sm:w-auto"
               >
                 Continue to the app
               </IntentPrefetch>

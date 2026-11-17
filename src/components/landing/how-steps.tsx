@@ -49,8 +49,8 @@ export function HowSteps() {
         <ol className="space-y-5 lg:col-span-5 lg:space-y-0">
           {STEPS.map(({ n, title, body, Replica }) => (
             <li key={n} className="lp-how-step lg:flex lg:min-h-[60vh] lg:flex-col lg:justify-center" data-step={n}>
-              <h3 className="flex items-baseline gap-3 text-title font-semibold">
-                <span className="font-mono text-[0.875rem] font-medium text-ink-3">0{n}</span>
+              <h3 className="mh-display flex items-baseline gap-3 text-[1.625rem] leading-tight md:text-[1.875rem]">
+                <span className="font-mono text-[0.8125rem] tracking-[0.06em] text-signal">0{n}</span>
                 {title}
               </h3>
               <p className="mt-2 text-small text-ink-2 md:text-body">

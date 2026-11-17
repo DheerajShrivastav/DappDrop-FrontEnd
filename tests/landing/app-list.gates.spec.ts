@@ -43,7 +43,10 @@ async function axe(page: Page) {
   await page.addScriptTag({ path: AXE })
   return page.evaluate(async () => {
     // @ts-expect-error axe is injected above
-    const r = await window.axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } })
+    // The dev server's own overlay (<nextjs-portal>, its "N Issues" badge) never ships and isn't
+    // page DOM: with the CI WalletConnect placeholder, Reown logs "Origin … not found on Allowlist"
+    // and the badge appears mid-test. Excluded so a dev-tooling a11y bug can't fail a fixture.
+    const r = await window.axe.run({ include: [document], exclude: [['nextjs-portal']] }, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'] } })
     return r.violations.map((v: { id: string; nodes: { target: string[] }[] }) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)
   })
 }
@@ -148,7 +151,9 @@ test.describe('app list + dashboard (08-site phase 2, Builder B)', () => {
   test('/humanity-callback: an honest state instead of a crash when Humanity is not configured', async ({ page }) => {
     await openApp(page, '/humanity-callback')
     await expect(page.locator('#__next_error__')).toHaveCount(0)
-    await expect(page.locator('main h1')).toHaveText('Verifying')
+    // Refine pass: the H1 names the page; it says "Verifying" only while something is verifying.
+    await expect(page.locator('main h1')).toHaveText('Humanity check')
+    await expect(page.getByRole('heading', { level: 2, name: /The humanity check isn’t set up here\./ })).toBeVisible()
   })
 
   test('the list fixture route is unreachable in a production build', async ({ request }) => {

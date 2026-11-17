@@ -3,6 +3,7 @@ import { explorerCodeUrl, network, officialDomain, repos, securityBuyerSummary, 
 import { CanCantCard } from './can-cant-card'
 import { IntentPrefetch } from './intent-prefetch'
 import { MoneyDiagram } from './money-diagram'
+import { PosterHero } from './poster-hero'
 import { START_HREF } from './nav'
 import { Receipt } from './receipt'
 import { SecurityLog } from './security-log'
@@ -41,17 +42,14 @@ function Out({ href, children, dest, name }: { href: string; children: React.Rea
   )
 }
 
+/** The hero: the home page's composition, with the vault still beside the copy (PosterHero). */
 export function SecurityHero() {
   return (
-    <section aria-labelledby="hero-title" data-section="hero" className="lp-container pb-6 pt-12 md:pb-10 md:pt-20">
-      <p className="font-mono text-eyebrow font-medium uppercase text-ink-3">Security</p>
-      <h1 id="hero-title" className="mt-3 max-w-[16ch] font-display text-display-xl font-normal text-ink">
-        Check our work.
-      </h1>
-      <p className="mt-5 max-w-[40rem] text-lead text-ink-2">
-        Not audited by a third party yet. Here&apos;s what we do instead, and what we can and can&apos;t do with your tokens.
-      </p>
-    </section>
+    <PosterHero
+      eyebrow="Security"
+      title="Check our work."
+      lead={<>Not audited by a third party yet. Here&apos;s what we do instead, and what we can and can&apos;t do with your tokens.</>}
+    />
   )
 }
 
@@ -66,7 +64,7 @@ export function SecurityStatus() {
   return (
     <section id="status" aria-labelledby="status-title" data-section="status" className="scroll-mt-20">
       <div className="lp-container">
-        <h2 id="status-title" className="font-mono text-eyebrow font-medium uppercase text-ink-3">
+        <h2 id="status-title" className="mh-eyebrow text-ink-3">
           Status today
         </h2>
         <p className="mt-3 rounded border border-rule bg-sunk px-3 py-2.5 font-mono text-[0.8125rem] leading-6 text-ink">{status.join(' · ')}</p>
@@ -180,10 +178,11 @@ export function SecurityNotes() {
 
 export function SecuritySafe() {
   return (
-    <section id="safe" aria-labelledby="safe-title" data-section="safe" className="scroll-mt-20">
+    // Refine pass: it follows the notes at half a section gap (it's their last word, not a new beat).
+    <section id="safe" aria-labelledby="safe-title" data-section="safe" className="-mt-[calc(var(--section-y)*0.5)] scroll-mt-20">
       <div className="lp-container pb-[var(--section-y)]">
         <div className="max-w-[44rem] rounded-lg border border-rule bg-surface p-5 text-small text-ink-2 md:p-7 md:text-body">
-          <h2 id="safe-title" tabIndex={-1} className="font-display text-title font-normal text-ink outline-none">
+          <h2 id="safe-title" tabIndex={-1} className="mh-display text-title text-ink outline-none">
             Stay safe
           </h2>
           <p className="mt-2">
@@ -203,7 +202,7 @@ export function SecurityStart() {
   return (
     <section id="start" aria-labelledby="start-title" data-section="security_start" className="lp-ink scroll-mt-20">
       <div className="lp-container section-y">
-        <h2 id="start-title" tabIndex={-1} className="font-display text-display-l font-normal text-paper outline-none">
+        <h2 id="start-title" tabIndex={-1} className="mh-display mh-reveal-h text-display-l text-paper outline-none">
           Seen enough?
         </h2>
         <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
