@@ -103,10 +103,6 @@ export function CampaignsView({ listed, hidden, loading, error, onRetry, joined,
             onChange={(v) => set('status', v)}
             options={STATUS_BUCKETS.map((b) => ({ value: b.value, label: `${b.label} · ${counts[b.value]}` }))}
           />
-          <div className="max-md:hidden flex flex-wrap gap-3">
-            <SelectBox label="Reward" value={filters.reward} onChange={(v) => set('reward', v as RewardFilter)} options={REWARD_FILTERS} />
-            <SelectBox label="Payout" value={filters.payout} onChange={(v) => set('payout', v as PayoutFilter)} options={PAYOUT_FILTERS} />
-          </div>
         </div>
         <div className="grid grid-cols-2 gap-3 md:hidden">
           <SelectBox
@@ -131,26 +127,29 @@ export function CampaignsView({ listed, hidden, loading, error, onRetry, joined,
           <SelectBox label="Payout" value={filters.payout} onChange={(v) => set('payout', v as PayoutFilter)} options={PAYOUT_FILTERS} />
           <SelectBox label="Sort" value={filters.sort} onChange={(v) => set('sort', v as SortKey)} options={SORTS} />
         </div>
-      </form>
 
-      {/* The curation line (and, on desktop, the sort). */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-        <p className="text-[0.8125rem] text-ink-3" aria-live="polite">
-          {!loading && hidden.length > 0 && (
-            <>
-              {showHidden
-                ? `Showing ${hidden.length} internal test ${hidden.length === 1 ? 'run' : 'runs'} too · `
-                : `Curated list. ${hidden.length} internal test ${hidden.length === 1 ? 'run is' : 'runs are'} hidden · `}
-              <button type="button" className="dd-link inline-flex min-h-6 items-center text-ink-2" aria-pressed={showHidden} onClick={() => setShowHidden((v) => !v)}>
-                {showHidden ? 'Hide them' : 'Show them'}
-              </button>
-            </>
-          )}
-        </p>
-        <div className="max-md:hidden w-[15rem]">
-          <SelectBox label="Sort" value={filters.sort} onChange={(v) => set('sort', v as SortKey)} options={SORTS} />
+        {/* The curation line, and on desktop the reward / payout / sort selects on the same row
+            (refine pass: before, Sort wrapped onto a row of its own under Payout). */}
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 md:pt-1">
+          <p className="text-[0.8125rem] text-ink-3" aria-live="polite">
+            {!loading && hidden.length > 0 && (
+              <>
+                {showHidden
+                  ? `Showing ${hidden.length} internal test ${hidden.length === 1 ? 'run' : 'runs'} too · `
+                  : `Curated list. ${hidden.length} internal test ${hidden.length === 1 ? 'run is' : 'runs are'} hidden · `}
+                <button type="button" className="dd-link inline-flex min-h-6 items-center text-ink-2" aria-pressed={showHidden} onClick={() => setShowHidden((v) => !v)}>
+                  {showHidden ? 'Hide them' : 'Show them'}
+                </button>
+              </>
+            )}
+          </p>
+          <div className="max-md:hidden flex flex-wrap gap-3">
+            <SelectBox label="Reward" value={filters.reward} onChange={(v) => set('reward', v as RewardFilter)} options={REWARD_FILTERS} />
+            <SelectBox label="Payout" value={filters.payout} onChange={(v) => set('payout', v as PayoutFilter)} options={PAYOUT_FILTERS} />
+            <SelectBox label="Sort" value={filters.sort} onChange={(v) => set('sort', v as SortKey)} options={SORTS} />
+          </div>
         </div>
-      </div>
+      </form>
 
       <section aria-label="Campaign list" className="mt-6">
         {loading ? (
