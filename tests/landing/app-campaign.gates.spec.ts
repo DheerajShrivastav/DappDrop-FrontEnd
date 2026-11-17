@@ -40,7 +40,9 @@ async function remember(page: Page, theme: string) {
 async function openCampaign(page: Page, url: string) {
   await page.goto(url, { waitUntil: 'load', timeout: 120_000 })
   await page.locator('[data-account-pill]:not([data-account-pill="loading"])').first().waitFor({ state: 'attached', timeout: 30_000 })
-  await page.locator('.cp-ribbon-wrap, main h2').first().waitFor({ timeout: 60_000 })
+  // Settled: the ribbon (a campaign), or a visible heading (the not-found state's H1 since the
+  // refine pass; it was a boxed h2 under an sr-only h1). The loading state's h1 is sr-only.
+  await page.locator('.cp-ribbon-wrap, main h2, main h1:not(.sr-only)').first().waitFor({ timeout: 60_000 })
   // Let the claim panel / reward list settle (their skeletons are aria-busy).
   await page.waitForFunction(() => !document.querySelector('main [aria-busy="true"]'), null, { timeout: 30_000 }).catch(() => {})
   await page.evaluate(() => document.fonts.ready)
