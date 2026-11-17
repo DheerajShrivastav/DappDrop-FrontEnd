@@ -26,8 +26,8 @@ import {
 } from '@/lib/web3-service'
 
 import { Button } from '@/components/app/button'
-import { EmptyState, LoadingRegion, Skeleton, ClaimSkeleton, RowsSkeleton } from '@/components/app/states'
-import { PageContainer } from '@/components/app/page-header'
+import { LoadingRegion, Skeleton, ClaimSkeleton, RowsSkeleton } from '@/components/app/states'
+import { PageContainer, PageHeader } from '@/components/app/page-header'
 import { useDocumentTitle } from '@/components/app/document-title'
 import { CampaignView } from './_components/campaign-view'
 import { getCampaignStatus } from '@/lib/campaign-status'
@@ -768,22 +768,23 @@ export default function CampaignDetailsPage() {
 
   if (!campaign) {
     return (
-      <PageContainer>
-        <h1 className="sr-only">Campaign #{campaignId}</h1>
-        <EmptyState
+      // Refine pass: a real page header (the answer is the H1), not a small boxed line under an
+      // invisible one; the same shape as the 404s.
+      <PageContainer className="md:pb-32">
+        <PageHeader
+          size="md"
+          eyebrow="Campaigns · Sepolia testnet"
           title={`We couldn’t find campaign #${campaignId}.`}
-          body="It doesn’t exist on Sepolia testnet, or the network didn’t answer."
-          action={
-            <>
-              <Button onClick={() => fetchAllCampaignData(true)}>Try again</Button>
-              <Button asChild variant="secondary">
-                <Link href="/campaigns" prefetch={false}>
-                  Browse campaigns
-                </Link>
-              </Button>
-            </>
-          }
+          lead="It doesn’t exist on Sepolia testnet, or the network didn’t answer."
         />
+        <div className="mt-8 flex flex-wrap gap-3">
+          <Button onClick={() => fetchAllCampaignData(true)}>Try again</Button>
+          <Button asChild variant="secondary">
+            <Link href="/campaigns" prefetch={false}>
+              Browse campaigns
+            </Link>
+          </Button>
+        </div>
       </PageContainer>
     )
   }
