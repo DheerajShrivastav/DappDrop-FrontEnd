@@ -133,7 +133,7 @@ function CallbackContent() {
     const returnPath = sessionStorage.getItem('humanity_return_to') || '/'
     return (
       <PageContainer>
-        <PageHeader eyebrow="Humanity check" title="Verifying" />
+        <PageHeader title="Humanity check" />
         <ErrorState
           className="mt-10"
           title="The humanity check didn’t go through."
@@ -172,7 +172,7 @@ export default function HumanityCallbackPage() {
   if (!HUMANITY_CONFIGURED) {
     return (
       <PageContainer>
-        <PageHeader eyebrow="Humanity check" title="Verifying" />
+        <PageHeader title="Humanity check" />
         <ErrorState
           className="mt-10"
           title="The humanity check isn’t set up here."

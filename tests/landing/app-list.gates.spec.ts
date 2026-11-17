@@ -148,7 +148,9 @@ test.describe('app list + dashboard (08-site phase 2, Builder B)', () => {
   test('/humanity-callback: an honest state instead of a crash when Humanity is not configured', async ({ page }) => {
     await openApp(page, '/humanity-callback')
     await expect(page.locator('#__next_error__')).toHaveCount(0)
-    await expect(page.locator('main h1')).toHaveText('Verifying')
+    // Refine pass: the H1 names the page; it says "Verifying" only while something is verifying.
+    await expect(page.locator('main h1')).toHaveText('Humanity check')
+    await expect(page.getByRole('heading', { level: 2, name: /The humanity check isn’t set up here\./ })).toBeVisible()
   })
 
   test('the list fixture route is unreachable in a production build', async ({ request }) => {
