@@ -23,7 +23,7 @@ export function PrintCardButton() {
     <button
       type="button"
       onClick={print}
-      className="inline-flex h-11 items-center rounded-sm border border-rule-strong px-4 text-small font-semibold text-ink can-hover:hover:border-ink"
+      className="inline-flex h-11 items-center rounded-full border border-rule-strong px-5 text-small font-medium text-ink transition-colors [transition-duration:var(--dur-micro)] can-hover:hover:border-ink"
     >
       Print or save as PDF
     </button>

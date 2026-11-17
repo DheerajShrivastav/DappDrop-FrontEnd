@@ -6,7 +6,9 @@ import type { ReceiptId } from '@/config/receipts'
 /**
  * S1-08 block 3: the money rules as numbered lifecycle stops (R1–R7), an <ol> on the sunk band,
  * vertical on phone. The 24-hour stop has a text label and the only accent (A11 rule 6).
- * Receipts attach inline to their stop (PRF phone-height fix). Flag paths:
+ * Receipts attach inline to their stop (PRF phone-height fix). Desktop (refine pass): three
+ * columns with R4 across the full row, so the seven stops read R1–R3 / R4 / R5–R7 (no orphan).
+ * Flag paths:
  * - tieredCancelLive → R2 loses the tiered chip (S2-03);
  * - keeperLive → R3 adds "It ends on schedule, automatically." (D-X7);
  * - hostCloseGuarded → R5 drops "unless the host has already closed", R5/R6 get receipts (S2-05).
@@ -48,7 +50,7 @@ export function RuleRibbon() {
       n: 'R4',
       when: 'The list · 24 h public review',
       accent: true,
-      rule: <strong className="block font-display text-[1.1875rem] font-normal leading-snug text-ink md:text-[1.375rem]">24 hours to check the list. Then claims open.</strong>,
+      rule: <strong className="mh-display block text-[1.1875rem] font-normal leading-snug text-ink md:text-[1.375rem]">24 hours to check the list. Then claims open.</strong>,
       more: (
         <>
           Your community can spot a mistake, and you can fix it, before any money moves. Publish a corrected list and the 24 hours
@@ -88,19 +90,19 @@ export function RuleRibbon() {
   return (
     <div id="rules" className="scroll-mt-20">
       <div className="lp-container pb-8 pt-[var(--section-y)] md:pb-10">
-        <h2 id="rules-title" tabIndex={-1} className="font-display text-display-l font-normal outline-none">
+        <h2 id="rules-title" tabIndex={-1} className="mh-display mh-reveal-h text-display-l outline-none">
           The rules, stop by stop
         </h2>
         <p className="mt-1 font-mono text-[0.75rem] uppercase tracking-[0.06em] text-ink-2">For reward-list campaigns</p>
         <p className="mt-2 max-w-[40rem] text-small text-ink-2">
           For your engineer: each “Check ↗” opens the code that enforces the rule.
         </p>
-        <ol className="mt-4 grid gap-x-6 gap-y-0 md:grid-cols-2 lg:grid-cols-4" aria-label="Rules R1 to R7">
+        <ol className="mt-4 grid gap-x-6 gap-y-0 md:grid-cols-2 lg:grid-cols-3" aria-label="Rules R1 to R7">
           {stops.map((s) => (
             <li
               key={s.n}
               id={`rule-${s.n.toLowerCase()}`}
-              className={`border-t-2 md:py-3 ${s.accent ? 'border-signal md:col-span-2' : 'border-ink-3'}`}
+              className={`border-t-2 md:py-3 ${s.accent ? 'border-signal md:col-span-2 lg:col-span-3 lg:my-2 [&_p]:max-w-[44rem]' : 'border-ink-3'}`}
             >
               {/* Founder decision 2026-10-11: below 768 px each stop shows its label and one-line
                   rule; the rest (detail, chip, receipt) is one tap away. Expanded from 768 px. */}

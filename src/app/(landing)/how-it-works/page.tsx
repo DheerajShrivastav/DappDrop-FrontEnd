@@ -31,8 +31,8 @@ export default function HowItWorksPage() {
       <section aria-labelledby="hero-title" data-section="hero" className="lp-container pb-12 pt-10 md:pb-16 md:pt-16">
         <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
           <div className="lg:col-span-6 lg:pt-6">
-            <p className="font-mono text-eyebrow font-medium uppercase text-ink-3">How it works</p>
-            <h1 id="hero-title" className="mt-3 max-w-[18ch] font-display text-display-xl font-normal text-ink max-[439px]:text-[2.5rem] max-[359px]:text-[2rem]">
+            <p className="mh-eyebrow text-ink-3">How it works</p>
+            <h1 id="hero-title" className="mh-display mt-4 max-w-[18ch] text-display-xl text-ink max-[439px]:text-[2.5rem] max-[359px]:text-[2rem]">
               How a campaign runs, start to finish.
             </h1>
             <p className="mt-5 max-w-[36rem] text-lead text-ink-2">

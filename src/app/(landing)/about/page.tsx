@@ -27,8 +27,8 @@ function Block({ id, eyebrow, title, children }: { id: string; eyebrow: string; 
     <section id={id} aria-labelledby={`${id}-title`} data-section={id} className="scroll-mt-20 border-t border-rule">
       <div className="lp-container grid gap-6 py-14 md:py-20 lg:grid-cols-12 lg:gap-8">
         <div className="lg:col-span-4">
-          <p className="font-mono text-eyebrow font-medium uppercase text-ink-3">{eyebrow}</p>
-          <h2 id={`${id}-title`} tabIndex={-1} className="mh-display mt-3 text-[clamp(1.75rem,1.4rem+1.2vw,2.5rem)] leading-[1.08] text-ink outline-none">
+          <p className="mh-eyebrow text-ink-3">{eyebrow}</p>
+          <h2 id={`${id}-title`} tabIndex={-1} className="mh-display mh-reveal-h mt-4 text-[clamp(1.75rem,1.4rem+1.2vw,2.5rem)] leading-[1.08] text-ink outline-none">
             {title}
           </h2>
         </div>
@@ -46,7 +46,7 @@ export default function AboutPage() {
   return (
     <>
       <section aria-labelledby="hero-title" data-section="hero" className="lp-container pb-14 pt-12 md:pb-20 md:pt-20">
-        <p className="font-mono text-eyebrow font-medium uppercase text-ink-3">About</p>
+        <p className="mh-eyebrow text-ink-3">About</p>
         <h1 id="hero-title" className="mh-display mt-4 max-w-[16ch] text-[clamp(2.5rem,1.6rem+3.6vw,4.75rem)] leading-[1.02] text-ink">
           Quest campaigns, settled on-chain.
         </h1>
@@ -128,7 +128,7 @@ export default function AboutPage() {
 
       <section aria-labelledby="about-start-title" data-section="about_start" className="border-t border-rule">
         <div className="lp-container flex flex-col items-start gap-6 py-16 md:flex-row md:items-center md:justify-between md:py-24">
-          <h2 id="about-start-title" className="mh-display text-[clamp(1.75rem,1.4rem+1.2vw,2.5rem)] leading-[1.08] text-ink">
+          <h2 id="about-start-title" className="mh-display mh-reveal-h text-[clamp(1.75rem,1.4rem+1.2vw,2.5rem)] leading-[1.08] text-ink">
             {network.testnet ? 'Try it with test tokens.' : 'Start a campaign.'}
           </h2>
           <IntentPrefetch href={START_HREF} className={pillButton} cta="about_start" loc="about">

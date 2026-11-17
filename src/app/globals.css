@@ -1085,3 +1085,50 @@ html[data-theme="porcelain"] .lp-theme main > section.lp-ink:last-of-type {
     text-align: center;
     color: var(--ink-3);
 }
+
+/* ---------------------------------------------------------------------------------------------
+   Refine pass (landing-studio/08-site/refine): the subpages in the home page's language.
+   --------------------------------------------------------------------------------------------- */
+/* Links on the Monolith pages: an ink-quiet underline that turns gold on hover, like the home
+   page's .mh-textlink and the app's .dd-link (app-design §1.11). Gold at rest is for the reward
+   and "now" only. Text-decoration (not a border) so a link can wrap inside a sentence. */
+.lp-theme .lp-link {
+    text-decoration-color: var(--rule-strong);
+    text-decoration-thickness: 1px;
+    transition: text-decoration-color var(--dur-short) linear;
+}
+.lp-theme .lp-ink .lp-link {
+    text-decoration-color: var(--paper-2);
+}
+@media (hover: hover) and (pointer: fine) {
+    .lp-theme .lp-link:hover {
+        text-decoration-color: var(--signal);
+        text-decoration-thickness: 1px;
+    }
+    .lp-theme .lp-ink .lp-link:hover {
+        text-decoration-color: var(--signal-on-ink);
+    }
+}
+
+/* Section headings rise out of a mask as they scroll in (the home page's .mh-reveal, for H2s).
+   clip-path + transform, never opacity: whenever the heading is painted it's at full contrast.
+   CSS only; none under reduced motion or without scroll-driven animations. */
+@media (prefers-reduced-motion: no-preference) {
+    @supports (animation-timeline: view()) {
+        .lp-theme .mh-reveal-h {
+            animation: mh-rise-mask linear both;
+            animation-timeline: view();
+            animation-range: entry 5% entry 85%;
+        }
+    }
+}
+@keyframes mh-rise-mask {
+    from {
+        clip-path: inset(-0.2em -0.1em 100% -0.1em);
+        transform: translateY(0.45em);
+    }
+    to {
+        clip-path: inset(-0.2em -0.1em -0.3em -0.1em);
+        transform: none;
+    }
+}

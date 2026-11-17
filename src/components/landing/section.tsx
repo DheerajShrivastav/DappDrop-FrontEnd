@@ -31,8 +31,8 @@ export function Section({
   return (
     <section id={id} aria-labelledby={`${id}-title`} data-section={track} className={`scroll-mt-20 ${bg} ${className}`}>
       <div className={after ? 'lp-container pb-12 pt-[var(--section-y)]' : 'lp-container section-y'}>
-        {eyebrow && <p className={`font-mono text-eyebrow font-medium uppercase ${band === 'ink' ? 'text-paper-2' : 'text-ink-3'}`}>{eyebrow}</p>}
-        <h2 id={`${id}-title`} tabIndex={-1} className="mt-3 max-w-[24ch] font-display text-display-l font-normal outline-none">
+        {eyebrow && <p className={`mh-eyebrow ${band === 'ink' ? 'text-paper-2' : 'text-ink-3'}`}>{eyebrow}</p>}
+        <h2 id={`${id}-title`} tabIndex={-1} className="mh-display mh-reveal-h mt-4 max-w-[24ch] text-display-l outline-none">
           {title}
         </h2>
         {dek && <p className={`mt-3 max-w-[40rem] text-body md:mt-4 md:text-lead ${band === 'ink' ? 'text-paper-2' : 'text-ink-2'}`}>{dek}</p>}
